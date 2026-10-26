@@ -1,0 +1,72 @@
+pumi
+====
+
+Copyright (C) 2026 The pumi authors.
+
+pumi is licensed in two parts:
+
+- The server and what is needed to build on it are licensed under the Apache License, Version
+  2.0 (LICENSE-APACHE). These are crates/pumid, crates/pumi-proto, crates/pumi-api,
+  crates/pumi-api-macros, crates/pumi-sys, crates/pumi-layout, crates/pumi-model and
+  crates/pumi-cli. crates/pumi-gpuix is also Apache-2.0, because it is forked from gpuix (see
+  below).
+- Everything else is licensed under the GNU General Public License, version 3 or (at your option)
+  any later version (LICENSE). That covers the app (the root crate, src/), crates/pumi-host,
+  crates/pumi-keys, crates/pumi-lang, crates/pumi-mirror, crates/pumi-os, crates/pumi-ui, xtask,
+  runtime/ and scripts/.
+
+Each crate's Cargo.toml names its license. An Apache-2.0 crate includes no GPL code.
+
+
+Third-party code
+----------------
+
+gpuix
+  The renderer (crates/pumi-gpuix) and its React bindings (runtime/app/native,
+  runtime/app/react) are forked from gpuix, "React and Solid for GPUI":
+  https://github.com/remorses/gpuix. Licensed under the Apache License, Version 2.0
+  (LICENSE-APACHE). Changed for pumi.
+
+GPUI and Zed
+  GPUI (vendor/gpui, vendor/gpui_linux, vendor/gpui_windows, and the git dependencies named in
+  Cargo.toml) is part of Zed, https://github.com/zed-industries/zed, and comes from gpuix's fork
+  at https://github.com/remorses/zed. Copyright Zed Industries, Inc. Licensed under the Apache
+  License, Version 2.0 (vendor/gpui/LICENSE-APACHE). Changed for pumi.
+
+  crates/pumi-gpuix/src/custom_elements/input.rs follows GPUI's input example
+  (crates/gpui/examples/input.rs, Apache-2.0).
+
+  The macOS editing shortcuts in src/term/keys.rs (MAC_EDITING) are those of Zed's terminal keymap
+  (assets/keymaps/default-macos.json). Copyright Zed Industries, Inc. Licensed under the GNU
+  General Public License, version 3 or later.
+
+  Several parts of pumi's interface are modelled on Zed's: its panes and their tab strips, its
+  side bar and title bar, and how it updates itself. They are written for pumi; their
+  comments say "as Zed's".
+
+Comet
+  Text selection and painting in crates/pumi-gpuix/src/text (mod.rs, selection.rs, paint.rs),
+  the theme tokens in crates/pumi-gpuix/src/theme.rs, and the editing behaviour of
+  crates/pumi-gpuix/src/custom_elements/input.rs are ported from Comet,
+  https://github.com/zeronsh/comet. Copyright (c) 2026 Wing. Licensed under the MIT License
+  (crates/pumi-gpuix/LICENSE-COMET). Changed for pumi.
+
+libghostty-vt and Ghostty
+  The terminal emulator, and its key and mouse encoders, are libghostty-vt, the terminal
+  emulation library of Ghostty (https://github.com/ghostty-org/ghostty, MIT License), used through
+  its Rust binding libghostty-rs (https://github.com/uzaaft/libghostty-rs, MIT or Apache-2.0).
+  It is a build dependency, fetched from its repository at a pinned commit; its build fetches
+  Ghostty's sources at the commit it names. Several terminal settings take their names and
+  behaviour from Ghostty's.
+
+iTerm2 Color Schemes
+  runtime/app/app/theme/terminal/themes.json is from iTerm2-Color-Schemes,
+  https://github.com/mbadolato/iTerm2-Color-Schemes. Copyright (c) 2011 to Present Mark Badolato.
+  Licensed under the MIT License (runtime/app/app/theme/terminal/LICENSE).
+
+Lucide
+  The icons in assets/icons are from Lucide, https://lucide.dev. Licensed under the ISC License,
+  with portions from Feather under the MIT License (assets/icons/LICENSES).
+
+The Rust and JavaScript dependencies named in Cargo.toml, Cargo.lock and the package.json files
+are under their own licenses.
