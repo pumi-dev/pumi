@@ -1,0 +1,19 @@
+[package]
+name = "pumi-cli"
+version = "0.42.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "`pumi` in every pane: the command line against pumid, `call`, `do`, `open`, `wait`, `registry` and `skill`."
+[lib]
+path = "src/lib.rs"
+[[bin]]
+name = "pumi-cli"
+path = "src/main.rs"
+[dependencies]
+pumi-sys = { path = "../pumi-sys" }
+pumi-api = { path = "../pumi-api" }
+pumi-proto = { path = "../pumi-proto" }
+serde_json = { version = "=1.0.151", features = ["preserve_order"] }
+[dev-dependencies]
+tempfile = "=3.27.0"
