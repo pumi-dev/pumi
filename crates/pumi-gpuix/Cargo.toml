@@ -1,0 +1,52 @@
+[package]
+name = "pumi-gpuix"
+version = "0.42.0"
+edition = "2021"
+publish = false
+description = "pumi's renderer: a retained tree fed by React, drawn by GPUI. Forked from gpuix (Apache-2.0)."
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+anyhow = "1"
+base64 = "0.22"
+csscolorparser = "0.8.3"
+log = "0.4"
+memchr = "2"
+env_logger = "0.11"
+parking_lot = "0.12"
+futures = "0.3"
+rustc-hash = "2"
+thiserror = "2"
+unicode-segmentation = "1"
+unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
+web-time = "1"
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+gpui = { workspace = true, features = ["font-kit", "profiler", "wayland", "x11"] }
+gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }
+percent-encoding = "2"
+url = { version = "2", features = ["serde"] }
+napi = { version = "3.12.7", features = ["napi8", "serde-json"] }
+napi-derive = "3.6.8"
+
+# The platform the app is embedded in (src/app/{macos,windows,linux}.rs).
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos = { workspace = true, features = ["font-kit"] }
+objc2 = "=0.6.5"
+raw-window-handle = "=0.6.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui_windows.workspace = true
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_HiDpi"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui_linux = { workspace = true, features = ["wayland", "x11"] }
+
+[features]
+# The GPU test renderer (`TestGpuixRenderer`, src/test_renderer.rs). Off in what ships.
+test-support = ["gpui/test-support", "gpui_platform/test-support", "gpui_macos/test-support"]
+
