@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "pumi",
+  "channel": "preview",
+  "version": "9.9.9",
+  "build": 7,
+  "tag": "v9.9.9",
+  "pub_date": "2026-10-15T00:00:00Z",
+  "notes_url": "https://github.com/pumi-dev/pumi/releases/tag/v9.9.9",
+  "assets": {
+    "macos-aarch64": { "name": "pumi-9.9.9-macos-aarch64.zip", "sha256": "00", "size": 1, "url": "" }
+  }
+}
