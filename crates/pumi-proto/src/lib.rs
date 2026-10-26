@@ -1,0 +1,10 @@
+pub mod client;
+pub mod frame;
+pub mod graphics;
+pub mod native;
+pub mod osc;
+pub mod paths;
+pub mod server;
+pub mod status;
+pub const PUMI_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const GHOSTTY_VERSION: &str = "1.3.2";
