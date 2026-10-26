@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "typeRoots": ["./node_modules/@types", "../../runtime/app/node_modules/@types"],
+    "strict": true,
+    // The SDK's own sources are checked with this off (their napi callbacks are untyped).
+    "noImplicitAny": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    // `pumi` is this repository's SDK; the app gives a plugin the same at run time.
+    "paths": {
+      "pumi": ["../../runtime/app/types/index.ts"],
+      "pumi/jsx-runtime": ["../../runtime/app/types/jsx-runtime.ts"],
+      "pumi/jsx-dev-runtime": ["../../runtime/app/types/jsx-dev-runtime.ts"]
+    },
+    "jsx": "react-jsx",
+    "jsxImportSource": "pumi"
+  },
+  "exclude": ["node_modules"]
+}
