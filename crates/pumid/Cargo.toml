@@ -1,0 +1,25 @@
+[package]
+name = "pumid"
+version = "0.42.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "pumi's core: sessions, views, panes and tabs, options, events and terminals, routing every other call to the channel that provides it."
+[lib]
+path = "src/lib.rs"
+[[bin]]
+name = "pumid"
+path = "src/main.rs"
+[dependencies]
+pumi-sys = { path = "../pumi-sys" }
+pumi-api = { path = "../pumi-api" }
+pumi-layout = { path = "../pumi-layout" }
+pumi-model = { path = "../pumi-model" }
+pumi-proto = { path = "../pumi-proto" }
+schemars = "=1.2.3"
+sha2 = "=0.11.1"
+base64 = "=0.23.1"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+[dev-dependencies]
+tempfile = "=3.27.0"
