@@ -1,0 +1,8 @@
+[alias]
+xtask = "run --quiet --release --package xtask --"
+[env]
+ZIG = { value = "zig", force = false }
+# libghostty-vt-sys picks the Zig mode from Cargo's `DEBUG`, so a profile that keeps debug info —
+# the release profile's line tables — builds the terminal engine in `Debug`: unoptimized, with
+# ghostty's full-page integrity checks on every update. An existing variable still wins.
+LIBGHOSTTY_VT_SYS_OPTIMIZE = { value = "ReleaseFast", force = false }

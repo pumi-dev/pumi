@@ -1,0 +1,115 @@
+[package]
+name = "pumi"
+version = "0.42.0"
+edition = "2024"
+publish = false
+license = "GPL-3.0-or-later"
+description = "pumi: a terminal workspace for coding agents."
+[lib]
+name = "pumi"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+[workspace]
+members = ["crates/pumi-proto", "crates/pumi-keys", "crates/pumid", "crates/pumi-host", "crates/pumi-mirror", "crates/pumi-cli", "crates/pumi-api", "crates/pumi-lang", "crates/pumi-layout", "crates/pumi-model", "crates/pumi-api-macros", "crates/pumi-os", "crates/pumi-gpuix", "crates/pumi-ui", "crates/pumi-sys", "xtask"]
+exclude = ["vendor/gpui", "vendor/gpui_windows", "vendor/gpui_linux"]
+[workspace.dependencies]
+gpui = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
+gpui_platform = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
+gpui_macos = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
+gpui_windows = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
+gpui_linux = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
+[features]
+default = []
+# The GPU test renderer (`TestGpuixRenderer`): `bun run addon` builds it, a release doesn't.
+test-support = ["pumi-gpuix/test-support"]
+[dependencies]
+pumi-gpuix = { path = "crates/pumi-gpuix" }
+pumi-ui = { path = "crates/pumi-ui" }
+napi = { version = "3.12.7", features = ["napi8", "serde-json"] }
+napi-derive = "3.6.8"
+gpui.workspace = true
+gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3.34"
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+libghostty-vt = { git = "https://github.com/uzaaft/libghostty-rs", rev = "d2036baeb605d31d09a9e2ba6d0c923e04c34d54" }
+pumi-proto = { path = "crates/pumi-proto" }
+pumi-cli = { path = "crates/pumi-cli" }
+pumi-api = { path = "crates/pumi-api" }
+pumi-os = { path = "crates/pumi-os" }
+pumi-sys = { path = "crates/pumi-sys" }
+pumi-lang = { path = "crates/pumi-lang" }
+pumi-keys = { path = "crates/pumi-keys" }
+pumi-layout = { path = "crates/pumi-layout" }
+wry = { version = "=0.57.0", default-features = false, features = ["devtools"] }
+raw-window-handle = "=0.6.2"
+sha2 = "=0.11.1"
+minisign-verify = "=0.3.0"
+semver = "=1.0.28"
+libc = "0.2.190"
+[build-dependencies]
+napi-build = "2.4.4"
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos.workspace = true
+core-foundation-sys = "=0.8.7"
+objc2 = "=0.6.5"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
+    "std",
+    "NSApplication",
+    "NSDockTile",
+    "NSHapticFeedback",
+    "NSResponder",
+    "NSView",
+] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = [
+    "std",
+    "NSString",
+    "NSGeometry",
+    "NSUserDefaults",
+    "objc2-core-foundation",
+] }
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_HiDpi"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+wry = { version = "=0.57.0", default-features = false, features = ["devtools", "os-webview", "x11"] }
+gtk = "=0.18.2"
+# Development builds: no debug info, which is the single biggest cost in an incremental rebuild
+# (30-40% on its own). The workspace's own crates are unoptimized, so a rebuild after an edit (and
+# every test binary) skips LLVM's passes; dependencies are optimized once and reused, and so are
+# the three crates that draw every frame, so the app still runs smoothly.
+[profile.dev]
+opt-level = 0
+debug = 0
+
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.dev.package.pumi]
+opt-level = 1
+
+[profile.dev.package.pumi-gpuix]
+opt-level = 1
+
+# Tests keep no incremental data: a full-workspace test run writes GBs of it under
+# target/debug/incremental and, at this size, non-incremental codegen is no slower.
+# `CARGO_INCREMENTAL=1` still wins over this when a single test needs it.
+[profile.test]
+incremental = false
+
+# Release: thin LTO across crates (most of fat LTO's gain, a fraction of its link time), DWARF
+# dropped because dist/ ships the binary, symbols kept so a crash report still names functions.
+[profile.release]
+lto = "thin"
+# What ships has no symbols; line tables go to a .dSYM beside each binary, which
+# scripts/release/pack-macos.sh zips apart from the app, to read a crash report with.
+debug = "line-tables-only"
+split-debuginfo = "packed"
+strip = "symbols"
+[patch.crates-io]
+async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
+async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+[patch."https://github.com/remorses/zed.git"]
+gpui = { path = "vendor/gpui" }
+gpui_windows = { path = "vendor/gpui_windows" }
+gpui_linux = { path = "vendor/gpui_linux" }
