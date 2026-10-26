@@ -1,0 +1,40 @@
+{
+  "name": "pumi-{{name}}",
+  "version": "0.1.0",
+  "description": "",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/react": "19.2.2",
+    "typescript": "5.9.3"
+  },
+  "pumi": {
+    "name": "{{name}}",
+    "owner": "{{owner}}",
+    "api": 1,
+    "contributes": {
+      "commands": [{ "id": "hello", "title": "Say hello" }],
+      "options": {
+        "position": {
+          "type": "string",
+          "default": "bottom-right",
+          "choices": ["top-left", "top", "top-right", "bottom-left", "bottom", "bottom-right"],
+          "label": "Position",
+          "desc": "Where its notice shows."
+        },
+        "url": { "type": "string", "default": "https://pumi.dev/", "label": "Link", "desc": "What the QR code opens." }
+      },
+      "slots": {
+        "panel": { "component": "Panel", "title": "{{name}}", "icon": "plugin" },
+        "tab.menu": { "actions": [{ "id": "hello", "title": "Say hello", "icon": "bell", "command": "hello" }] }
+      },
+      "settings": {
+        "sections": [{ "id": "example", "page": "general", "title": "{{name}}", "component": "Settings", "keywords": ["qr", "position"] }]
+      }
+    }
+  }
+}
