@@ -1,0 +1,277 @@
+# Releases: a `v<version>` tag builds every platform, signs everything, and leaves a *draft*
+# GitHub release with the artifacts and the signed manifest. Nothing is live until the draft
+# is published (in GitHub's UI, or `gh release edit v<version> --draft=false`): the updater and
+# install.sh only ever read the latest *published* release. See docs/releasing.md.
+#
+# macOS builds run on a self-hosted Apple silicon runner, which cross-compiles
+# both architectures. Linux builds run on GitHub's Ubuntu 22.04 runners, so they
+# run on any glibc 2.35 or later; Windows on GitHub's windows-2022 runner.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (an existing v<version> tag). Builds and drafts like a push."
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  RUSTUP_TOOLCHAIN: "1.97.1"
+  CARGO_TERM_COLOR: always
+  CHANNEL: preview
+  PUMI_RELEASE_REPO: ${{ github.repository }}
+  BUILD_NUMBER: ${{ github.run_number }}
+
+jobs:
+  version:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - id: v
+        name: The tag names Cargo.toml's version
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "v$version" = "$TAG" ] || { echo "::error::tag $TAG but Cargo.toml says $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  macos:
+    needs: version
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      # Outside the checkout, which actions/checkout cleans, so builds on this machine stay
+      # incremental.
+      - run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target" >> "$GITHUB_ENV"
+      - name: Toolchain
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal \
+            --target aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Signing keychain
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          kc="$RUNNER_TEMP/pumi-signing.keychain-db"
+          pass="$(openssl rand -hex 24)"
+          security delete-keychain "$kc" 2>/dev/null || true
+          security create-keychain -p "$pass" "$kc"
+          security set-keychain-settings -lut 7200 "$kc"
+          security unlock-keychain -p "$pass" "$kc"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pass" "$kc" >/dev/null
+          echo "SIGN_KEYCHAIN=$kc" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@v2
+      - name: Build
+        run: scripts/release/build.sh aarch64-apple-darwin x86_64-apple-darwin
+      - name: Pack
+        env:
+          SIGN_IDENTITY: ${{ vars.MACOS_CERT_SHA1 }}
+        run: |
+          scripts/release/pack-macos.sh aarch64
+          scripts/release/pack-macos.sh x86_64
+      - name: Smoke test
+        run: |
+          app=dist/release/macos-aarch64/pumi.app
+          "$app/Contents/MacOS/pumi" --help >/dev/null
+          "$app/Contents/MacOS/pumid" --version
+          "$app/Contents/Resources/bin/pumi" --version
+          intel=dist/release/macos-x86_64/pumi.app/Contents/MacOS/pumid
+          arch -x86_64 "$intel" --version || echo "(no Rosetta here)"
+          if ! codesign -d -r- "$app" 2>&1 | grep -q 'certificate root = H"'; then
+            echo "::error::not signed with the release certificate"; exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            dist/release/*.zip
+            dist/release/*.sha256
+          if-no-files-found: error
+      - name: Remove the signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/pumi-signing.keychain-db" 2>/dev/null || true
+
+  linux:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      # GitHub's image leaves ~14 GB free; gpui and the editor crates need more.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: System packages and Zig
+        run: |
+          sudo -E scripts/release/linux-deps.sh | tee /tmp/deps.log
+          zig="$(sed -n 's/^ZIG=//p' /tmp/deps.log)"
+          echo "ZIG=$zig" >> "$GITHUB_ENV"
+          # libghostty-vt-sys runs the `zig` on PATH.
+          dirname "$zig" >> "$GITHUB_PATH"
+      - name: Toolchain
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal \
+            --target ${{ matrix.arch }}-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.arch }}
+      - name: Build
+        run: scripts/release/build.sh ${{ matrix.arch }}-unknown-linux-gnu
+      - name: Pack
+        run: scripts/release/pack-linux.sh ${{ matrix.arch }}
+      - name: Smoke test
+        run: |
+          app=dist/release/linux-${{ matrix.arch }}/pumi.app
+          "$app/bin/pumid" --version
+          "$app/bin/pumi" --help >/dev/null
+          "$app/Resources/bin/pumi" --version
+          ls "$app/bin"/pumi.linux-*.node
+          glibc="$(objdump -T "$app/bin/pumi" | grep -o 'GLIBC_[0-9.]*' \
+            | sort -Vu | tail -1)"
+          echo "glibc wanted: $glibc"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            dist/release/*.tar.gz
+            dist/release/*.sha256
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      # libghostty-vt is built with Zig.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-windows
+      - name: Build
+        run: scripts/release/build.sh x86_64-pc-windows-msvc
+      - name: Pack
+        run: scripts/release/pack-windows.sh
+      - name: Smoke test
+        run: |
+          app=dist/release/windows-x86_64/pumi.app
+          "$app/bin/pumid.exe" --version
+          "$app/Resources/bin/pumi-cli.exe" --version
+          ls "$app/bin/pumi.win32-x64.node"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/release/*.zip
+            dist/release/*.sha256
+          if-no-files-found: error
+
+  # Optional: the Intel build on real Intel hardware (GitHub's runner; it costs
+  # private-repo minutes, so it runs only when PUMI_INTEL_SMOKE is "true").
+  macos-intel-smoke:
+    needs: macos
+    if: vars.PUMI_INTEL_SMOKE == 'true'
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: dist
+      - run: |
+          ditto -x -k dist/pumi-*-macos-x86_64.zip .
+          codesign --verify --deep --strict pumi.app
+          pumi.app/Contents/MacOS/pumid --version
+          pumi.app/Contents/MacOS/pumi --help >/dev/null
+
+  draft:
+    needs: [version, macos, linux, windows]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          merge-multiple: true
+      - name: minisign
+        run: |
+          curl -fsSL -o /tmp/minisign.tgz https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz
+          echo "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73  /tmp/minisign.tgz" | sha256sum -c -
+          tar -xzf /tmp/minisign.tgz -C /tmp
+          sudo install -m 755 /tmp/minisign-linux/x86_64/minisign /usr/local/bin/minisign
+      - name: Manifest and signatures
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          key="$RUNNER_TEMP/minisign.key"
+          (umask 077 && printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key")
+          MINISIGN_KEY="$key" OUT=dist/release scripts/release/manifest.sh
+          rm -f "$key"
+          # Check what was signed with the key the app trusts, before anything is uploaded.
+          primary="$(grep -o 'RW[A-Za-z0-9+/=]*' src/updater/manifest.rs | head -1)"
+          minisign -V -m dist/release/latest.json -x dist/release/latest.json.minisig -P "$primary"
+          cat dist/release/latest.json
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 && gh release delete "$TAG" --yes --cleanup-tag=false
+          gh release create "$TAG" --draft --verify-tag \
+            --title "pumi $VERSION" --generate-notes \
+            dist/release/*.zip dist/release/*.tar.gz dist/release/*.sha256 \
+            dist/release/*.minisig dist/release/latest.json \
+            scripts/release/install.sh scripts/release/install.ps1
+          echo "Drafted $TAG. Publish it to ship: gh release edit $TAG --draft=false" >> "$GITHUB_STEP_SUMMARY"

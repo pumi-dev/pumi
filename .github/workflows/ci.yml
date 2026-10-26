@@ -1,0 +1,104 @@
+# Every push to main and every pull request: everything builds, the
+# generated API is current, the OS lint holds, the app type-checks, and
+# the tests pass — on macOS, Linux and Windows.
+# GitHub's runners: a pull request's code never runs on ours.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUSTUP_TOOLCHAIN: "1.97.1"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      # Xcode 26 and later download the Metal compiler on its own; older
+      # ones bundle it.
+      - name: Metal toolchain
+        run: |
+          xcrun -sdk macosx metal --version ||
+            xcodebuild -downloadComponent MetalToolchain
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: oven-sh/setup-bun@v2
+      # libghostty-vt is built with Zig.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - run: bun install --frozen-lockfile
+        working-directory: runtime/app
+      - run: cargo build --locked -p pumid -p pumi-host -p pumi-cli
+      - run: bun run addon
+        working-directory: runtime/app
+      - run: cargo xtask api --check
+      - run: cargo xtask platform
+      - run: bunx tsc --noEmit -p .
+        working-directory: runtime/app
+      - run: cargo test --locked --workspace --exclude xtask
+      - run: bun test
+        working-directory: runtime/app
+
+  # The same code where it links GTK, X11, Wayland and WebKitGTK: what the macOS
+  # run compiles for one OS and never runs.
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      # GitHub's image leaves ~14 GB free; gpui and the editor crates need more.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: System packages and Zig
+        run: |
+          sudo -E scripts/release/linux-deps.sh | tee /tmp/deps.log
+          zig="$(sed -n 's/^ZIG=//p' /tmp/deps.log)"
+          echo "ZIG=$zig" >> "$GITHUB_ENV"
+          # libghostty-vt-sys runs the `zig` on PATH.
+          dirname "$zig" >> "$GITHUB_PATH"
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: oven-sh/setup-bun@v2
+      - uses: Swatinem/rust-cache@v2
+      - run: bun install --frozen-lockfile
+        working-directory: runtime/app
+      - run: cargo build --locked -p pumid -p pumi-host -p pumi-cli
+      - run: bun run addon
+        working-directory: runtime/app
+      - run: cargo xtask platform
+      - run: cargo test --locked --workspace --exclude xtask
+
+  # On Windows: the server crates, the OS layer and ConPTY, by their own tests.
+  # The app itself is the release job's.
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p pumid -p pumi-host -p pumi-cli
+      - run: cargo xtask platform
+      - run: cargo test --locked -p pumid -p pumi-host -p pumi-cli -p pumi-sys
