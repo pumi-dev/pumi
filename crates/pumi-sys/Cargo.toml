@@ -1,0 +1,32 @@
+[package]
+name = "pumi-sys"
+version = "0.42.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "What pumi's processes ask of the OS: local sockets, terminals, processes, signals, detaching and directories. Every other crate is the same code on every OS; this one has a file per OS, and only that OS's file is built."
+
+[dependencies]
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.190"
+
+[target.'cfg(windows)'.dependencies]
+interprocess = "=2.4.4"
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_JobObjects",
+    "Win32_System_Pipes",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
