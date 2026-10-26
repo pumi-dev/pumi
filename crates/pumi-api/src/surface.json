@@ -1,0 +1,3191 @@
+{
+  "models": [
+    {
+      "name": "Session",
+      "kind": "session",
+      "idPrefix": "$",
+      "desc": "A session containing views.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "SessionId",
+          "desc": "Its prefixed id.",
+          "watch": false,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "desc": "Its name.",
+          "watch": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "cwd",
+          "type": "string | null",
+          "desc": "Its directory.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "views",
+          "type": "ViewId[]",
+          "desc": "Its views in order.",
+          "watch": true,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+            }
+          }
+        },
+        {
+          "name": "activeView",
+          "type": "ViewId | null",
+          "desc": "Its current view.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "methods": [
+        {
+          "name": "update",
+          "fn": "session.update"
+        },
+        {
+          "name": "focus",
+          "fn": "session.focus"
+        },
+        {
+          "name": "close",
+          "fn": "session.close"
+        }
+      ],
+      "events": [
+        "session.opened",
+        "session.closed",
+        "session.changed"
+      ]
+    },
+    {
+      "name": "View",
+      "kind": "view",
+      "idPrefix": "@",
+      "desc": "A view: a layout of panes, each holding tabs.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "ViewId",
+          "desc": "Its prefixed id.",
+          "watch": false,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "session",
+          "type": "SessionId",
+          "desc": "Its session.",
+          "watch": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "name",
+          "type": "string | null",
+          "desc": "Its given name.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "index",
+          "type": "number",
+          "desc": "Its index in the session.",
+          "watch": true,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "layout",
+          "type": "Layout",
+          "desc": "Its panes as they split, each with its tabs and the one in front.",
+          "watch": true,
+          "schema": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "pane": {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+                  },
+                  "tabs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                    }
+                  },
+                  "active": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "pane"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "axis": {
+                    "type": "string",
+                    "enum": [
+                      "row",
+                      "column"
+                    ]
+                  },
+                  "ratio": {
+                    "type": "number"
+                  },
+                  "first": {},
+                  "second": {}
+                },
+                "required": [
+                  "axis",
+                  "ratio",
+                  "first",
+                  "second"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "even-horizontal",
+                  "even-vertical",
+                  "main-horizontal",
+                  "main-horizontal-mirrored",
+                  "main-vertical",
+                  "main-vertical-mirrored",
+                  "tiled"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "activeTab",
+          "type": "TabId | null",
+          "desc": "Its active tab: the one with the focus, in front of its pane.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "activePane",
+          "type": "PaneId | null",
+          "desc": "Its pane with the focus.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "zoom",
+          "type": "PaneId | null",
+          "desc": "Its zoomed pane.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "methods": [
+        {
+          "name": "update",
+          "fn": "view.update"
+        },
+        {
+          "name": "focus",
+          "fn": "view.focus"
+        },
+        {
+          "name": "close",
+          "fn": "view.close"
+        }
+      ],
+      "events": [
+        "view.opened",
+        "view.closed",
+        "view.changed"
+      ]
+    },
+    {
+      "name": "Pane",
+      "kind": "pane",
+      "idPrefix": ":",
+      "desc": "A pane: an area of a view's layout, holding tabs with one in front.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "PaneId",
+          "desc": "Its prefixed id.",
+          "watch": false,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "view",
+          "type": "ViewId",
+          "desc": "Its view.",
+          "watch": false,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "tabs",
+          "type": "TabId[]",
+          "desc": "Its tabs, in the order its strip shows them.",
+          "watch": true,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+            }
+          }
+        },
+        {
+          "name": "activeTab",
+          "type": "TabId",
+          "desc": "The tab in front.",
+          "watch": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "isFocused",
+          "type": "boolean",
+          "desc": "It has its view's focus.",
+          "watch": false,
+          "schema": {
+            "type": "boolean"
+          }
+        },
+        {
+          "name": "isZoomed",
+          "type": "boolean",
+          "desc": "It fills its view.",
+          "watch": false,
+          "schema": {
+            "type": "boolean"
+          }
+        }
+      ],
+      "methods": [
+        {
+          "name": "update",
+          "fn": "pane.update"
+        },
+        {
+          "name": "focus",
+          "fn": "pane.focus"
+        },
+        {
+          "name": "close",
+          "fn": "pane.close"
+        }
+      ],
+      "events": [
+        "pane.opened",
+        "pane.closed",
+        "pane.changed"
+      ]
+    },
+    {
+      "name": "Tab",
+      "kind": "tab",
+      "idPrefix": "%",
+      "desc": "A tab holding one block.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "TabId",
+          "desc": "Its prefixed id.",
+          "watch": false,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "session",
+          "type": "SessionId",
+          "desc": "Its session.",
+          "watch": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "view",
+          "type": "ViewId | null",
+          "desc": "Its view.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "block",
+          "type": "string",
+          "desc": "The block it holds.",
+          "watch": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "traits",
+          "type": "Record<string, object>",
+          "desc": "Its traits and their fields.",
+          "watch": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "agent": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "working",
+                      "blocked",
+                      "done",
+                      "idle",
+                      "error"
+                    ]
+                  },
+                  "session": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "transcript": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "conversation": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "accepts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "queue",
+                        "wake"
+                      ]
+                    }
+                  },
+                  "queue": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "from": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "created": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text",
+                        "from",
+                        "created"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            },
+            "required": [],
+            "additionalProperties": true
+          }
+        },
+        {
+          "name": "place",
+          "type": "TabPlace",
+          "desc": "Where it is.",
+          "watch": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "tiled",
+                  "float",
+                  "hidden",
+                  "view",
+                  "session"
+                ]
+              },
+              "view": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pane": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "current"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "new"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "split": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "right",
+                      "up",
+                      "down"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "index": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "swap": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ratio": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "beside": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "size": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "full": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cwd": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "focus": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "replace": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "relative": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "view",
+                      "client",
+                      "tab",
+                      "cursor",
+                      "mouse"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "anchor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "NW",
+                      "N",
+                      "NE",
+                      "W",
+                      "center",
+                      "E",
+                      "SW",
+                      "S",
+                      "SE"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "row": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "col": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "width": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "height": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "border": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "focusable": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mouse": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dismiss": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "escape",
+                        "key",
+                        "press",
+                        "scroll"
+                      ]
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "backdrop": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "zIndex": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "title",
+          "type": "string | null",
+          "desc": "Its title.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "cwd",
+          "type": "string | null",
+          "desc": "Its directory.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "foregroundCwd",
+          "type": "string | null",
+          "desc": "Its foreground process's directory.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "process",
+          "type": "Process | null",
+          "desc": "Its foreground process.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": [
+                  "null",
+                  "boolean",
+                  "number",
+                  "string",
+                  "array",
+                  "object"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scroll",
+          "type": "Scroll",
+          "desc": "Its scroll position.",
+          "watch": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "offsetFromBottom": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "offsetFromBottom"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "neighbors",
+          "type": "Neighbors",
+          "desc": "Its neighboring tabs.",
+          "watch": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "left": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "right": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "up": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "down": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "left",
+              "right",
+              "up",
+              "down"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "isFocused",
+          "type": "boolean",
+          "desc": "Whether it has focus.",
+          "watch": true,
+          "schema": {
+            "type": "boolean"
+          }
+        },
+        {
+          "name": "isZoomed",
+          "type": "boolean",
+          "desc": "Its pane fills its view.",
+          "watch": true,
+          "schema": {
+            "type": "boolean"
+          }
+        },
+        {
+          "name": "options",
+          "type": "object",
+          "desc": "Its options.",
+          "watch": true,
+          "schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+          }
+        }
+      ],
+      "methods": [
+        {
+          "name": "update",
+          "fn": "tab.update"
+        },
+        {
+          "name": "focus",
+          "fn": "tab.focus"
+        },
+        {
+          "name": "close",
+          "fn": "tab.close"
+        },
+        {
+          "name": "read",
+          "fn": "tab.call",
+          "method": "read"
+        },
+        {
+          "name": "input",
+          "fn": "tab.call",
+          "method": "input"
+        },
+        {
+          "name": "run",
+          "fn": "tab.call",
+          "method": "run"
+        },
+        {
+          "name": "wait",
+          "fn": "tab.call",
+          "method": "wait"
+        },
+        {
+          "name": "selection",
+          "fn": "tab.call",
+          "method": "selection"
+        },
+        {
+          "name": "report",
+          "fn": "tab.call",
+          "method": "report"
+        },
+        {
+          "name": "attach",
+          "fn": "tab.call",
+          "method": "attach"
+        }
+      ],
+      "events": [
+        "tab.opened",
+        "tab.closed",
+        "tab.changed",
+        "tab.alerted",
+        "agent.sending",
+        "agent.turned"
+      ]
+    },
+    {
+      "name": "Request",
+      "kind": "request",
+      "idPrefix": "+",
+      "desc": "A request shown to the user.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "RequestId",
+          "desc": "Its prefixed id.",
+          "watch": false,
+          "schema": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\+[1-9][0-9]*$"
+          }
+        },
+        {
+          "name": "tab",
+          "type": "TabId | null",
+          "desc": "Its tab.",
+          "watch": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "desc": "Its kind.",
+          "watch": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "desc": "Its title.",
+          "watch": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "detail",
+          "type": "string | null",
+          "desc": "Its detail.",
+          "watch": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "options",
+          "type": "unknown[]",
+          "desc": "Its possible answers.",
+          "watch": false,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": [
+                "null",
+                "boolean",
+                "number",
+                "string",
+                "array",
+                "object"
+              ]
+            }
+          }
+        },
+        {
+          "name": "tool",
+          "type": "string | null",
+          "desc": "The tool a permission is for.",
+          "watch": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "level",
+          "type": "string | null",
+          "desc": "How much it matters: info, warn, error or debug (only kept).",
+          "watch": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warn",
+                  "error",
+                  "debug"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "notification",
+          "type": "Notification | null",
+          "desc": "What a notification does in the OS's notification centre.",
+          "watch": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "subtitle": {
+                    "type": "string"
+                  },
+                  "sound": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "type": "string"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "reply": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "normal",
+                      "critical"
+                    ]
+                  },
+                  "data": {
+                    "type": [
+                      "null",
+                      "boolean",
+                      "number",
+                      "string",
+                      "array",
+                      "object"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "source",
+          "type": "string | null",
+          "desc": "Who opened it.",
+          "watch": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "created",
+          "type": "string",
+          "desc": "When it opened.",
+          "watch": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "expires",
+          "type": "string | null",
+          "desc": "When it expires.",
+          "watch": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "methods": [
+        {
+          "name": "close",
+          "fn": "request.close"
+        }
+      ],
+      "events": [
+        "request.opened",
+        "request.closed"
+      ]
+    },
+    {
+      "name": "Plugin",
+      "kind": "plugin",
+      "idPrefix": "",
+      "desc": "An installed plugin.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "PluginId",
+          "desc": "Its owner/name id.",
+          "watch": false,
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$"
+          }
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "desc": "Its version.",
+          "watch": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "desc": "Where it came from.",
+          "watch": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "desc": "Its directory.",
+          "watch": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "desc": "Whether it is enabled.",
+          "watch": true,
+          "schema": {
+            "type": "boolean"
+          }
+        }
+      ],
+      "methods": [
+        {
+          "name": "update",
+          "fn": "plugin.update"
+        },
+        {
+          "name": "remove",
+          "fn": "plugin.remove"
+        }
+      ],
+      "events": [
+        "registry.changed"
+      ]
+    }
+  ],
+  "tabMethods": [
+    {
+      "name": "read",
+      "desc": "Text read from a tab: a terminal's as its screen shows it, one line a row.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "visible",
+              "recent",
+              "unwrapped"
+            ],
+            "description": "`visible`: the screen as it is; `recent` (the default): the scrollback and the screen; `unwrapped`: those, with lines wrapped at the screen's width joined."
+          },
+          "lines": {
+            "type": "integer",
+            "description": "The last this many lines that hold something: the screen's rows for `visible`, 200 otherwise (`pumi tab read`: 50)."
+          },
+          "ansi": {
+            "type": "boolean",
+            "description": "The output as the program wrote it, its escape sequences kept."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "example": {
+        "args": {
+          "source": "visible",
+          "lines": 80
+        },
+        "result": {
+          "text": "ready\n"
+        }
+      },
+      "blocks": []
+    },
+    {
+      "name": "input",
+      "desc": "Text, a paste, or keys sent to a tab.",
+      "params_schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "paste": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "paste"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "keys"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "returns_schema": {
+        "type": "null"
+      },
+      "example": {
+        "args": {
+          "keys": [
+            "ctrl+c"
+          ]
+        },
+        "result": null
+      },
+      "blocks": []
+    },
+    {
+      "name": "run",
+      "desc": "A command pasted and entered as one write.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            ]
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "returns_schema": {
+        "type": "null"
+      },
+      "example": {
+        "args": {
+          "command": [
+            "make",
+            "test"
+          ]
+        },
+        "result": null
+      },
+      "blocks": [
+        "terminal"
+      ]
+    },
+    {
+      "name": "wait",
+      "desc": "A tab waited on for output or exit.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "match": {
+            "type": "string"
+          },
+          "regex": {
+            "type": "string"
+          },
+          "exit": {
+            "type": "boolean"
+          },
+          "timeout": {
+            "type": "number"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns_schema": {
+        "type": "object",
+        "properties": {
+          "match": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exitCode": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "match",
+          "exitCode"
+        ],
+        "additionalProperties": false
+      },
+      "example": {
+        "args": {
+          "exit": true,
+          "timeout": 30
+        },
+        "result": {
+          "match": null,
+          "exitCode": 0
+        }
+      },
+      "blocks": []
+    },
+    {
+      "name": "selection",
+      "desc": "The tab selection.",
+      "params_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "example": {
+        "args": {},
+        "result": {
+          "text": "selected"
+        }
+      },
+      "blocks": []
+    },
+    {
+      "name": "report",
+      "desc": "An OSC 7501 report sent by a tab.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": [
+              "null",
+              "boolean",
+              "number",
+              "string",
+              "array",
+              "object"
+            ]
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "returns_schema": {
+        "type": "null"
+      },
+      "example": {
+        "args": {
+          "body": {
+            "kind": "metadata",
+            "tokens": 12
+          }
+        },
+        "result": null
+      },
+      "blocks": []
+    },
+    {
+      "name": "attach",
+      "desc": "A terminal stream attached to a tab.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "control",
+              "observe"
+            ]
+          },
+          "takeover": {
+            "type": "boolean"
+          },
+          "cols": {
+            "type": "integer"
+          },
+          "rows": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "returns_schema": {
+        "type": "object",
+        "properties": {
+          "stream": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stream"
+        ],
+        "additionalProperties": false
+      },
+      "example": {
+        "args": {
+          "mode": "observe",
+          "cols": 120,
+          "rows": 40
+        },
+        "result": {
+          "stream": "stream/1"
+        }
+      },
+      "blocks": [
+        "terminal"
+      ]
+    }
+  ],
+  "traits": [
+    {
+      "name": "agent",
+      "desc": "An agent transport attached to a tab.",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "desc": "Which agent it is.",
+          "watch": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "desc": "What the agent is doing.",
+          "watch": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "working",
+              "blocked",
+              "done",
+              "idle",
+              "error"
+            ]
+          }
+        },
+        {
+          "name": "session",
+          "type": "string | null",
+          "desc": "The agent's own session id.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "model",
+          "type": "string | null",
+          "desc": "The model it uses.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "transcript",
+          "type": "string | null",
+          "desc": "Its transcript's path.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "conversation",
+          "type": "string | null",
+          "desc": "The conversation provider.",
+          "watch": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        {
+          "name": "accepts",
+          "type": "string[]",
+          "desc": "The visible transports it accepts.",
+          "watch": true,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "queue",
+                "wake"
+              ]
+            }
+          }
+        },
+        {
+          "name": "queue",
+          "type": "QueuedMessage[]",
+          "desc": "Its queued messages.",
+          "watch": true,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "text": {
+                  "type": "string"
+                },
+                "from": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "text",
+                "from",
+                "created"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "tab.opened",
+      "provider": "core",
+      "desc": "A tab opened: `block` is what it holds; `restored` when it opened from a saved state.",
+      "match": "the tab's block",
+      "data": [
+        "tab",
+        "block",
+        "restored"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "tab": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          },
+          "block": {
+            "type": "string"
+          },
+          "restored": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tab",
+          "block",
+          "restored"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "tab": "%3",
+            "block": "terminal",
+            "restored": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "tab.closed",
+      "provider": "core",
+      "desc": "A tab closed: `block` is what it held.",
+      "match": "the tab's block",
+      "data": [
+        "tab",
+        "block"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "tab": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          },
+          "block": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tab",
+          "block"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "tab": "%3",
+            "block": "terminal"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tab.changed",
+      "provider": "core",
+      "desc": "A tab changed in the fields `keys` names (`title`, `cwd`, `block`, `place`, `size`, `exitCode`, `options.<name>`, `traits.<trait>`); `patch` holds their new values.",
+      "match": "the tab id",
+      "data": [
+        "tab",
+        "keys",
+        "patch"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "tab": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "title",
+                "cwd",
+                "foregroundCwd",
+                "block",
+                "place",
+                "size",
+                "exitCode",
+                "options.*",
+                "traits.*"
+              ]
+            },
+            "minItems": 1
+          },
+          "patch": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "tab",
+          "keys",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "tab": "%3",
+            "keys": [
+              "title"
+            ],
+            "patch": {
+              "title": "tests"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "tab.alerted",
+      "provider": "core",
+      "desc": "A tab's program asked for attention: it rang the bell, or sent an OSC 9 or 777 notification (`message`).",
+      "match": "the alert kind",
+      "data": [
+        "tab",
+        "kind",
+        "message"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "tab": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bell",
+              "osc9",
+              "osc777"
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "tab",
+          "kind",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "tab": "%3",
+            "kind": "bell",
+            "message": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "request.opened",
+      "provider": "core",
+      "desc": "A request was opened for the user (`request.open`): show it, and answer it with `request.close(id, {answer})`.",
+      "match": "the request's kind: `notification`, `permission` or `question`",
+      "data": [
+        "request",
+        "tab",
+        "kind",
+        "title",
+        "detail",
+        "tool",
+        "options",
+        "level",
+        "notification",
+        "source",
+        "created",
+        "expires"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\+[1-9][0-9]*$"
+          },
+          "tab": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": [
+                "null",
+                "boolean",
+                "number",
+                "string",
+                "array",
+                "object"
+              ]
+            }
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warn",
+                  "error",
+                  "debug"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notification": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "subtitle": {
+                    "type": "string"
+                  },
+                  "sound": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "type": "string"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "reply": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  },
+                  "urgency": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "normal",
+                      "critical"
+                    ]
+                  },
+                  "data": {
+                    "type": [
+                      "null",
+                      "boolean",
+                      "number",
+                      "string",
+                      "array",
+                      "object"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created": {
+            "type": "string"
+          },
+          "expires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "request",
+          "tab",
+          "kind",
+          "title",
+          "detail",
+          "options",
+          "tool",
+          "level",
+          "notification",
+          "source",
+          "created",
+          "expires"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "request": "+7",
+            "tab": "%3",
+            "kind": "permission",
+            "title": "Run `make deploy`?",
+            "detail": null,
+            "tool": "Bash",
+            "options": [
+              {
+                "id": "allow",
+                "label": "Allow",
+                "kind": "allow_once"
+              }
+            ],
+            "level": null,
+            "notification": null,
+            "source": "cli",
+            "created": "2026-10-16T07:18:39Z",
+            "expires": "2026-10-16T07:23:39Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "request.closed",
+      "provider": "core",
+      "desc": "A request closed: `answered`, `closed` (unanswered, its tab closed, or a newer one of its group replaced it), `timeout` or `cancelled` (the channel that opened it went).",
+      "match": "the request's id",
+      "data": [
+        "request",
+        "tab",
+        "answer",
+        "reason"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\+[1-9][0-9]*$"
+          },
+          "tab": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answer": {
+            "type": [
+              "null",
+              "boolean",
+              "number",
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "timeout",
+              "closed",
+              "cancelled"
+            ]
+          }
+        },
+        "required": [
+          "request",
+          "tab",
+          "answer",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "request": "+7",
+            "tab": "%3",
+            "answer": {
+              "option": "allow"
+            },
+            "reason": "answered"
+          }
+        }
+      ]
+    },
+    {
+      "name": "agent.sending",
+      "provider": "core",
+      "desc": "An agent is about to be sent something (`agent.turn`): a source listening by this name answers what it should know with `agent.contribute(id, text)`, before the deadline (a second).",
+      "match": "the moment: `start` or `prompt`",
+      "data": [
+        "id",
+        "tab",
+        "agent",
+        "session",
+        "event",
+        "resumed",
+        "full",
+        "peek"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tab": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event": {
+            "type": "string"
+          },
+          "resumed": {
+            "type": "boolean"
+          },
+          "full": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "peek": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "tab",
+          "agent",
+          "session",
+          "event",
+          "resumed",
+          "full",
+          "peek"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "id": 4,
+            "tab": "%3",
+            "agent": "claude",
+            "session": null,
+            "event": "prompt",
+            "resumed": false,
+            "full": "fix tests",
+            "peek": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "agent.turned",
+      "provider": "core",
+      "desc": "An agent's turn ended (`stop`), or it compacted its context (`compact`): what it was told may be gone.",
+      "match": "the moment: `stop` or `compact`",
+      "data": [
+        "tab",
+        "agent",
+        "session",
+        "event"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "tab": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "stop",
+              "compact"
+            ]
+          }
+        },
+        "required": [
+          "tab",
+          "agent",
+          "session",
+          "event"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "tab": "%3",
+            "agent": "claude",
+            "session": null,
+            "event": "stop"
+          }
+        }
+      ]
+    },
+    {
+      "name": "view.opened",
+      "provider": "core",
+      "desc": "A view opened in a session.",
+      "match": "the object id",
+      "data": [
+        "view",
+        "session"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          },
+          "session": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          }
+        },
+        "required": [
+          "view",
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "view": "@1",
+            "session": "$1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "view.closed",
+      "provider": "core",
+      "desc": "A view closed.",
+      "match": "the object id",
+      "data": [
+        "view",
+        "session"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          },
+          "session": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          }
+        },
+        "required": [
+          "view",
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "view": "@1",
+            "session": "$1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "view.changed",
+      "provider": "core",
+      "desc": "A view changed in the fields `keys` names (`name`, `index`, `session`, `layout`, `activeTab`, `activePane`, `zoom`); `patch` holds their new values.",
+      "match": "the object id",
+      "data": [
+        "view",
+        "keys",
+        "patch"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "name",
+                "index",
+                "session",
+                "layout",
+                "activeTab",
+                "activePane",
+                "zoom"
+              ]
+            },
+            "minItems": 1
+          },
+          "patch": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "view",
+          "keys",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "view": "@1",
+            "keys": [
+              "activeTab"
+            ],
+            "patch": {
+              "activeTab": "%3"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "pane.opened",
+      "provider": "core",
+      "desc": "A pane opened in a view: a tab split one off, or a view was made.",
+      "match": "the object id",
+      "data": [
+        "pane",
+        "view"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "pane": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+          },
+          "view": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          }
+        },
+        "required": [
+          "pane",
+          "view"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "pane": ":1",
+            "view": "@1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "pane.closed",
+      "provider": "core",
+      "desc": "A pane closed: its last tab went, or its view did.",
+      "match": "the object id",
+      "data": [
+        "pane",
+        "view"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "pane": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+          },
+          "view": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          }
+        },
+        "required": [
+          "pane",
+          "view"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "pane": ":1",
+            "view": "@1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "pane.changed",
+      "provider": "core",
+      "desc": "A pane changed in the fields `keys` names (`tabs`, `activeTab`); `patch` holds their new values.",
+      "match": "the object id",
+      "data": [
+        "pane",
+        "keys",
+        "patch"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "pane": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "tabs",
+                "activeTab"
+              ]
+            },
+            "minItems": 1
+          },
+          "patch": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "pane",
+          "keys",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "pane": ":1",
+            "keys": [
+              "activeTab"
+            ],
+            "patch": {
+              "activeTab": "%3"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "session.opened",
+      "provider": "core",
+      "desc": "A session opened.",
+      "match": "the object id",
+      "data": [
+        "session",
+        "name",
+        "activeView"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "activeView": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "session",
+          "name",
+          "activeView"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "session": "$1",
+            "name": "work",
+            "activeView": "@1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "session.closed",
+      "provider": "core",
+      "desc": "A session closed.",
+      "match": "the object id",
+      "data": [
+        "session"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "session": "$1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "session.changed",
+      "provider": "core",
+      "desc": "A session changed in the fields `keys` names (`name`, `cwd`, `activeView`); `patch` holds their new values.",
+      "match": "the object id",
+      "data": [
+        "session",
+        "keys",
+        "patch"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "name",
+                "activeView",
+                "cwd"
+              ]
+            },
+            "minItems": 1
+          },
+          "patch": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "session",
+          "keys",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "session": "$1",
+            "keys": [
+              "name"
+            ],
+            "patch": {
+              "name": "work"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "option.changed",
+      "provider": "core",
+      "desc": "A global or plugin option changed; an object's options fire that object's `changed`.",
+      "match": "the option's name",
+      "data": [
+        "name",
+        "scope",
+        "plugin",
+        "old",
+        "new",
+        "source"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "global",
+              "plugin"
+            ]
+          },
+          "plugin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "old": {
+            "type": [
+              "null",
+              "boolean",
+              "number",
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "new": {
+            "type": [
+              "null",
+              "boolean",
+              "number",
+              "string",
+              "array",
+              "object"
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "scope",
+          "plugin",
+          "old",
+          "new",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "name": "guifont",
+            "scope": "global",
+            "plugin": null,
+            "old": null,
+            "new": "Berkeley Mono 14",
+            "source": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "app.changed",
+      "provider": "app",
+      "desc": "The app changed in the named fields (`isFocused`).",
+      "match": "",
+      "data": [
+        "keys",
+        "patch"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "isFocused"
+              ]
+            },
+            "minItems": 1
+          },
+          "patch": {
+            "type": "object",
+            "properties": {
+              "isFocused": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "isFocused"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "keys",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "keys": [
+              "isFocused"
+            ],
+            "patch": {
+              "isFocused": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "registry.changed",
+      "provider": "core",
+      "desc": "Entries of a registry kind (`registry.list`) were set, removed or changed: `names` are theirs.",
+      "match": "the registry kind",
+      "data": [
+        "kind",
+        "names"
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fn",
+              "block",
+              "trait",
+              "option",
+              "key",
+              "menu",
+              "plugin",
+              "theme",
+              "viewer"
+            ]
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "names"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "args": {
+            "kind": "plugin",
+            "names": [
+              "owner/name"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

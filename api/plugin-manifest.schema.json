@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A pumi plugin's package.json",
+  "description": "The `pumi` key of a plugin's package.json: what the plugin is and what it contributes, read without running it. The rest of package.json is npm's.",
+  "type": "object",
+  "required": ["pumi"],
+  "properties": {
+    "pumi": { "$ref": "#/$defs/Manifest" }
+  },
+  "$defs": {
+    "Manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "api"],
+      "properties": {
+        "name": {
+          "description": "The plugin's name; its id is `owner/name`, and its prefix `owner.name.`.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "owner": {
+          "description": "The owner of a linked local plugin (`local` without one). A published plugin's owner is its GitHub owner, lowercased with `-` as `_`.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]*$"
+        },
+        "api": {
+          "description": "The API level the plugin is written for. Without it the plugin is not run.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "minPumi": {
+          "description": "The oldest pumi release it runs on.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "isolate": {
+          "description": "Run it in a process of its own on the same Bun, instead of a worker.",
+          "type": "boolean",
+          "default": false
+        },
+        "uses": {
+          "description": "What it says it touches, shown before it is installed. Nothing is enforced.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["network", "processes", "files", "addons"] }
+        },
+        "themes": {
+          "description": "Its UI themes: directories in the plugin, each with a `theme.ts` (its default export a theme, `defineTheme`), its `*.css` and a `preview.png` or `.svg`. A theme's id is its directory's name, what `ui_theme` is set to.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "icon": {
+          "description": "Its icon in the store: a square PNG, JPEG, WebP or GIF in the plugin (256×256 is plenty).",
+          "type": "string",
+          "pattern": "\\.(png|jpe?g|webp|gif)$"
+        },
+        "images": {
+          "description": "What its store listing shows: PNG, JPEG, WebP or GIF files in the plugin. The first is its card's picture.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "alt"],
+            "properties": {
+              "path": { "type": "string", "pattern": "\\.(png|jpe?g|webp|gif)$" },
+              "alt": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "contributes": { "$ref": "#/$defs/Contributes" },
+        "activation": {
+          "description": "When its worker starts. Without any, it starts on first use of one of its contributions.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(onStartup|onBlock:.+|onCommand:.+|onEvent:.+)$" }
+        }
+      }
+    },
+    "Contributes": {
+      "description": "What the plugin adds, read from the manifest without running it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "options": {
+          "description": "Its options, by key: `side_by_side` is `owner.name.side_by_side`. Options exist only here.",
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+          "additionalProperties": { "$ref": "#/$defs/OptionSpec" }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_.-]*$" },
+              "title": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "keys": {
+          "description": "Default keys, each running one of its commands.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "command"],
+            "properties": {
+              "key": { "type": "string", "minLength": 1 },
+              "command": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "slots": {
+          "description": "What it adds to the window's slots, by slot: actions (each runs one of its commands) and a component (an export of src/ui.tsx, loaded when the slot is on screen). `palette.actions` holds actions only.",
+          "type": "object",
+          "propertyNames": { "enum": ["window.overlay", "session.header", "session.menu", "view.actions", "view.badge", "view.menu", "tab.toolbar", "tab.strip", "tab.overlay", "tab.menu", "agent.controls", "agent.footer", "agent.menu", "panel", "palette.actions"] },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "component": { "description": "The export of src/ui.tsx that draws it.", "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+              "title": { "type": "string" },
+              "icon": { "type": "string" },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "title", "command"],
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "title": { "type": "string", "minLength": 1 },
+                    "icon": { "type": "string" },
+                    "command": { "description": "One of its `commands`, run with what the slot is of (`{tab}`, `{view}`).", "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "blocks": {
+          "description": "The blocks it defines: `owner.name.<id>`, each drawn by the src/ui.tsx export named for its id (`board` → `Board`).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$" },
+              "title": { "type": "string" },
+              "icon": { "type": "string" },
+              "version": {
+                "description": "The version of its tabs' saved `data`; a state of another version is refused. 1 by default.",
+                "type": "integer",
+                "minimum": 1
+              },
+              "strategy": {
+                "description": "How its tabs come back: as they were, by running something again, or pointing at something that must still exist. `exact` by default.",
+                "enum": ["exact", "relaunch", "reference"]
+              },
+              "methods": {
+                "description": "Its tabs' own methods: `tab.call(tab, method, args)` fires `tab.called` for the renderer and answers `null`.",
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$", "not": { "enum": ["read", "input", "selection", "resize", "args", "report"] } }
+              }
+            }
+          }
+        },
+        "renderers": {
+          "description": "The blocks it draws but did not define (`terminal`, the core's `file`, another plugin's `owner.name.id`), each with the src/ui.tsx export that draws them. A renderer of `file` may say which files it draws: `{\"export\": \"Editor\", \"match\": [\"*.md\"]}`; the one whose glob fits a file best draws it, unless the tab's `@tab_renderer` names another.",
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["export", "match"],
+                "properties": {
+                  "export": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+                  "match": {
+                    "description": "Globs: one without a `/` is matched against the file's name, one with a `/` against its path (from any folder, unless it starts with `/`). `*` is any run of characters but `/`, `**` any at all, `?` one; case is ignored. The most literal characters of a matching glob is how well it fits.",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "traits": {
+          "description": "Its traits, `owner.name.<id>`: a tab has one while its option `@owner.name.<id>` is set.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$" },
+              "title": { "type": "string" },
+              "desc": { "type": "string" },
+              "fields": { "description": "Its fields: `@<trait>_<field>` options.", "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "settings": {
+          "description": "What it draws in Settings: pages of its own (after the built-in ones in the nav) and sections on a page (a built-in one, after its own rows, or one of its pages), each an export of src/ui.tsx drawn with the settings kit (`Page`, `Section`, `Row`, `OptionRow`, … from \"pumi\"). Without `settings`, its options are a page Settings makes of them. A page's and a section's id is prefixed as its options are (`tailscale` is `owner.name.tailscale`): what `openSettings` links to and `registry.list(\"settings\")` lists.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "title", "component"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$", "not": { "enum": ["general", "appearance", "keys", "plugins"] } },
+                  "title": { "type": "string", "minLength": 1 },
+                  "icon": { "description": "One of the app's icons.", "type": "string" },
+                  "component": { "description": "The export of src/ui.tsx that draws it, loaded when the page is shown.", "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+                  "keywords": { "description": "Words Settings' search finds it by, beside its title.", "type": "array", "items": { "type": "string", "minLength": 1 } }
+                }
+              }
+            },
+            "sections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "page", "title", "component"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+                  "page": { "description": "A built-in page (`general`, `appearance`, `keys`, `plugins`) or the id of one of its own `pages`.", "type": "string", "minLength": 1 },
+                  "title": { "type": "string", "minLength": 1 },
+                  "component": { "description": "The export of src/ui.tsx that draws it, loaded when its page is shown.", "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+                  "keywords": { "description": "Words Settings' search finds it by, beside its title.", "type": "array", "items": { "type": "string", "minLength": 1 } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "OptionSpec": {
+      "description": "An option's declaration: `option.declare`'s fields, with `secret` for a value kept in the OS keychain.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "desc"],
+      "properties": {
+        "type": { "enum": ["boolean", "number", "string", "table", "secret"] },
+        "default": { "description": "Its value until one is set; not kept for a `secret`." },
+        "scope": {
+          "description": "The narrowest object it is set on; `global` by default.",
+          "enum": ["global", "session", "view", "tab", "client"]
+        },
+        "desc": { "type": "string" },
+        "label": { "description": "Its title in Settings; made of its key by default.", "type": "string" },
+        "group": { "description": "Its heading in Settings; the plugin's name by default.", "type": "string" },
+        "choices": { "description": "The values it accepts, when only some are allowed.", "type": "array" },
+        "labels": {
+          "description": "What Settings calls each of `choices`, in their order.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number" },
+        "unit": { "description": "A number's unit in Settings (`pt`, `%`).", "type": "string" },
+        "placeholder": { "description": "What an empty text field shows.", "type": "string" },
+        "control": {
+          "description": "How Settings edits it when its type does not say.",
+          "enum": ["toggle", "slider", "json", "color"]
+        },
+        "types": {
+          "description": "The tab types it belongs to (one of its own components by its id); every tab's when empty.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

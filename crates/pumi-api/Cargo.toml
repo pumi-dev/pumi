@@ -1,0 +1,23 @@
+[package]
+name = "pumi-api"
+version = "0.42.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "pumi's API kernel: function metadata, the registry and dispatcher, JSON-RPC 2.0, the op log; tmux's language is pumi-lang."
+[dependencies]
+pumi-api-macros = { path = "../pumi-api-macros" }
+linkme = "=0.3.37"
+serde = { version = "1", features = ["derive"] }
+# A function's parameters are its schema's properties, in order, wherever its schema goes.
+serde_json = { version = "1", features = ["preserve_order"] }
+schemars = "=1.2.3"
+# The channel to the core (`channel`) is a local socket: not in a wasm plugin.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+pumi-sys = { path = "../pumi-sys" }
+
+[dev-dependencies]
+divan = "=0.1.21"
+[[bench]]
+name = "api"
+harness = false
