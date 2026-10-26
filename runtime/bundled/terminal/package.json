@@ -1,0 +1,16 @@
+{
+  "name": "pumi-terminal",
+  "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
+  "description": "Draws terminal blocks: the server runs each terminal, and this shows its screen and gives it the keys. Turn it off to draw terminals with a plugin of your own.",
+  "type": "module",
+  "private": true,
+  "pumi": {
+    "name": "terminal",
+    "owner": "pumi",
+    "api": 1,
+    "contributes": {
+      "renderers": { "terminal": "Terminal" }
+    }
+  }
+}

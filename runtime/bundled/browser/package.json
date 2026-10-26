@@ -1,0 +1,71 @@
+{
+  "name": "pumi-browser",
+  "version": "0.2.0",
+  "license": "GPL-3.0-or-later",
+  "description": "A web page in a tab: back, forward, reload and an address bar over the app's webview, and where cmd+click opens a terminal's links. Turn it off and browser tabs, their commands and their settings go; links open in the system's browser.",
+  "type": "module",
+  "private": true,
+  "main": "src/main.ts",
+  "scripts": {
+    "test": "bun test",
+    "check": "tsc --noEmit -p ."
+  },
+  "pumi": {
+    "name": "browser",
+    "owner": "pumi",
+    "api": 1,
+    "contributes": {
+      "options": {
+        "url": {
+          "type": "string",
+          "scope": "tab",
+          "default": "about:blank",
+          "blocks": ["page"],
+          "label": "Page",
+          "desc": "The page's address in this tab. Setting it navigates."
+        },
+        "home_url": {
+          "type": "string",
+          "default": "",
+          "label": "Home page",
+          "placeholder": "Empty: focus the address",
+          "desc": "The page a new browser tab opens. Leave empty to start in the address bar."
+        },
+        "search_url": {
+          "type": "string",
+          "default": "https://duckduckgo.com/?q={query}",
+          "label": "Search",
+          "placeholder": "https://…?q={query}",
+          "desc": "The search engine the address bar uses; {query} stands for what you typed."
+        },
+        "open_links": {
+          "type": "string",
+          "default": "app",
+          "choices": ["app", "system"],
+          "labels": ["Browser tab", "System browser"],
+          "label": "Open links in",
+          "desc": "Where cmd+click opens links from terminals: a browser tab beside the terminal, or the system's browser. Shift+cmd+click opens the other."
+        },
+        "webview_devtools": {
+          "type": "boolean",
+          "default": true,
+          "label": "Web Inspector",
+          "desc": "Inspect and debug web pages with alt+cmd+i."
+        }
+      },
+      "commands": [
+        { "id": "open", "title": "Browser: open a page" },
+        { "id": "openView", "title": "Browser: open a page in a new view" }
+      ],
+      "blocks": [
+        {
+          "id": "page",
+          "title": "Browser",
+          "icon": "globe",
+          "methods": ["navigate", "back", "forward", "reload"]
+        }
+      ]
+    },
+    "activation": []
+  }
+}
