@@ -51,7 +51,7 @@ export declare class Engine {
    * The font families the text system has, sorted, without the system's hidden ones (`.SF…`).
    * `{monospace: true}` keeps those whose `i` is as wide as their `m`: what a terminal can use.
    * Off the main thread: telling the monospace ones loads every font, a quarter second with
-   * a couple of hundred installed, which held the window (and Settings → Appearance) still.
+   * a couple of hundred installed.
    */
   fonts(opts?: FontsOptions | undefined | null): Promise<string[]>
   /**
@@ -758,7 +758,10 @@ export interface EventPayload {
   modifiers?: EventModifiers
 }
 
-/** True when this binary has the GPU test renderer: built with the `test-support` feature. */
+/**
+ * True when this binary has the GPU test renderer: built with the `test-support` feature, on
+ * macOS or Windows.
+ */
 export declare function hasTestGpuixRenderer(): boolean
 
 /**

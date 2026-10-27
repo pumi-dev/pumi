@@ -5,7 +5,10 @@ import { describe, expect, mock, test } from "bun:test"
 const calls: unknown[][] = []
 const handlers = new Map<string, (data: any) => void>()
 let nextId = 40
+// The engine re-exports the wire ids' helpers (`via`, `num`, …), which what is under test imports.
+const ids = await import("../app/ids.ts")
 mock.module("../app/engine.ts", () => ({
+  ...ids,
   store: { get: () => ({}), subscribe: () => () => {} },
   call: (...args: unknown[]) => {
     calls.push(args)
@@ -18,7 +21,10 @@ mock.module("../app/engine.ts", () => ({
   },
 }))
 const channels = await import("./channels.ts")
-const { subscribeEvent } = await import("./events.ts")
+// A copy of its own (the query): another test file may have loaded events.ts already, bound to
+// another engine, and this one has to hear the fake's `event`s.
+const fresh = "./events.ts?channels-test"
+const { subscribeEvent } = (await import(fresh)) as typeof import("./events.ts")
 
 describe("a plugin's channel", () => {
   test("a message reaches the plugin's listeners of its topic, and is kept as the last", () => {

@@ -885,10 +885,12 @@ mod tests {
             assert!(agent.accepts.iter().all(|w| ["queue", "wake"].contains(w)), "{}", agent.id);
         }
     }
-    // The hook line is run by a POSIX shell, which a Windows runner does not have at `/bin/sh`.
-    #[cfg(unix)]
     #[test]
     fn the_command_is_a_no_op_outside_pumi() {
+        // The hook line is run by a POSIX shell, which a Windows runner does not have at `/bin/sh`.
+        if cfg!(windows) {
+            return;
+        }
         let out = std::process::Command::new("/bin/sh")
             .arg("-c")
             .arg(command("claude", "start", "hooks"))

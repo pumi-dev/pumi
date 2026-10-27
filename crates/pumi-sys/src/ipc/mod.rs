@@ -109,10 +109,16 @@ mod tests {
         let listener = Listener::bind(&at).unwrap();
         assert!(matches!(Listener::bind(&at), Err(e) if e.kind() == io::ErrorKind::AddrInUse));
         let server = std::thread::spawn(move || {
-            let stream = listener.accept().unwrap();
-            let mut line = String::new();
-            BufReader::new(stream.try_clone().unwrap()).read_line(&mut line).unwrap();
-            (&stream).write_all(line.to_uppercase().as_bytes()).unwrap();
+            // The second bind's liveness probe may be the first connection: it says nothing.
+            loop {
+                let stream = listener.accept().unwrap();
+                let mut line = String::new();
+                BufReader::new(stream.try_clone().unwrap()).read_line(&mut line).unwrap();
+                if !line.is_empty() {
+                    (&stream).write_all(line.to_uppercase().as_bytes()).unwrap();
+                    return;
+                }
+            }
         });
         let mut client = Stream::connect(&at).unwrap();
         client.write_all(b"hello\n").unwrap();

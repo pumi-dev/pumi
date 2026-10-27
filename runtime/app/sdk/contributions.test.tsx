@@ -5,8 +5,9 @@ import { useState, type ReactNode } from "react"
 import { flushSync } from "../react/reconciler/reconciler.ts"
 import { createTestRoot, hasNativeTestRenderer } from "../react/testing.ts"
 
-// The window's state, without starting the app's engine.
-mock.module("../app/engine.ts", () => ({ store: { get: () => ({ trees: {}, options: {} }), subscribe: () => () => {} }, call: () => Promise.resolve(null), on: () => () => {} }))
+// The window's state, without starting the app's engine (which re-exports the wire ids' helpers).
+const ids = await import("../app/ids.ts")
+mock.module("../app/engine.ts", () => ({ ...ids, store: { get: () => ({ trees: {}, options: {} }), subscribe: () => () => {} }, call: () => Promise.resolve(null), on: () => () => {} }))
 const { fitting, inCompartment, renderComponent } = await import("./contributions.ts")
 type ComponentItem = import("./contributions.ts").ComponentItem
 
@@ -87,9 +88,10 @@ gpu("renderComponent", () => {
   test("draws a component again when what it is given changes, not when the theme around it does", () => {
     const t = createTestRoot({ width: 300, height: 200 })
     let renders = 0
-    function Plugin({ tab }: { tab: { id: number } }) {
+    // A component is given ids (`%1`), as the hooks give them.
+    function Plugin({ tab }: { tab: string }) {
       renders++
-      return <text>{`tab ${tab.id}`}</text>
+      return <text>{`tab ${tab}`}</text>
     }
     const item: ComponentItem = { id: "component", plugin: "me/plugin", Component: Plugin }
     let bump = () => {}
@@ -115,7 +117,7 @@ gpu("renderComponent", () => {
     flushSync(() => move())
     expect(renders).toBe(2)
     t.renderer.flush()
-    expect(t.renderer.getAllText()).toContain("tab 2")
+    expect(t.renderer.getAllText()).toContain("tab %2")
     t.unmount()
   })
 })

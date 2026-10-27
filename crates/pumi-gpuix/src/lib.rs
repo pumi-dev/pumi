@@ -26,6 +26,7 @@ mod tooltip;
 
 // gpui's VisualTestAppContext, what the test renderer draws with, is macOS's and Windows' only.
 #[cfg(all(feature = "test-support", any(target_os = "macos", target_os = "windows")))]
+#[path = "test_renderer.rs"]
 mod test_renderer;
 
 pub use element_tree::*;

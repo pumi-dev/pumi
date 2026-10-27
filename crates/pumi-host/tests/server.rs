@@ -688,10 +688,12 @@ fn a_plugin_from_a_repository_installs_at_the_ref_it_follows_and_goes() {
     assert!(err.is_err(), "{err:?}");
     assert!(!root.join("d/pumi/installed/things").exists());
 }
-#[cfg(unix)]
 #[test]
 fn a_plugin_from_a_repository_gets_its_dependencies_once_and_again_when_it_lost_them() {
-    use std::os::unix::fs::PermissionsExt;
+    // The fake Bun is a shell script.
+    if cfg!(windows) {
+        return;
+    }
     let dir = Server::dir();
     let root = dir.path();
     let repo = root.join("qr");
@@ -721,7 +723,8 @@ fn a_plugin_from_a_repository_gets_its_dependencies_once_and_again_when_it_lost_
         calls = calls.display()
     );
     std::fs::write(&bun, script).unwrap();
-    std::fs::set_permissions(&bun, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // Runnable as the host binary is.
+    std::fs::set_permissions(&bun, std::fs::metadata(env!("CARGO_BIN_EXE_pumi-host")).unwrap().permissions()).unwrap();
     let ran = || std::fs::read_to_string(&calls).unwrap_or_default().lines().map(String::from).collect::<Vec<_>>();
     let installed = root.join("d/pumi/installed/qr");
     let url = format!("file://{}", repo.display());

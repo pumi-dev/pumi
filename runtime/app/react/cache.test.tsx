@@ -402,6 +402,9 @@ gpu("compartment", () => {
       </div>,
     )
     for (let i = 0; i < 3; i++) t.renderer.flush()
+    // The motion's first frame draws the whole tree once, as it starts; what is measured is after.
+    t.renderer.clockFastForward(63)
+    t.renderer.flush()
     t.renderer.getCompartmentStats()
     for (let i = 0; i < 8; i++) {
       t.renderer.clockFastForward(63)
