@@ -893,8 +893,8 @@ export interface Functions {
         axis: "row" | "column";
         /** The first half's share, between 0 and 1. */
         ratio: number;
-        first: unknown;
-        second: unknown;
+        first: Layout;
+        second: Layout;
       };
       /** The tab with the focus, in front of its pane. */
       activeTab?: TabId | null;
@@ -1558,8 +1558,8 @@ export interface Functions {
       axis: "row" | "column";
       /** The first half's share, between 0 and 1. */
       ratio: number;
-      first: unknown;
-      second: unknown;
+      first: Layout;
+      second: Layout;
     };
     /** The tab with the focus, in front of its pane. */
     activeTab?: TabId | null;
@@ -1592,8 +1592,8 @@ export interface Functions {
       axis: "row" | "column";
       /** The first half's share, between 0 and 1. */
       ratio: number;
-      first: unknown;
-      second: unknown;
+      first: Layout;
+      second: Layout;
     } | null;
     /** The pane zoomed to fill it, which gets its focus; `null` unzooms it. */
     zoom?: PaneId | null;
@@ -2616,8 +2616,8 @@ export interface Nouns {
         axis: "row" | "column";
         /** The first half's share, between 0 and 1. */
         ratio: number;
-        first: unknown;
-        second: unknown;
+        first: Layout;
+        second: Layout;
       };
       /** The tab with the focus, in front of its pane. */
       activeTab?: TabId | null;
@@ -3325,8 +3325,8 @@ export interface Nouns {
       axis: "row" | "column";
       /** The first half's share, between 0 and 1. */
       ratio: number;
-      first: unknown;
-      second: unknown;
+      first: Layout;
+      second: Layout;
     };
     /** The tab with the focus, in front of its pane. */
     activeTab?: TabId | null;
@@ -3362,8 +3362,8 @@ export interface Nouns {
       axis: "row" | "column";
       /** The first half's share, between 0 and 1. */
       ratio: number;
-      first: unknown;
-      second: unknown;
+      first: Layout;
+      second: Layout;
     } | null;
     /** The pane zoomed to fill it, which gets its focus; `null` unzooms it. */
     zoom?: PaneId | null;

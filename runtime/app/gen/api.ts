@@ -158,11 +158,22 @@ class Built {
     for (const [model, field] of fields) {
       const name = field.type.replace(/ \| null$/, "").replace(/\[\]$/, "");
       if (!/^[A-Z][A-Za-z]*$/.test(name) || this.modelOf.has(name) || name === "ObjectId" || this.named.has(name)) continue;
-      let ts = this.types.ts(this.bare(this.fieldSchema(model, field), field.type), new Map(), "");
-      // The export's layout is a tree its schema cannot name: each side of a split is a layout.
-      if (name === "Layout") ts = ts.replace(/(first|second): unknown;/g, "$1: Layout;");
+      const schema = this.bare(this.fieldSchema(model, field), field.type);
+      const root = this.rootOf(model);
+      // A tree refers back to itself by its definition (each side of a split is a layout): when
+      // that definition is the field's whole type, it is this type.
+      for (const ref of this.types.refs(schema)) {
+        const self = new Map([[ref, name]]);
+        if (this.types.ts(this.types.body(root, ref), self, "") === this.types.ts(schema, self, "")) this.types.claim(root, ref, name);
+      }
+      const ts = this.types.ts(schema, this.types.defs(root, `${model?.kind}.get`), "");
       this.named.set(name, `export type ${name} = ${ts};\n`);
     }
+  }
+
+  /** The schema a model's fields are read from (`<kind>.get`'s answer), with its `$defs`. */
+  private rootOf(model: ModelSpec | undefined): Schema {
+    return (model && this.fns.get(`${model.kind}.get`)?.returns_schema) || {};
   }
 
   /** A field's type as data: ids stay ids. */
@@ -170,7 +181,7 @@ class Built {
     if (field.type === "Record<string, object>") return "TabTraits";
     const tokens = field.type.match(/[A-Z][A-Za-z]*/g) ?? [];
     if (tokens.some((t) => this.named.has(t) || this.modelOf.has(t) || t === "ObjectId")) return field.type;
-    return this.types.ts(this.fieldSchema(model, field), new Map(), "  ");
+    return this.types.ts(this.fieldSchema(model, field), this.types.defs(this.rootOf(model), `${model?.kind}.get`), "  ");
   }
 
   /** A field's type as a model's getter answers it: an id is its model (`ViewId[]` is `View[]`). */
@@ -186,7 +197,8 @@ class Built {
     const schema = this.schemaOf(f.params_schema) ?? {};
     const props: Record<string, Schema> = schema.properties ?? {};
     const required = new Set<string>(schema.required ?? []);
-    const list = f.parameters.map(([, name]) => ({ name, type: this.types.ts(props[name], new Map(), "  "), optional: !required.has(name) }));
+    const local = this.types.defs(schema, f.name);
+    const list = f.parameters.map(([, name]) => ({ name, type: this.types.ts(props[name], local, "  "), optional: !required.has(name) }));
     // Only a trailing run of optional parameters is optional in TypeScript; an earlier one takes
     // `undefined`.
     let trailing = true;
@@ -200,7 +212,12 @@ class Built {
   }
 
   returns(f: Fn): string {
-    return this.types.ts(f.returns_schema, new Map(), "  ");
+    return this.of(f.returns_schema, f.name);
+  }
+
+  /** The TypeScript type of `schema`, a whole one of `owner`'s (its `$defs` beside it). */
+  of(schema: Schema, owner: string, indent = "  "): string {
+    return this.types.ts(schema, this.types.defs(schema, owner), indent);
   }
 }
 
@@ -231,6 +248,8 @@ export function typesFile(api: Export, header: string): string {
   for (const m of api.models) out += `${doc(`${m.name}'s id (\`${m.idPrefix ? `${m.idPrefix}1` : "owner/name"}\`).`)}export type ${m.name}Id = string;\n`;
   out += `${doc("Any object's id, for an option's scope.")}export type ObjectId = string;\n\n`;
   for (const decl of b.named.values()) out += `${decl}\n`;
+  // The definitions a schema below still refers to are named as they come up: they go here.
+  const at = out.length;
 
   for (const t of api.traits) {
     out += doc(`${t.desc} A tab has it while its option \`@${t.name}\` is set; its fields are \`@${t.name}.<field>\`.`);
@@ -259,7 +278,7 @@ export function typesFile(api: Export, header: string): string {
   out += "/** Every method a tab answers through `tab.call`: its arguments and its answer. */\n";
   out += "export interface TabMethods {\n";
   for (const p of api.tabMethods) {
-    out += `${doc(p.desc, "  ")}  ${prop(p.name)}: { args: ${b.types.ts(p.params_schema, new Map(), "  ")}; returns: ${b.types.ts(p.returns_schema, new Map(), "  ")} };\n`;
+    out += `${doc(p.desc, "  ")}  ${prop(p.name)}: { args: ${b.of(p.params_schema, p.name)}; returns: ${b.of(p.returns_schema, p.name)} };\n`;
   }
   out += "}\n\n";
 
@@ -267,7 +286,7 @@ export function typesFile(api: Export, header: string): string {
   out += "export interface Events {\n";
   for (const e of api.events) {
     const text = `${e.desc}${e.match ? `\n\nIts \`match\` is ${e.match}.` : ""}`;
-    out += `${doc(text, "  ")}  ${JSON.stringify(e.name)}: ${b.types.ts(e.params_schema, new Map(), "  ")};\n`;
+    out += `${doc(text, "  ")}  ${JSON.stringify(e.name)}: ${b.of(e.params_schema, e.name)};\n`;
   }
   out += "}\n\n";
 
@@ -284,7 +303,8 @@ export function typesFile(api: Export, header: string): string {
   }
   out += "}\n\n";
   out += "export type EventName = keyof Events;\nexport type FunctionName = keyof Functions;\nexport type TabMethodName = keyof TabMethods;\n";
-  return out;
+  const defs = [...b.types.named.values()].map((decl) => `${decl}\n`).join("");
+  return out.slice(0, at) + defs + out.slice(at);
 }
 
 /** worker/sdk/models.gen.ts: the model classes. */
@@ -292,9 +312,7 @@ export function modelsFile(api: Export, header: string): string {
   const b = new Built(api);
   const typeNames = new Set<string>(["TabTraits", ...b.named.keys(), "ObjectId"]);
   for (const m of api.models) typeNames.add(`${m.name}Id`).add(`${m.name}Data`).add(`${m.name}Key`);
-  let out = header;
-  out += 'import { Model, installClasses } from "./model.ts";\n';
-  out += `import type { ${[...typeNames].sort().join(", ")} } from "./api.types.gen.ts";\n\n`;
+  let out = "";
   for (const m of api.models) {
     const self = m.name[0]!.toLowerCase() + m.name.slice(1);
     out += doc(`${m.desc} Its fields read the live cache; each method is one call.`);
@@ -313,10 +331,10 @@ export function modelsFile(api: Export, header: string): string {
         if (!p) throw new Error(`${m.name}.${method.name}: no tab method ${method.method}`);
         const schema: any = p.params_schema;
         const optional = !schema?.oneOf && !(schema?.required?.length > 0);
-        const args = b.types.ts(p.params_schema, new Map(), "  ");
+        const args = b.of(p.params_schema, p.name);
         const ex = p.example && `await ${self}.${method.name}(${literal(p.example.args)})`;
         out += doc(documented(p.desc, ex, p.example?.result), "  ");
-        out += `  ${prop(method.name)}(args${optional ? "?" : ""}: ${args}): Promise<${b.types.ts(p.returns_schema, new Map(), "  ")}> {\n`;
+        out += `  ${prop(method.name)}(args${optional ? "?" : ""}: ${args}): Promise<${b.of(p.returns_schema, p.name)}> {\n`;
         out += `    return this.invoke("tab.call", [this.id, ${JSON.stringify(method.method)}, args${optional ? " ?? {}" : ""}]);\n  }\n`;
         continue;
       }
@@ -337,7 +355,10 @@ export function modelsFile(api: Export, header: string): string {
   out += `export const MODEL_CLASSES = { ${api.models.map((m) => `${prop(m.kind)}: ${m.name}`).join(", ")} } as const;\n\n`;
   // The cache makes a model by its kind, so the classes give themselves to it as they load.
   out += "installClasses(MODEL_CLASSES);\n";
-  return out;
+  // The definitions the methods' schemas named, as they came up.
+  for (const name of b.types.named.keys()) typeNames.add(name);
+  const imports = `import { Model, installClasses } from "./model.ts";\nimport type { ${[...typeNames].sort().join(", ")} } from "./api.types.gen.ts";\n\n`;
+  return header + imports + out;
 }
 
 /** worker/sdk/api.gen.ts: what the SDK builds its nouns, models and cache from at run time. */

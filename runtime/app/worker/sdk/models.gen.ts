@@ -121,8 +121,8 @@ export class View extends Model<ViewData, ViewKey> {
       axis: "row" | "column";
       /** The first half's share, between 0 and 1. */
       ratio: number;
-      first: unknown;
-      second: unknown;
+      first: Layout;
+      second: Layout;
     } | null;
     /** The pane zoomed to fill it, which gets its focus; `null` unzooms it. */
     zoom?: PaneId | null;

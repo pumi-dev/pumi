@@ -1,7 +1,7 @@
 // JSON Schema (as the export's `params_schema` and `returns_schema` have it: schemars' draft 2020-12
-// subset) to TypeScript types. `$defs` become named types, shared by every function whose schema
-// has the same definition under the same name; a name two functions define differently gets the
-// function's name as a suffix for the second. A string whose `pattern` is an id's is that id's type
+// subset) to TypeScript types. The `$defs` a schema still refers to (a tree's branches) become
+// named types, shared by every function whose schema has the same definition under the same name;
+// a name two functions define differently gets the function's name as a suffix for the second. A string whose `pattern` is an id's is that id's type
 // (`TabId`).
 
 export type Schema = boolean | { [key: string]: any };
@@ -28,17 +28,83 @@ export class Types {
   /** Each definition seen: name → [its JSON, the name it was given]. */
   private seen = new Map<string, [string, string][]>();
 
+  /** The names of the definitions `schema` refers to outside its `$defs`. */
+  refs(schema: Schema): Set<string> {
+    const out = new Set<string>();
+    const walk = (s: unknown) => {
+      if (Array.isArray(s)) return s.forEach(walk);
+      if (!s || typeof s !== "object") return;
+      for (const [k, v] of Object.entries(s)) {
+        if (k === "$ref" && typeof v === "string") out.add(v.replace("#/$defs/", ""));
+        else if (k !== "$defs") walk(v);
+      }
+    };
+    walk(schema);
+    return out;
+  }
+
   /**
-   * The names `schema`'s `$defs` get here, by their name in it. `owner` (a function's name) is
-   * what tells two different definitions of one name apart.
+   * Definition `name` of `root`'s `$defs`, with every other definition it refers to written out
+   * in place, as the export writes a schema: only a reference back to one it is inside (a tree's
+   * branch) stays one, and is added to `kept`.
    */
-  defs(schema: Schema, owner: string): Map<string, string> {
+  body(root: Schema, name: string, kept = new Set<string>([name])): Schema {
+    const defs: Record<string, Schema> = (typeof root === "object" && root.$defs) || {};
+    const inline = (s: any, inside: string[]): any => {
+      if (Array.isArray(s)) return s.map((v) => inline(v, inside));
+      if (!s || typeof s !== "object") return s;
+      if (typeof s.$ref === "string") {
+        const ref = s.$ref.replace("#/$defs/", "");
+        if (kept.has(ref) || inside.includes(ref) || !(ref in defs)) {
+          if (ref in defs) kept.add(ref);
+          return s;
+        }
+        const { $ref: _, ...rest } = s;
+        return { ...inline(defs[ref], [...inside, ref]), ...rest };
+      }
+      return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, inline(v, inside)]));
+    };
+    return inline(defs[name], [name]);
+  }
+
+  /**
+   * Gives definition `ref` of `root` the name `given` from now on, which its caller declares: a
+   * model's field type is the tree its schema refers back to (`Layout` is the export's
+   * `LayoutTree`).
+   */
+  claim(root: Schema, ref: string, given: string) {
+    const json = JSON.stringify(this.bodies(root).get(ref) ?? this.body(root, ref));
+    this.seen.set(ref, [[json, given], ...(this.seen.get(ref) ?? []).filter(([j]) => j !== json)]);
+    this.claimed.add(given);
+  }
+  private claimed = new Set<string>();
+
+  /**
+   * What each definition `root` refers to says, the others it uses written out; one a definition
+   * refers back to while inside it is among them too.
+   */
+  private bodies(root: Schema): Map<string, Schema> {
+    const kept = this.refs(root);
+    const bodies = new Map<string, Schema>();
+    for (let size = -1; size !== kept.size; ) {
+      size = kept.size;
+      for (const name of [...kept]) bodies.set(name, this.body(root, name, kept));
+    }
+    return bodies;
+  }
+
+  /**
+   * The names the definitions `root` refers to get here, by their name in its `$defs`, each
+   * declared once. The export writes every definition out in place but a tree's, so what is left
+   * to name is the reference a tree makes to itself. `owner` (a function's name) is what tells two
+   * different definitions of one name apart.
+   */
+  defs(root: Schema, owner: string): Map<string, string> {
     const local = new Map<string, string>();
-    if (typeof schema !== "object") return local;
-    const defs: Record<string, Schema> = schema.$defs ?? {};
-    // Names first, so definitions can refer to each other in any order.
-    for (const [name, def] of Object.entries(defs)) {
-      const json = JSON.stringify(def);
+    if (typeof root !== "object" || !root.$defs) return local;
+    const bodies = this.bodies(root);
+    for (const [name, body] of bodies) {
+      const json = JSON.stringify(body);
       const known = this.seen.get(name) ?? [];
       const same = known.find(([j]) => j === json);
       if (same) {
@@ -50,11 +116,11 @@ export class Types {
       this.seen.set(name, known);
       local.set(name, given);
     }
-    for (const [name, def] of Object.entries(defs)) {
+    for (const [name, body] of bodies) {
       const given = local.get(name)!;
-      if (this.named.has(given)) continue;
-      const desc = typeof def === "object" ? def.description : undefined;
-      this.named.set(given, `${doc(desc)}export type ${given} = ${this.ts(def, local, "")};\n`);
+      if (this.named.has(given) || this.claimed.has(given)) continue;
+      const desc = typeof body === "object" ? body.description : undefined;
+      this.named.set(given, `${doc(desc)}export type ${given} = ${this.ts(body, local, "")};\n`);
     }
     return local;
   }
