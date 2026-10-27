@@ -594,6 +594,45 @@ fn a_linked_package_lists_its_block_types_while_it_is_on() {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+/// A linked plugin is refreshed where it is, and removing it takes the link, never the directory
+/// it links to.
+#[test]
+fn a_linked_plugin_is_refreshed_where_it_is_and_removing_it_keeps_its_directory() {
+    let dir = Server::dir();
+    let root = dir.path();
+    let pkg = root.join("tools");
+    std::fs::create_dir_all(pkg.join("src")).unwrap();
+    std::fs::write(
+        pkg.join("package.json"),
+        r#"{ "name": "tools", "pumi": { "name": "tools", "owner": "me", "api": 1 } }"#,
+    )
+    .unwrap();
+    std::fs::write(pkg.join("src/work.ts"), "unsaved work\n").unwrap();
+    let server = Server::start_home(root);
+    let mut client = server.client();
+    let id = client.call("plugin.add", json!([pkg.to_str().unwrap(), {}]));
+    assert_eq!(id, "me/tools");
+    let link = root.join("d/pumi/installed/tools");
+    assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "installed as a link");
+    client.call("plugin.update", json!([id, {}]));
+    client.call("plugin.update", json!([id, {"enabled": false}]));
+    client.call("plugin.update", json!([id, {"enabled": true}]));
+    client.call("plugin.remove", json!([id, {"data": true}]));
+    assert!(std::fs::symlink_metadata(&link).is_err(), "its link goes");
+    assert_eq!(std::fs::read_to_string(pkg.join("src/work.ts")).unwrap(), "unsaved work\n", "its directory stays");
+    assert!(
+        client
+            .call("registry.list", json!(["plugin", {}]))
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["spec"]["name"] != "tools")
+    );
+    // Linked again, then its directory is gone: a refresh says so.
+    client.call("plugin.add", json!([pkg.to_str().unwrap(), {}]));
+    std::fs::remove_dir_all(&pkg).unwrap();
+    assert!(client.try_call("plugin.update", json!([id, {}])).is_err(), "its directory is gone");
+}
 #[test]
 fn the_bundled_terminal_plugin_is_listed_turned_off_and_never_removed() {
     let dir = Server::dir();

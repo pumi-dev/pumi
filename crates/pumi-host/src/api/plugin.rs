@@ -1,7 +1,7 @@
 use super::kernel;
 use crate::kernel::Kernel;
 use crate::kernel::events::About;
-use crate::plugins::{Entry, checkout_of, dir_of, lock_read, lock_write, root};
+use crate::plugins::{Entry, checkout_of, dir_of, installed_at, lock_read, lock_write, root};
 use pumi_api::{Cx, Error, Optional, Result, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -220,7 +220,7 @@ fn unlink(path: &Path) -> std::io::Result<()> {
 fn install(spec: &Spec) -> Result<(String, Entry)> {
     std::fs::create_dir_all(root()).map_err(|e| Error::exception(format!("{}: {e}", root().display())))?;
     let name = spec.name.clone().expect("a spec has a name");
-    let dir = dir_of(&name);
+    let dir = installed_at(&name);
     let target = dir.display().to_string();
     if spec.kind == "link" {
         if !Path::new(&spec.src).is_dir() {
@@ -378,7 +378,7 @@ pub fn pumi_plugin_add(cx: &mut Cx, source: String, opts: Optional<AddOpts>) -> 
         return Err(Error::invalid_params(format!("`{name}` is bundled with pumi; it is installed already")));
     }
     let mut lock = lock_read();
-    let known = spec.name.as_ref().filter(|n| std::fs::symlink_metadata(dir_of(n)).is_ok()).cloned();
+    let known = spec.name.as_ref().filter(|n| std::fs::symlink_metadata(installed_at(n)).is_ok()).cloned();
     let name = match known {
         Some(name) => {
             if let Some(had) = lock.plugins.get(&name)
@@ -505,10 +505,10 @@ pub fn pumi_plugin_update(cx: &mut Cx, plugin: PluginId, patch: Optional<UpdateP
             crate::deps::ensure(&dir_of(&name)).map_err(|e| Error::exception(format!("{name}: {e}")))?;
         }
         Some("link") => {
-            let target = std::fs::read_link(dir_of(&name))
-                .map_err(|e| Error::not_found(format!("{}: {e}", dir_of(&name).display())))?;
-            if !target.exists() {
-                return Err(Error::not_found(format!("{}: the linked directory is gone", target.display())));
+            // Read again where it was linked from, which the lockfile says.
+            let src = entry.src.as_deref().map(PathBuf::from).unwrap_or_else(|| installed_at(&name));
+            if !src.join("package.json").is_file() {
+                return Err(Error::not_found(format!("{}: the linked directory is gone", src.display())));
             }
         }
         _ => {}
@@ -545,15 +545,17 @@ pub fn pumi_plugin_remove(cx: &mut Cx, plugin: PluginId, opts: Optional<RemoveOp
             "`{name}` is bundled with pumi and cannot be removed; turn it off with `plugin.update {name} {{enabled: false}}`"
         )));
     }
-    let dir = dir_of(&name);
     // Read before its files go: its id names its data, its manifest its secrets.
-    let plugin = data.then(|| pumi_api::manifest::read(&dir, entry.src.as_deref()).ok()).flatten();
-    let gone = match std::fs::symlink_metadata(&dir) {
-        Ok(m) if m.file_type().is_symlink() => unlink(&dir),
-        Ok(_) => std::fs::remove_dir_all(&dir),
+    let plugin = data.then(|| pumi_api::manifest::read(&dir_of(&name), entry.src.as_deref()).ok()).flatten();
+    // What goes is the install: a link, or a clone. A linked plugin's directory is never pumi's.
+    let at = installed_at(&name);
+    let gone = match std::fs::symlink_metadata(&at) {
+        Ok(m) if m.file_type().is_symlink() => unlink(&at),
+        Ok(_) if entry.kind.as_deref() == Some("link") => Ok(()),
+        Ok(_) => std::fs::remove_dir_all(&at),
         Err(_) => Ok(()),
     };
-    gone.map_err(|e| Error::exception(format!("{}: {e}", dir.display())))?;
+    gone.map_err(|e| Error::exception(format!("{}: {e}", at.display())))?;
     if entry.path.is_some() && entry.kind.as_deref() == Some("git") {
         let _ = std::fs::remove_dir_all(checkout_of(&name));
     }

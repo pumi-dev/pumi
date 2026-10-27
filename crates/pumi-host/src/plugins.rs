@@ -54,6 +54,8 @@ pub fn is_bundled(name: &str) -> bool {
 }
 /// The owner only bundled plugins have.
 pub const BUNDLED_OWNER: &str = "pumi";
+/// Where a plugin's code is: a bundled one's directory, a linked one's where it was linked from, and
+/// otherwise where it is installed (`installed_at`).
 pub fn dir_of(name: &str) -> PathBuf {
     if let Some(dir) = bundled().remove(name) {
         return dir;
@@ -69,6 +71,11 @@ pub fn dir_of(name: &str) -> PathBuf {
             return path;
         }
     }
+    installed_at(name)
+}
+/// Where a plugin is installed: `root()/<name>`, the directory it was cloned to or a link. For a
+/// linked plugin that is the link, not its directory (`dir_of`), which is its author's.
+pub fn installed_at(name: &str) -> PathBuf {
     root().join(name)
 }
 /// The lockfile's earlier name, `pack-lock.json`: read when the current one is missing.
