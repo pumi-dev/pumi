@@ -236,6 +236,11 @@ mod tests {
             .map(|binding| binding.keystrokes().iter().map(|k| k.inner().unparse()).collect::<Vec<_>>().join(" "))
     }
 
+    /// `chord` as this OS's GPUI spells it: the platform key is `cmd` on macOS, `super` on Linux.
+    fn here(chord: &str) -> String {
+        gpui::Keystroke::parse(chord).unwrap().unparse()
+    }
+
     #[test]
     fn the_app_menu_has_about_settings_and_quit() {
         let mut bindings = Vec::new();
@@ -243,7 +248,7 @@ mod tests {
         assert_eq!(names(&menu.items).first().map(String::as_str), Some("About pumi"));
         assert!(names(&menu.items).iter().any(|item| item == "Settings…"));
         assert!(names(&menu.items).iter().any(|item| item == "Quit pumi"));
-        assert_eq!(chord(&bindings, "settings").as_deref(), Some("cmd-,"));
+        assert_eq!(chord(&bindings, "settings"), Some(here("cmd-,")));
         assert_eq!(spell("cmd+/").as_deref(), Some("cmd-/"));
     }
 
@@ -252,7 +257,7 @@ mod tests {
         let mut bindings = Vec::new();
         let menu = submenu(&json!({ "name": "Pane", "items": [{ "command": "split_vertical", "title": "Split Right", "chord": "cmd+d" }] }), &mut bindings).unwrap();
         assert_eq!(names(&menu.items), ["Split Right"]);
-        assert_eq!(chord(&bindings, "split_vertical").as_deref(), Some("cmd-d"));
+        assert_eq!(chord(&bindings, "split_vertical"), Some(here("cmd-d")));
     }
 
     #[test]
