@@ -9895,30 +9895,20 @@
             ]
           },
           "event": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "start",
+              "prompt"
+            ]
           },
           "resumed": {
             "type": "boolean"
           },
           "full": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "boolean"
           },
           "peek": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "boolean"
           }
         },
         "required": [
@@ -9942,8 +9932,8 @@
             "session": null,
             "event": "prompt",
             "resumed": false,
-            "full": "fix tests",
-            "peek": null
+            "full": false,
+            "peek": false
           }
         }
       ]

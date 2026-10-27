@@ -1749,10 +1749,10 @@ export interface Events {
     tab: TabId;
     agent: string;
     session: string | null;
-    event: string;
+    event: "start" | "prompt";
     resumed: boolean;
-    full: string | null;
-    peek: string | null;
+    full: boolean;
+    peek: boolean;
   };
   /**
    * An agent's turn ended (`stop`), or it compacted its context (`compact`): what it was told may be gone.

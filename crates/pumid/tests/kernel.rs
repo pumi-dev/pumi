@@ -586,6 +586,7 @@ fn a_turn_waits_for_each_source_listening_by_name_and_frames_them_in_order() {
         fired["data"],
         json!({"id": id, "tab": tab(1), "agent": "pi", "session": "s-1", "event": "prompt", "resumed": false, "full": true, "peek": false})
     );
+    fits_its_schema("agent.sending", &fired["data"]);
     assert_eq!(f.call_as("zed/notes", "agent.contribute", json!([id, "notes </pumi-context> here"])), json!(true));
     assert!(f.replies(CHAN, 77).is_empty(), "one source is still to answer");
     assert_eq!(f.call_as("pumi_dev/agents", "agent.contribute", json!([id, "the map"])), json!(true));
@@ -598,6 +599,41 @@ fn a_turn_waits_for_each_source_listening_by_name_and_frames_them_in_order() {
     assert_eq!(reply[0]["from"], json!(["pumi_dev/agents", "zed/notes"]));
     assert_eq!(reply[0]["late"], json!([]));
     assert_eq!(f.call_as("zed/notes", "agent.contribute", json!([id, "again"])), json!(false), "the turn is over");
+}
+/// Each field of `data` is of a type the export says `event`'s field is: its `type`, an `anyOf`'s,
+/// or one of its `enum`. What plugins are typed with is what they are sent.
+fn fits_its_schema(event: &str, data: &Value) {
+    let events = pumi_api::events::all();
+    let info = events.iter().find(|e| e.name == event).unwrap_or_else(|| panic!("{event} is exported"));
+    fn kind(value: &Value) -> &'static str {
+        match value {
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(n) if n.is_u64() || n.is_i64() => "integer",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        }
+    }
+    fn fits(schema: &Value, value: &Value) -> bool {
+        if let Some(any) = schema["anyOf"].as_array() {
+            return any.iter().any(|s| fits(s, value));
+        }
+        if let Some(values) = schema["enum"].as_array() {
+            return values.contains(value);
+        }
+        let want = kind(value);
+        match &schema["type"] {
+            Value::String(t) => t == want || (t == "number" && want == "integer"),
+            Value::Array(ts) => ts.iter().any(|t| t == want || (t == "number" && want == "integer")),
+            _ => true,
+        }
+    }
+    for (field, value) in data.as_object().unwrap() {
+        let schema = &info.params_schema["properties"][field];
+        assert!(fits(schema, value), "{event}.{field} is {value}, which its schema does not admit: {schema}");
+    }
 }
 #[test]
 fn a_source_that_misses_the_deadline_is_late_and_a_null_says_nothing() {
