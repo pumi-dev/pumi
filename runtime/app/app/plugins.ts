@@ -90,6 +90,8 @@ const provided = new Map<string, string>()
 const listeners = new Set<() => void>()
 let host: Host | undefined
 let isHost = false
+/** The plugins `pumi plugin dev --inspect` runs under Bun's inspector. */
+const inspected = new Set<string>()
 
 function changed() {
   for (const listener of listeners) listener()
@@ -248,6 +250,7 @@ function loadOf(entry: Entry): Load {
     prefix: entry.prefix,
     paths,
     isolate: entry.manifest.isolate === true,
+    inspect: inspected.has(entry.id),
   }
 }
 
@@ -387,10 +390,19 @@ async function reload(event: any) {
     if (!entry.active && names.length === 0) continue
     entry.error = null
     entry.active = true
-    if (entry.sent) host?.frame({ type: "reload", pkg: entry.id })
+    if (entry.sent) host?.frame({ type: "reload", pkg: entry.id, spec: loadOf(entry) })
     else activate(entry.id)
   }
   changed()
+}
+
+/** `pumi plugin dev` asks for a plugin again (every one without a `name`); `inspect` runs it under
+ *  Bun's inspector. */
+function reloadRequested(data: any) {
+  const name = typeof data?.name === "string" ? data.name : ""
+  if (name && data?.inspect === true) inspected.add(name)
+  else if (name) inspected.delete(name)
+  return reload({ names: name ? [name] : [] })
 }
 
 /** The callbacks the server makes to a plugin (a function or menu item it set): `<pkg>/<n>`. */
@@ -450,6 +462,7 @@ export async function start(safe: boolean) {
   await listen("client.detached", { desc: "the plugin host may change" }, () => elect()).catch(() => {})
   // A plugin installed, removed or reloaded: `registry.changed` of the `plugin` kind.
   await listen("registry.changed", { match: "plugin", desc: "reloads plugins" }, (e) => reload(e.data)).catch(() => {})
+  await listen("plugin.reloadRequested", { desc: "reloads a plugin (`pumi plugin dev`)" }, (e) => reloadRequested(e.data)).catch(() => {})
   await elect()
   // Every app draws its plugins' window side; only the host runs their workers.
   if (!isHost) await catalog()

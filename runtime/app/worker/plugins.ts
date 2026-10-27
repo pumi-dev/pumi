@@ -91,7 +91,10 @@ export class Host {
         });
       case "reload": {
         const p = this.plugins.get(f.pkg);
-        if (p) this.restart(p);
+        if (!p) return;
+        // What the app knows of it now (its manifest read again, `--inspect`), when it says.
+        if (f.spec) p.spec = f.spec as Load;
+        this.restart(p);
         return;
       }
       case "stop": {
