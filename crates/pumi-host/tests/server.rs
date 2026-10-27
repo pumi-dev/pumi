@@ -1036,6 +1036,11 @@ fn a_notice_is_not_a_tab() {
 fn install(from: &Path, bin: &Path, name: &str) {
     let new = bin.join(format!("{name}.new"));
     std::fs::copy(from, &new).unwrap();
+    // A new binary, as an update writes one: macOS's copy is a clone that keeps the source's
+    // times, so a copy of the same build would look like the file already running.
+    let file = std::fs::OpenOptions::new().write(true).open(&new).unwrap();
+    file.set_modified(std::time::SystemTime::now()).unwrap();
+    drop(file);
     std::fs::rename(&new, bin.join(pumi_sys::paths::exe(name))).unwrap();
 }
 fn host_pid(client: &mut Client) -> Value {

@@ -474,7 +474,9 @@ mod tests {
     fn a_path_is_whole() {
         let home = pumi_proto::paths::home_dir();
         assert_eq!(super::whole_path("~/a.md").unwrap(), home.join("a.md").display().to_string());
-        assert_eq!(super::whole_path("/tmp/a.md").unwrap(), "/tmp/a.md");
+        // `/tmp/a.md` is relative to the drive on Windows; a whole path there has one.
+        let absolute = if cfg!(windows) { r"C:\tmp\a.md" } else { "/tmp/a.md" };
+        assert_eq!(super::whole_path(absolute).unwrap(), absolute);
         let cwd = std::env::current_dir().unwrap();
         assert_eq!(super::whole_path("a.md").unwrap(), cwd.join("a.md").display().to_string());
     }

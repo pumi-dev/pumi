@@ -24,15 +24,17 @@ mod text;
 mod theme;
 mod tooltip;
 
-#[cfg(feature = "test-support")]
+// gpui's VisualTestAppContext, what the test renderer draws with, is macOS's and Windows' only.
+#[cfg(all(feature = "test-support", any(target_os = "macos", target_os = "windows")))]
 mod test_renderer;
 
 pub use element_tree::*;
 pub use renderer::*;
 pub use style::*;
 
-/// True when this binary has the GPU test renderer: built with the `test-support` feature.
+/// True when this binary has the GPU test renderer: built with the `test-support` feature, on
+/// macOS or Windows.
 #[napi_derive::napi]
 pub fn has_test_gpuix_renderer() -> bool {
-    cfg!(feature = "test-support")
+    cfg!(all(feature = "test-support", any(target_os = "macos", target_os = "windows")))
 }
