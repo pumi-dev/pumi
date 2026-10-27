@@ -267,6 +267,11 @@ fn install(spec: &Spec) -> Result<(String, Entry)> {
         undo();
         return Err(e);
     }
+    // Its npm dependencies: a plugin that cannot load them is not installed.
+    if let Err(e) = crate::deps::ensure(&dir) {
+        undo();
+        return Err(Error::exception(format!("{target}: {e}")));
+    }
     let rev = run("git", &["-C", &at, "rev-parse", "HEAD"], None)?;
     let entry = Entry {
         src: Some(spec.src.clone()),
@@ -352,7 +357,9 @@ pub struct AddOpts {
 /// Install a plugin: a store id (`owner/name`, or a name only one listing has), a GitHub
 /// repository (`owner/repo`, or `owner/repo/dir` for one in a folder), a git URL, or a directory
 /// on this machine, which is linked. The commit installed is recorded; a manifest's `minPumi`
-/// newer than this pumi is refused. An install from GitHub is counted by the store
+/// newer than this pumi is refused. One from git with `dependencies` has them installed (`bun
+/// install --production --no-save --ignore-scripts`), and is refused when they fail to install.
+/// An install from GitHub is counted by the store
 /// (`pluginindex`'s server, once per address a day). One already installed stays as it is.
 /// Answers its id (`owner/name`).
 #[api(
@@ -390,6 +397,10 @@ pub fn pumi_plugin_add(cx: &mut Cx, source: String, opts: Optional<AddOpts>) -> 
                 ..Entry::default()
             });
             save(&lock)?;
+            // One installed already may still miss its dependencies (from before pumi installed them).
+            if lock.plugins[&name].kind.as_deref() == Some("git") {
+                crate::deps::ensure(&dir_of(&name)).map_err(|e| Error::exception(format!("{name}: {e}")))?;
+            }
             name
         }
         None => {
@@ -452,7 +463,8 @@ pub struct UpdatePatch {
     pub version: Optional<String>,
 }
 /// Patch a plugin, or refresh it from its source: a linked one is read again where it is, and a
-/// git one is fetched and checked out at the ref it follows (or the one `version` gives). What
+/// git one is fetched and checked out at the ref it follows (or the one `version` gives), and its
+/// dependencies are installed when they changed or are missing. What
 /// its manifest contributes is read again, and the app starts it again. `enabled` turns it on or
 /// off, and it stays installed.
 #[api(
@@ -486,7 +498,11 @@ pub fn pumi_plugin_update(cx: &mut Cx, plugin: PluginId, patch: Optional<UpdateP
                 let to = change["to"].as_str().unwrap_or_default().to_string();
                 run("git", &["-C", &dir.display().to_string(), "checkout", "--quiet", "--detach", &to], None)?;
                 lock.plugins.get_mut(&name).expect("listed").rev = Some(to);
+                save(&lock)?;
             }
+            // Its dependencies as the commit it now has asks for them, or as an install from
+            // before pumi ran `bun install` never had them.
+            crate::deps::ensure(&dir_of(&name)).map_err(|e| Error::exception(format!("{name}: {e}")))?;
         }
         Some("link") => {
             let target = std::fs::read_link(dir_of(&name))

@@ -2,6 +2,7 @@ pub mod api;
 pub mod callback;
 pub mod contributions;
 pub mod defaults;
+pub mod deps;
 pub mod dirs;
 pub mod geometry;
 pub use pumi_mirror as kernel;

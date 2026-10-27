@@ -379,6 +379,8 @@ pumi plugin remove owner/name                # uninstall it
 
 A plugin runs with your permissions and no sandbox, so say what yours does.
 
+A plugin from GitHub with `dependencies` in its `package.json` gets them on install, with `bun install --production --no-save --ignore-scripts` (its `devDependencies` and install scripts are skipped). `plugin update` installs them again when they change, and pumi installs any that are missing when it starts. A linked plugin's are yours to install.
+
 ## SDK
 
 Both files import from `"pumi"`.

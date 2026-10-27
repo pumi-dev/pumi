@@ -613,7 +613,8 @@ export class Plugin extends Model<PluginData, PluginKey> {
   }
   /**
    * Patch a plugin, or refresh it from its source: a linked one is read again where it is, and a
-   * git one is fetched and checked out at the ref it follows (or the one `version` gives). What
+   * git one is fetched and checked out at the ref it follows (or the one `version` gives), and its
+   * dependencies are installed when they changed or are missing. What
    * its manifest contributes is read again, and the app starts it again. `enabled` turns it on or
    * off, and it stays installed.
    *

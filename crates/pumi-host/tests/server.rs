@@ -45,6 +45,9 @@ impl Server {
         Server::spawn_from(Some(bin), dir, &["--clean", "-u", "NONE"], false)
     }
     fn spawn_from(bin: Option<&Path>, dir: &Path, extra: &[&str], home: bool) -> Server {
+        Server::spawn_with(bin, dir, extra, home, &[])
+    }
+    fn spawn_with(bin: Option<&Path>, dir: &Path, extra: &[&str], home: bool, env: &[(&str, &Path)]) -> Server {
         let log = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("test.log")).unwrap();
         let mut command = match bin {
             Some(bin) => {
@@ -75,6 +78,7 @@ impl Server {
                 command.env(var, dir.join(sub));
             }
         }
+        command.envs(env.iter().copied());
         let child = command.spawn().unwrap();
         let socket = pumi_sys::ipc::address(dir, "pumi.sock");
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -683,6 +687,75 @@ fn a_plugin_from_a_repository_installs_at_the_ref_it_follows_and_goes() {
     let err = client.try_call("plugin.add", json!([url, {}]));
     assert!(err.is_err(), "{err:?}");
     assert!(!root.join("d/pumi/installed/things").exists());
+}
+#[cfg(unix)]
+#[test]
+fn a_plugin_from_a_repository_gets_its_dependencies_once_and_again_when_it_lost_them() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = Server::dir();
+    let root = dir.path();
+    let repo = root.join("qr");
+    std::fs::create_dir_all(&repo).unwrap();
+    let manifest = r#"{ "name": "pumi-qr", "dependencies": { "qrcode": "^1.5.4" },
+      "devDependencies": { "typescript": "5.9.3" }, "pumi": { "name": "qr", "api": 1 } }"#;
+    std::fs::write(repo.join("package.json"), manifest).unwrap();
+    let git = |args: &[&str]| {
+        let ok = Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "init.defaultBranch=main"])
+            .args(args)
+            .current_dir(&repo)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    git(&["init", "-q"]);
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "one"]);
+    // A Bun that says how it was run, and fails while `fail` is there.
+    let calls = root.join("bun-calls");
+    let bun = root.join("fake-bun");
+    let script = format!(
+        "#!/bin/sh\n[ -e '{fail}' ] && {{ echo 'no network' >&2; exit 1; }}\necho \"$PWD $*\" >> '{calls}'\nmkdir -p node_modules/qrcode\n",
+        fail = root.join("fail").display(),
+        calls = calls.display()
+    );
+    std::fs::write(&bun, script).unwrap();
+    std::fs::set_permissions(&bun, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let ran = || std::fs::read_to_string(&calls).unwrap_or_default().lines().map(String::from).collect::<Vec<_>>();
+    let installed = root.join("d/pumi/installed/qr");
+    let url = format!("file://{}", repo.display());
+    {
+        let server = Server::spawn_with(None, root, &[], true, &[("PUMI_BUN", &bun)]);
+        let mut client = server.client();
+        // Bun failing, the plugin is not installed.
+        std::fs::write(root.join("fail"), "").unwrap();
+        let err = client.try_call("plugin.add", json!([url, {}]));
+        assert!(format!("{err:?}").contains("no network"), "{err:?}");
+        assert!(!installed.exists(), "nothing is left behind");
+        std::fs::remove_file(root.join("fail")).unwrap();
+        assert_eq!(client.call("plugin.add", json!([url, {}])), json!("local/qr"));
+        let first = ran();
+        assert_eq!(first.len(), 1, "installed once: {first:?}");
+        assert!(first[0].ends_with("install --production --no-save --ignore-scripts --no-progress"), "{first:?}");
+        assert!(installed.join("node_modules/qrcode").is_dir());
+        // Nothing changed: no second install.
+        client.call("plugin.update", json!(["local/qr", {}]));
+        assert_eq!(ran().len(), 1, "{:?}", ran());
+        // Lost, `plugin.update` installs them again.
+        std::fs::remove_dir_all(installed.join("node_modules")).unwrap();
+        client.call("plugin.update", json!(["local/qr", {}]));
+        assert_eq!(ran().len(), 2, "{:?}", ran());
+        std::fs::remove_dir_all(installed.join("node_modules")).unwrap();
+    }
+    // As one installed before pumi ran `bun install`: the next start installs them.
+    let _server = Server::spawn_with(None, root, &[], true, &[("PUMI_BUN", &bun)]);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while ran().len() < 3 {
+        assert!(Instant::now() < deadline, "no install at start: {:?}", ran());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(ran().len(), 3, "{:?}", ran());
 }
 #[test]
 fn a_linked_package_s_block_is_a_tab_type_with_its_own_methods_and_options() {

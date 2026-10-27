@@ -2492,7 +2492,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Install a plugin: a store id (`owner/name`, or a name only one listing has), a GitHub\nrepository (`owner/repo`, or `owner/repo/dir` for one in a folder), a git URL, or a directory\non this machine, which is linked. The commit installed is recorded; a manifest's `minPumi`\nnewer than this pumi is refused. An install from GitHub is counted by the store\n(`pluginindex`'s server, once per address a day). One already installed stays as it is.\nAnswers its id (`owner/name`).",
+      "desc": "Install a plugin: a store id (`owner/name`, or a name only one listing has), a GitHub\nrepository (`owner/repo`, or `owner/repo/dir` for one in a folder), a git URL, or a directory\non this machine, which is linked. The commit installed is recorded; a manifest's `minPumi`\nnewer than this pumi is refused. One from git with `dependencies` has them installed (`bun\ninstall --production --no-save --ignore-scripts`), and is refused when they fail to install.\nAn install from GitHub is counted by the store\n(`pluginindex`'s server, once per address a day). One already installed stays as it is.\nAnswers its id (`owner/name`).",
       "parameters": [
         [
           "String",
@@ -2635,7 +2635,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Patch a plugin, or refresh it from its source: a linked one is read again where it is, and a\ngit one is fetched and checked out at the ref it follows (or the one `version` gives). What\nits manifest contributes is read again, and the app starts it again. `enabled` turns it on or\noff, and it stays installed.",
+      "desc": "Patch a plugin, or refresh it from its source: a linked one is read again where it is, and a\ngit one is fetched and checked out at the ref it follows (or the one `version` gives), and its\ndependencies are installed when they changed or are missing. What\nits manifest contributes is read again, and the app starts it again. `enabled` turns it on or\noff, and it stays installed.",
       "parameters": [
         [
           "String",

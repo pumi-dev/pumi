@@ -655,7 +655,9 @@ export interface Functions {
    * Install a plugin: a store id (`owner/name`, or a name only one listing has), a GitHub
    * repository (`owner/repo`, or `owner/repo/dir` for one in a folder), a git URL, or a directory
    * on this machine, which is linked. The commit installed is recorded; a manifest's `minPumi`
-   * newer than this pumi is refused. An install from GitHub is counted by the store
+   * newer than this pumi is refused. One from git with `dependencies` has them installed (`bun
+   * install --production --no-save --ignore-scripts`), and is refused when they fail to install.
+   * An install from GitHub is counted by the store
    * (`pluginindex`'s server, once per address a day). One already installed stays as it is.
    * Answers its id (`owner/name`).
    */
@@ -681,7 +683,8 @@ export interface Functions {
   }]; returns: null };
   /**
    * Patch a plugin, or refresh it from its source: a linked one is read again where it is, and a
-   * git one is fetched and checked out at the ref it follows (or the one `version` gives). What
+   * git one is fetched and checked out at the ref it follows (or the one `version` gives), and its
+   * dependencies are installed when they changed or are missing. What
    * its manifest contributes is read again, and the app starts it again. `enabled` turns it on or
    * off, and it stays installed.
    */
@@ -2325,7 +2328,9 @@ export interface Nouns {
      * Install a plugin: a store id (`owner/name`, or a name only one listing has), a GitHub
      * repository (`owner/repo`, or `owner/repo/dir` for one in a folder), a git URL, or a directory
      * on this machine, which is linked. The commit installed is recorded; a manifest's `minPumi`
-     * newer than this pumi is refused. An install from GitHub is counted by the store
+     * newer than this pumi is refused. One from git with `dependencies` has them installed (`bun
+     * install --production --no-save --ignore-scripts`), and is refused when they fail to install.
+     * An install from GitHub is counted by the store
      * (`pluginindex`'s server, once per address a day). One already installed stays as it is.
      * Answers its id (`owner/name`).
      *
@@ -2357,7 +2362,8 @@ export interface Nouns {
   }): Promise<null>;
     /**
      * Patch a plugin, or refresh it from its source: a linked one is read again where it is, and a
-     * git one is fetched and checked out at the ref it follows (or the one `version` gives). What
+     * git one is fetched and checked out at the ref it follows (or the one `version` gives), and its
+     * dependencies are installed when they changed or are missing. What
      * its manifest contributes is read again, and the app starts it again. `enabled` turns it on or
      * off, and it stays installed.
      *

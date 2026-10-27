@@ -17,7 +17,14 @@ pub struct Config {
 pub use crate::kernel::events::SUBSCRIPTION;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Note {
-    Notice { msg: String },
+    Notice {
+        msg: String,
+    },
+    /// A plugin's dependencies were installed in the background (`Ok(true)`), or failed to.
+    Deps {
+        name: String,
+        result: Result<bool, String>,
+    },
 }
 #[derive(Clone)]
 pub struct Notes(pub Sender<Note>);
@@ -214,11 +221,28 @@ pub fn run(config: Config) -> io::Result<()> {
     register(registry, &mut kernel).map_err(|e| io::Error::other(e.message))?;
     let mut lp = Loop { registry, kernel: &mut kernel, config: &config, inbox };
     crate::defaults::start(registry, lp.kernel, &config.startup);
+    if !config.startup.clean && !config.startup.none {
+        catch_up_deps(&notes);
+    }
     be_fallback(lp.kernel).map_err(|e| io::Error::other(e.message))?;
     log(&format!("pid {} serving the core on {}", std::process::id(), config.socket.display()));
     lp.run(&messages);
     log("stopped");
     Ok(())
+}
+/// Installs, in the background, the dependencies of the plugins that are missing them: ones
+/// installed before pumi ran `bun install`, or whose install failed. Each one done is a note, and
+/// the loop has the app start it again.
+fn catch_up_deps(notes: &Sender<Note>) {
+    let notes = notes.clone();
+    let _ = std::thread::Builder::new().name("pumi-host-deps".into()).spawn(move || {
+        for (name, dir) in crate::deps::missing() {
+            let result = crate::deps::ensure(&dir).map_err(|e| format!("plugin {name}: {e}"));
+            if notes.send(Note::Deps { name, result }).is_err() {
+                return;
+            }
+        }
+    });
 }
 struct Loop<'a> {
     registry: &'a Registry,
@@ -258,6 +282,22 @@ impl Loop<'_> {
                     }
                     Msg::Note(Note::Notice { msg }) => {
                         crate::api::requests::notify_all(self.kernel, "info", msg);
+                        self.turn(None);
+                    }
+                    Msg::Note(Note::Deps { name, result }) => {
+                        match result {
+                            Ok(false) => {}
+                            Ok(true) => {
+                                log(&format!("{name}: installed its dependencies"));
+                                // The app starts it again, now that it can load them.
+                                let data = json!({ "kind": "plugin", "names": [name] });
+                                self.kernel.emit("registry.changed", "plugin", Default::default(), data);
+                            }
+                            Err(why) => {
+                                log(&why);
+                                crate::api::requests::notify_all(self.kernel, "error", why);
+                            }
+                        }
                         self.turn(None);
                     }
                 }
