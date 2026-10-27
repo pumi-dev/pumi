@@ -30,8 +30,8 @@ export interface RequestFilter {
 
 /**
  * The root: the caller's current session, view and tab, every session, and the calls that make
- * more of them. Reads come from the live cache (fill it once with `await workspace.ready`); the
- * `open…` calls are one wire call each.
+ * more of them. Reads come from the live cache (fill it once with `await workspace.ready`, and a
+ * model it does not hold with `await model.ready`); the `open…` calls are one wire call each.
  */
 class Workspace {
   private caller: Caller = () => ({});
@@ -104,22 +104,22 @@ class Workspace {
     return cache.models<Session>("session", this.ids);
   }
 
-  /** A session by its id, or `null` while the cache has none. */
+  /** A session by its id; its fields read once the cache has it (`await session.ready`). */
   getSession(id: string): Session | null {
     return cache.model<Session>("session", id);
   }
 
-  /** A view by its id, or `null` while the cache has none. */
+  /** A view by its id; its fields read once the cache has it (`await view.ready`). */
   getView(id: string): View | null {
     return cache.model<View>("view", id);
   }
 
-  /** A pane by its id (`:4`), or `null` while the cache has none. */
+  /** A pane by its id (`:4`); its fields read once the cache has it (`await pane.ready`). */
   getPane(id: string): Pane | null {
     return cache.model<Pane>("pane", id);
   }
 
-  /** A tab by its id, or `null` while the cache has none. */
+  /** A tab by its id; its fields read once the cache has it (`await tab.ready`). */
   getTab(id: string): Tab | null {
     return cache.model<Tab>("tab", id);
   }

@@ -189,9 +189,16 @@ tests.watch(["title", "cwd"], () => console.log(tests.title));
 | --- | --- |
 | `currentSession` `currentView` `currentTab` | the caller's own |
 | `sessions` | every session |
-| `getSession(id)` `getView(id)` `getPane(id)` `getTab(id)` `getPlugin(id)` | one, or `null` while the cache has none |
+| `getSession(id)` `getView(id)` `getPane(id)` `getTab(id)` `getPlugin(id)` | one by its id (`getPlugin` is a call) |
 | `tabs(filter)` `requests(filter)` `panes(view)` | what `tab.list`, `request.list` and `pane.list` find |
 | `openTab(block, args, place)` `openRequest(request, opts)` | one call, answered with the model |
+
+A model's fields read `undefined` until the cache holds it. What `openTab`, `tabs()`, `panes()` and `requests()` answer is filled, and so are the caller's own objects and every session after `workspace.ready`; a model reached through another's field (`session.views`, `pane.tabs`) or by its id may not be, so `await model.ready` first. It answers the model, and rejects when the object is gone.
+
+```ts
+const pane = await workspace.getPane(":4")!.ready;
+const tabs = await Promise.all(pane.tabs.map((tab) => tab.ready));
+```
 
 What a tab is, in one read: `tab.block`, `tab.traits`, `tab.place`, `tab.title`, `tab.cwd`, `tab.foregroundCwd`, `tab.process`, `tab.scroll`, `tab.neighbors`, `tab.isFocused`, `tab.isZoomed`, `tab.options`. A view holds `layout` (its panes as they split, each with its `tabs` and the one in front), `activeTab`, `activePane` and `zoom`; a pane (`workspace.getPane(":4")`, `workspace.panes(view)`) holds its `view`, `tabs` and `activeTab`; a session holds its `views` and `activeView`. `pane.opened`, `pane.changed` and `pane.closed` say what changed of a view's panes.
 

@@ -1,7 +1,8 @@
 // The live cache the model classes read, and the base class they share. A model's fields are
 // getters over one cache and each of its methods is one wire call. The cache fills a model with
 // `<kind>.get` the first time a field is read and stays current from the objects' own public
-// events; `watch(keys, fn)` hears only the keys it names.
+// events; `watch(keys, fn)` hears only the keys it names. A field reads `undefined` until its
+// model is filled: `await model.ready` fills it.
 //
 // One cache per process: the window and each worker connect it to their own wire, and read it the
 // same way afterwards.
@@ -275,7 +276,20 @@ export abstract class Model<D extends { id: string } = any, K extends string = s
     this.#kind = (this.constructor as typeof Model).kind;
   }
 
-  /** One field, as the cache has it; `undefined` until it is filled. */
+  /**
+   * It, once the cache holds its fields: until then each reads `undefined`, whatever its type
+   * says. A model from `workspace.openTab`, `tabs()` or the caller's own after `workspace.ready`
+   * is filled already; one reached through another's field (`session.views`, `pane.tabs`) or by
+   * id (`workspace.getTab`) may not be. Rejects when there is no such object (it closed).
+   */
+  get ready(): Promise<this> {
+    return cache.load(this.#kind, this.id).then((fields) => {
+      if (!fields) throw new Error(`pumi: no ${this.#kind} ${this.id}`);
+      return this;
+    });
+  }
+
+  /** One field, as the cache has it; `undefined` until it is filled (`await this.ready`). */
   protected field<P extends keyof D & string>(name: P): D[P] {
     return cache.get(this.#kind, this.id)?.[name] as D[P];
   }
