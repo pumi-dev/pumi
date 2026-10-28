@@ -160,6 +160,16 @@ Keep what a block shows where every window reads it: the tab's options (`option.
 
 `tab.call(tab, method, args)` is what a tab's block answers: `read`, `input`, `run`, `wait`, `selection`, `report` and `attach`, and the block's own methods. The block's own live in the plugin's functions, so `navigate` above is `me.hello.page.navigate`: the tab's id first, then the args. A renderer says what its tab shows with `describe`, and reads what it was opened with by `args`.
 
+A tab's icon is its `@icon` option while it is set, else its agent's mark, else its block's `icon`, else the core block's. Both take an icon of the app's by name (`list`), a `data:image/…` URI (an SVG, PNG, JPEG, WebP or GIF, at most 16 KB), or `plugin:<path>`, a file in the plugin that defines the tab's block. An SVG is tinted to fit the theme; `@icon` set to `{"src": …, "tint": false}` keeps its own colours. Nothing is fetched: a page's favicon goes in as a `data:` URI.
+
+```ts
+await call("option.set", "@icon", { src: favicon, tint: false }, { scope: "tab", id: tab });
+```
+
+```sh
+pumi option set @icon sparkle --scope tab --id %3
+```
+
 `tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `session`, and leaving the place out puts the tab below the caller's.
 
 ```ts

@@ -67,7 +67,9 @@ It also has settings for how it behaves, in sections under those: Panes (`ui_pan
 
 Each part of the window is a component. Give one in `components` and it draws that part; the app's own draw the rest, and a part you give draws the ones inside it with `useComponents()`.
 
-`Window` `Starting` `ViewBar` `View` `Layout` `Split` `Pane` `PaneTitle` `PaneTab` `TabBody` `Splitter` `Float` `Panel` `Sessions` `Agent` `AgentControls` `Action` `Menu` `Dialog` `IconButton`
+`Window` `Starting` `ViewBar` `View` `Layout` `Split` `Pane` `PaneTitle` `PaneTab` `TabBody` `Splitter` `Float` `Panel` `Sessions` `Agent` `AgentControls` `Action` `Menu` `Dialog` `IconButton` `TabIcon`
+
+`TabIcon` is a tab's icon wherever one is shown: its pane's strip, the side bar, a view's tabs, a tab being dragged. It is given `{tab, size, color}`. `useTabIcon(tab)` says what the tab's icon is (`{src, tint, from}`: its own `@icon`, its agent's mark, its block's, or the core's), and `IconImage` draws one, tinted by `color` when `tint` is set. The app's own shows the tab's status (`useTabStatus`) in its place while it is working, done, blocked or failed (`showsStatus`). Draw `<TabIcon tab={id} />` from `pumi` in your own parts and they show what the theme's `TabIcon` does.
 
 A `Pane` is given its id, its `tabs` and the one in front (`active`). Its `PaneTitle` draws the strip of its tabs, one `PaneTab` each, while panes hold tabs (`pane_tabs`, on by default), and the front tab's title while they don't. `TabBody` draws a tab: only the front tab's is drawn, and the others keep running behind it. A zoomed pane fills its view with its strip still on top. Draw the focus from the `focused` a part is given, or `useFocusedTab(view)` from `pumi/theme`, rather than from `view.activeTab`: they are the focus as this window has it.
 
