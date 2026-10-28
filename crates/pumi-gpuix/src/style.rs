@@ -278,17 +278,22 @@ impl<'de> Deserialize<'de> for DimensionValue {
             where
                 E: de::Error,
             {
-                if v == "auto" {
+                let written = v.trim();
+                if written == "auto" {
                     Ok(DimensionValue::Auto)
-                } else if v.ends_with('%') {
-                    let num_str = v.trim_end_matches('%');
-                    match num_str.parse::<f64>() {
+                } else if let Some(number) = written.strip_suffix('%') {
+                    match number.trim().parse::<f64>() {
                         Ok(n) => Ok(DimensionValue::Percentage(n / 100.0)),
-                        Err(_) => Err(de::Error::custom(format!("invalid percentage: {}", v))),
+                        Err(_) => Err(de::Error::custom(format!("invalid percentage: {v}"))),
+                    }
+                } else if let Some(number) = written.strip_suffix("px") {
+                    match number.trim().parse::<f64>() {
+                        Ok(n) => Ok(DimensionValue::Pixels(n)),
+                        Err(_) => Err(de::Error::custom(format!("invalid length: {v}"))),
                     }
                 } else {
                     // Try to parse as a number
-                    match v.parse::<f64>() {
+                    match written.parse::<f64>() {
                         Ok(n) => Ok(DimensionValue::Pixels(n)),
                         Err(_) => Err(de::Error::custom(format!("invalid dimension: {}", v))),
                     }
@@ -349,12 +354,14 @@ pub struct StyleDesc {
     pub margin_bottom: Option<f64>,
     pub margin_left: Option<f64>,
 
-    // Position
+    // Position. An offset is a length of its parent, as a size is: `20`, `"20px"` or a share
+    // of it (`"25%"`), which is what a float's anchor and row/col are written in
+    // (`runtime/app/app/theme/default.tsx`'s `placement`).
     pub position: Option<String>,
-    pub top: Option<f64>,
-    pub right: Option<f64>,
-    pub bottom: Option<f64>,
-    pub left: Option<f64>,
+    pub top: Option<DimensionValue>,
+    pub right: Option<DimensionValue>,
+    pub bottom: Option<DimensionValue>,
+    pub left: Option<DimensionValue>,
 
     /// Paint order among siblings: higher paints (and hit-tests) later. Ties keep tree order.
     pub z_index: Option<f64>,
@@ -632,6 +639,18 @@ mod tests {
 
     fn with_fill(fill: &str) -> StyleDesc {
         StyleDesc { background_color: Some(fill.to_owned()), ..Default::default() }
+    }
+
+    #[test]
+    fn an_offset_is_a_length_of_its_parent() {
+        // What a float's anchor and its row/col say: cells, a length in px, or a share of the box
+        // it floats over (`runtime/app/app/theme/default.tsx`'s `placement`).
+        let style: StyleDesc =
+            serde_json::from_str(r##"{"left":"25%","top":20,"right":"24px","bottom":"auto"}"##).unwrap();
+        assert_eq!(style.left, Some(DimensionValue::Percentage(0.25)));
+        assert_eq!(style.top, Some(DimensionValue::Pixels(20.0)));
+        assert_eq!(style.right, Some(DimensionValue::Pixels(24.0)));
+        assert_eq!(style.bottom, Some(DimensionValue::Auto));
     }
 
     #[test]

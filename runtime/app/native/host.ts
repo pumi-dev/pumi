@@ -234,10 +234,11 @@ export interface StyleDesc {
   marginLeft?: number
 
   position?: string
-  top?: number
-  right?: number
-  bottom?: number
-  left?: number
+  /** An offset from the box's parent: px, or a share of it (`"25%"`), as a size is. */
+  top?: DimensionValue
+  right?: DimensionValue
+  bottom?: DimensionValue
+  left?: DimensionValue
   /** Paint (and hit-test) order among siblings: higher is on top. Ties keep tree order. */
   zIndex?: number
 

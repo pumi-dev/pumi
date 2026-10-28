@@ -77,16 +77,16 @@ impl MotionStyle {
             style.opacity = Some(value.clamp(0.0, 1.0));
         }
         if let Some(value) = num("top") {
-            style.top = Some(value);
+            style.top = Some(DimensionValue::Pixels(value));
         }
         if let Some(value) = num("right") {
-            style.right = Some(value);
+            style.right = Some(DimensionValue::Pixels(value));
         }
         if let Some(value) = num("bottom") {
-            style.bottom = Some(value);
+            style.bottom = Some(DimensionValue::Pixels(value));
         }
         if let Some(value) = num("left") {
-            style.left = Some(value);
+            style.left = Some(DimensionValue::Pixels(value));
         }
         if let Some(value) = num("borderRadius") {
             style.border_radius = Some(value.max(0.0));
@@ -99,15 +99,15 @@ impl MotionStyle {
                 style.position = Some("relative".into());
             }
             if x != 0.0 {
-                match (style.left, style.right) {
-                    (None, Some(right)) => style.right = Some(right - x),
-                    (left, _) => style.left = Some(left.unwrap_or(0.0) + x),
+                match (style.left.clone(), style.right.clone()) {
+                    (None, Some(right)) => style.right = Some(moved_by(right, -x)),
+                    (left, _) => style.left = Some(moved_by(left.unwrap_or(DimensionValue::Pixels(0.0)), x)),
                 }
             }
             if y != 0.0 {
-                match (style.top, style.bottom) {
-                    (None, Some(bottom)) => style.bottom = Some(bottom - y),
-                    (top, _) => style.top = Some(top.unwrap_or(0.0) + y),
+                match (style.top.clone(), style.bottom.clone()) {
+                    (None, Some(bottom)) => style.bottom = Some(moved_by(bottom, -y)),
+                    (top, _) => style.top = Some(moved_by(top.unwrap_or(DimensionValue::Pixels(0.0)), y)),
                 }
             }
         }
@@ -123,6 +123,15 @@ impl MotionStyle {
         if let Some(value) = get("borderColor") {
             style.border_color = Some(color_string(value));
         }
+    }
+}
+
+/// An offset a translation moves: pixels move; a share has no pixel size to move by (the parent's
+/// is not known here), so it stays where it is.
+fn moved_by(value: DimensionValue, delta: f64) -> DimensionValue {
+    match value {
+        DimensionValue::Pixels(v) => DimensionValue::Pixels(v + delta),
+        other => other,
     }
 }
 
@@ -760,6 +769,11 @@ fn cubic_bezier(x: f64, [x1, y1, x2, y2]: [f64; 4]) -> f64 {
 mod tests {
     use super::*;
 
+    /// An inset in pixels, as motion writes one.
+    fn px(value: f64) -> DimensionValue {
+        DimensionValue::Pixels(value)
+    }
+
     #[test]
     fn interpolates_and_retargets_from_the_visible_value() {
         let started = Instant::now();
@@ -1071,12 +1085,32 @@ mod tests {
         let mut style = StyleDesc::default();
         state.visible_style(now).unwrap().apply_to(&mut style);
         assert_eq!(style.position.as_deref(), Some("relative"));
-        assert_eq!((style.left, style.top), (Some(4.0), Some(-2.0)));
+        assert_eq!((style.left, style.top), (Some(px(4.0)), Some(px(-2.0))));
 
-        let mut placed =
-            StyleDesc { position: Some("absolute".into()), right: Some(10.0), top: Some(5.0), ..Default::default() };
+        let mut placed = StyleDesc {
+            position: Some("absolute".into()),
+            right: Some(px(10.0)),
+            top: Some(px(5.0)),
+            ..Default::default()
+        };
         state.visible_style(now).unwrap().apply_to(&mut placed);
-        assert_eq!((placed.right, placed.top, placed.left), (Some(6.0), Some(3.0), None));
+        assert_eq!((placed.right, placed.top, placed.left), (Some(px(6.0)), Some(px(3.0)), None));
+    }
+
+    #[test]
+    fn a_translation_leaves_a_share_where_it_is() {
+        let now = Instant::now();
+        let description = serde_json::json!({ "initial": false, "animate": { "x": 4, "y": -2 } });
+        let state = MotionState::new(&description, now).unwrap();
+        // A share has no pixel size to move by (the parent's is not known here): it stays put.
+        let mut style = StyleDesc {
+            position: Some("absolute".into()),
+            left: Some(DimensionValue::Percentage(0.25)),
+            ..Default::default()
+        };
+        state.visible_style(now).unwrap().apply_to(&mut style);
+        assert_eq!(style.left, Some(DimensionValue::Percentage(0.25)));
+        assert_eq!(style.top, Some(px(-2.0)));
     }
 
     #[test]

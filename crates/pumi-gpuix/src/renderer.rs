@@ -4170,6 +4170,16 @@ pub(crate) fn apply_width<E: gpui::Styled>(el: E, dim: &crate::style::DimensionV
     }
 }
 
+/// An offset from a positioned box's parent: pixels, or a share of it. taffy resolves a
+/// fraction as a percentage of the parent, the same as a share of a size.
+pub(crate) fn offset(dim: &crate::style::DimensionValue) -> gpui::Length {
+    match dim {
+        crate::style::DimensionValue::Pixels(v) => gpui::px(*v as f32).into(),
+        crate::style::DimensionValue::Percentage(v) => gpui::relative(*v as f32).into(),
+        crate::style::DimensionValue::Auto => gpui::Length::Auto,
+    }
+}
+
 pub(crate) fn apply_height<E: gpui::Styled>(el: E, dim: &crate::style::DimensionValue) -> E {
     match dim {
         crate::style::DimensionValue::Pixels(v) => el.h(gpui::px(*v as f32)),
@@ -4374,17 +4384,17 @@ pub(crate) fn apply_styles<E: gpui::Styled>(mut el: E, style: &StyleDesc) -> E {
         Some("relative") => el = el.relative(),
         _ => {}
     }
-    if let Some(top) = style.top {
-        el = el.top(gpui::px(top as f32));
+    if let Some(ref top) = style.top {
+        el = el.top(offset(top));
     }
-    if let Some(right) = style.right {
-        el = el.right(gpui::px(right as f32));
+    if let Some(ref right) = style.right {
+        el = el.right(offset(right));
     }
-    if let Some(bottom) = style.bottom {
-        el = el.bottom(gpui::px(bottom as f32));
+    if let Some(ref bottom) = style.bottom {
+        el = el.bottom(offset(bottom));
     }
-    if let Some(left) = style.left {
-        el = el.left(gpui::px(left as f32));
+    if let Some(ref left) = style.left {
+        el = el.left(offset(left));
     }
     if let Some(ratio) = style.aspect_ratio {
         if ratio > 0.0 && ratio.is_finite() {
