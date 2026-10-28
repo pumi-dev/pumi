@@ -75,8 +75,9 @@ pub fn run(config: Config, ready: impl FnOnce()) -> io::Result<()> {
     };
     let socket = config.paths.file(File::PumiSocket);
     let grid_socket = config.paths.file(File::GridSocket);
-    let rpc = Listener::bind(&socket)?;
-    let grid = Listener::bind(&grid_socket)?;
+    let follows = config.resume.is_some() || config.restart_after.is_some();
+    let rpc = bind(&socket, follows)?;
+    let grid = bind(&grid_socket, follows)?;
     let (inbox, messages) = channel::<Msg>();
     let mut kernel = Kernel::new(KernelConfig {
         name: config.name.clone(),
@@ -175,6 +176,22 @@ pub fn run(config: Config, ready: impl FnOnce()) -> io::Result<()> {
     let _ = std::fs::remove_file(&grid_socket);
     log("stopped");
     Ok(())
+}
+/// How long a server that follows a restart waits for its sockets to be free.
+const SOCKETS_FREED: Duration = Duration::from_secs(2);
+/// Listens on `path`. A server that `follows` a restart takes over the sockets of the one
+/// before, whose listener a child it forked just before can hold for some ms until that child
+/// execs: it waits for that, at most [`SOCKETS_FREED`].
+fn bind(path: &std::path::Path, follows: bool) -> io::Result<Listener> {
+    let deadline = Instant::now() + SOCKETS_FREED;
+    loop {
+        match Listener::bind(path) {
+            Err(err) if follows && err.kind() == io::ErrorKind::AddrInUse && Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(5));
+            }
+            bound => return bound,
+        }
+    }
 }
 fn start_of<'a>(config: &'a Config, exited: &'a crate::host::Exited) -> crate::host::Start<'a> {
     crate::host::Start {
