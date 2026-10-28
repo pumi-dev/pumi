@@ -117,7 +117,10 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
         let Some(id) = t.get("id").and_then(u) else { continue };
         let options = t.get("options").and_then(Value::as_object).cloned().unwrap_or_default();
         let place = t.get("place").cloned().unwrap_or(Value::Null);
-        let view = (place["kind"] == "tiled").then(|| place["view"].as_u64()).flatten();
+        // A tiled tab is in its view's layout; a float is drawn over its view (the app's
+        // `useFloats`). Either is one of the view's tabs; a hidden one is in no view.
+        let tiled = place["kind"] == "tiled";
+        let view = (tiled || place["kind"] == "float").then(|| place["view"].as_u64()).flatten();
         let text = |key: &str| options.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string);
         let title = text("title").filter(|t| !t.trim().is_empty());
         let tab = model::Tab {
@@ -146,7 +149,7 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
             ..Default::default()
         };
         if view.is_some() {
-            if let Some(layout) = snapshot.layouts.iter_mut().find(|l| l.view_id == tab.view_id) {
+            if tiled && let Some(layout) = snapshot.layouts.iter_mut().find(|l| l.view_id == tab.view_id) {
                 let n = |k: &str| tab.options.get(k).and_then(Value::as_i64).unwrap_or(0);
                 layout.tabs.push(model::LayoutTab {
                     tab_id: tab.tab_id.clone(),
@@ -231,7 +234,7 @@ mod tests {
         assert_eq!(read.snapshot.workspaces[0].workspace_id, "$1");
         assert_eq!(read.snapshot.workspaces[0].cwd.as_deref(), Some("/src/pumi"), "the folder it was opened at");
         assert_eq!(read.snapshot.views[0].workspace_id, "$1");
-        assert_eq!(read.snapshot.tabs.len(), 2);
+        assert_eq!(read.snapshot.tabs.len(), 3, "a float is one of its view's tabs");
         assert_eq!(read.snapshot.tabs[0].terminal_title.as_deref(), Some("⠋ π - pumi"));
         assert_eq!(read.snapshot.tabs[0].terminal_title_stripped.as_deref(), Some("π - pumi"));
         assert_eq!(read.snapshot.views[0].worktree.as_deref(), Some("/src/pumi.worktrees/avid-storm"));
@@ -244,7 +247,12 @@ mod tests {
         );
         assert_eq!(agent.agent_conversation.as_deref(), Some("pumi_dev/acp"));
         assert_eq!(read.snapshot.tabs[0].agent_session, None);
-        assert_eq!(read.snapshot.others[0].tab_id, "%3");
+        let float = &read.snapshot.tabs[2];
+        assert_eq!((float.tab_id.as_str(), float.view_id.as_str(), float.workspace_id.as_str()), ("%3", "@1", "$1"));
+        assert_eq!(float.place["kind"], "float");
+        assert!(read.snapshot.others.is_empty());
+        let rects: Vec<&str> = read.snapshot.layouts[0].tabs.iter().map(|t| t.tab_id.as_str()).collect();
+        assert_eq!(rects, ["%1", "%2"], "a float has no place in the layout");
         assert!(read.trees.contains_key("@1"));
         let Node::Split { second, .. } = &read.trees["@1"].1 else { panic!("a split") };
         let Node::Leaf(Leaf::Pane(pane)) = second.as_ref() else { panic!("a pane") };

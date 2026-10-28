@@ -225,7 +225,8 @@ export function useFloats(view?: string): Tab[] {
     const floats: Tab[] = []
     for (const tab of s.snapshot?.tabs ?? []) {
       const place = (tab as any).place
-      if (place?.kind === "float" && (!view || place.view === view)) floats.push(tab)
+      // `place.view` is the core's number; `view_id` is the `@N` the app goes by.
+      if (place?.kind === "float" && (!view || tab.view_id === view)) floats.push(tab)
     }
     return floats.sort((a: any, b: any) => (a.place.zindex ?? 0) - (b.place.zindex ?? 0))
   })
