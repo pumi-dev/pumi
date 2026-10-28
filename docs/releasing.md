@@ -71,6 +71,53 @@ It deletes whatever release has that tag first, published or not, so never re-ru
 A published release is never pulled back by downgrading — the updater only moves forward — so
 ship a fixed version, and remember that deleting a release only stops new installs of it.
 
+## The plugin SDK on npm
+
+`@pumi-dev/sdk` is what a plugin outside this repository type-checks and tests against (the plugin
+docs' "Type-check and test"). `bun run sdk` in `runtime/app` builds it from the app's sources
+into `target/sdk/pumi-dev-sdk-<version>.tgz`. Nothing publishes it automatically; these steps are by
+hand, after the app's release is published (step 5 above), so every SDK version matches an app
+people can install.
+
+The SDK's version is its own, `SDK_VERSION` in `runtime/app/build/sdk.ts`, and its README names the
+app version it was built from. It moves only when what a plugin imports changes: build it, then
+compare the new `target/sdk/package/*.d.ts` with the last published ones (`npm pack
+@pumi-dev/sdk@<last>` and unpack it). No difference: publish nothing. An added export: bump the
+minor (0.1 → 0.2). A removed or changed one: also the minor while it is 0.x, the major after.
+A new version is set in three places: `SDK_VERSION`, the `pumi` devDependency in
+`runtime/app/template/package.json` (what `pumi plugin new` writes; a `pumi-cli` test fails while
+the two differ), and the pins in `docs/user/build-a-plugin.md` and `docs/user/plugins.md`.
+
+### Once: an account and the `pumi-dev` organization
+
+1. Make an account at <https://www.npmjs.com/signup> and confirm the email npm sends.
+2. Turn on two-factor authentication: your avatar (top right) → **Account** → **Two-Factor
+   Authentication**, with an authenticator app. npm asks for a code from it when you publish.
+3. Make the organization: your avatar → **Add Organization** → name it `pumi-dev` → the free
+   plan (unlimited public packages). Packages named `@pumi-dev/…` are the organization's. (`@pumi`
+   is held by an account that isn't ours, so the scope matches the GitHub organization instead.)
+4. Log this machine in: run `npm login` in a terminal. It prints a link (or opens the browser);
+   sign in there and the terminal says `Logged in`. `npm whoami` prints your user name from then
+   on. The login is kept in `~/.npmrc`; `npm logout` removes it.
+
+### Each release
+
+1. In `runtime/app`: `bun install`, then `bun run sdk`. It prints the tarball's path and size.
+2. Look at what will go up: `tar -tzf target/sdk/pumi-dev-sdk-<version>.tgz` (from the repository
+   root). It lists `package/package.json`, the `.d.ts` and `.js` files, `README.md` and `LICENSE`;
+   no `.node` file.
+3. Publish it: `npm publish target/sdk/pumi-dev-sdk-<version>.tgz --access public`. npm asks for the
+   two-factor code. `--access public` is what lets a scoped package be public (the package says
+   so too, in `publishConfig`); without it npm tries to make a private one, which needs a paid plan.
+4. Check it: `npm view @pumi-dev/sdk version` prints the new version, and
+   <https://www.npmjs.com/package/@pumi-dev/sdk> shows it.
+
+A version is published once, for good. npm refuses the same version number again, even after it is
+unpublished, so a broken SDK is fixed by the next SDK version. Until then, mark it
+(`npm deprecate @pumi-dev/sdk@<version> "use <other> instead"`); a plugin that installs it sees the
+message. `npm unpublish @pumi-dev/sdk@<version>` works only within 72 hours and only while nothing
+depends on it.
+
 ## Keys
 
 | Secret | Used for |
