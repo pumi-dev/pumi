@@ -46,9 +46,9 @@ describe("iconSource", () => {
 describe("tabIcon", () => {
   const terminal = { block: "terminal" }
 
-  test("a tab's own icon comes first, then its agent's mark, its block's, the core's", () => {
+  test("a tab's own icon comes first, then its block's, the core's", () => {
     expect(tabIcon({ ...terminal, agent: "claude", options: { "@icon": SVG } })).toMatchObject({ src: SVG, from: "tab" })
-    expect(tabIcon({ ...terminal, agent: "claude" })).toMatchObject({ src: assets.icon("agent_claude"), from: "agent" })
+    expect(tabIcon({ ...terminal, agent: "claude" })).toMatchObject({ src: assets.icon("terminal"), from: "core" })
     expect(tabIcon({ block: "me.board.board" }, { icon: "list" })).toMatchObject({ src: assets.icon("list"), from: "block" })
     expect(tabIcon(terminal)).toMatchObject({ src: assets.icon("terminal"), from: "core" })
     expect(tabIcon({ block: "me.board.board" })).toMatchObject({ src: assets.icon("box"), from: "core" })
@@ -59,11 +59,8 @@ describe("tabIcon", () => {
     expect(tabIcon({ block: "me.board.board" }, { icon: "plugin:gone.svg", dir: tmpdir() })).toMatchObject({ from: "core" })
   })
 
-  test("an agent's mark is by its name, or another's", () => {
-    expect(agentIcon("pi")?.src).toBe(assets.icon("agent_pi"))
-    expect(agentIcon("omp")?.src).toBe(assets.icon("agent_pi"))
-    expect(agentIcon("Claude")?.src).toBe(assets.icon("agent_claude"))
-    expect(agentIcon("codex")).toBeUndefined()
+  test("the app ships no agent marks", () => {
+    for (const agent of ["pi", "omp", "claude", "codex"]) expect(agentIcon(agent)).toBeUndefined()
   })
 })
 
