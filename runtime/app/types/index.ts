@@ -48,6 +48,8 @@ export {
   SelectValue,
   type MotionDivProps,
 } from "../react/index.ts"
+/** What an element's `ref` holds: its `focus()`, `scrollTo()` and `scrollIntoView()`, a list's `scrollToItem()`. */
+export type { PublicInstance as ElementRef } from "../react/index.ts"
 export type {
   BackgroundImageLayer,
   BackgroundPosition,
