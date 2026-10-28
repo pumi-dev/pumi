@@ -125,25 +125,70 @@ class Cache {
     for (const w of [...this.watchers]) if (w.kind === kind && w.id === id) w.fn();
   }
 
-  /** `change` happened: merges its patch, filling what it did not carry, and tells who watches. */
+  /**
+   * `change` happened: merges its patch, filling what it did not carry, and tells who watches. A
+   * key into a field (`options.title`, the patch carrying `{options: {title}}`) is merged into
+   * that field. A key the patch does not carry is asked for again, the fields held until the
+   * answer comes: a model read meanwhile is as it was, not gone.
+   */
   changed(change: Change) {
     const at = key(change.kind, change.id);
+    const had = this.fields.get(at);
     const patch: Fields = {};
     const unknown: string[] = [];
     for (const name of change.keys) {
-      if (name in change.patch) patch[name] = change.patch[name];
-      else unknown.push(name);
+      if (name in change.patch) {
+        patch[name] = change.patch[name];
+        continue;
+      }
+      const dot = name.indexOf(".");
+      const head = dot > 0 ? name.slice(0, dot) : "";
+      const carried = head ? change.patch[head] : undefined;
+      const rest = name.slice(dot + 1);
+      if (had && carried && typeof carried === "object" && !Array.isArray(carried) && rest in carried) {
+        const before = (patch[head] ?? had[head]) as Fields | undefined;
+        const merged: Fields = { ...(before && typeof before === "object" && !Array.isArray(before) ? before : {}) };
+        const value = (carried as Fields)[rest];
+        if (value === null || value === undefined) delete merged[rest];
+        else merged[rest] = value;
+        patch[head] = merged;
+        continue;
+      }
+      unknown.push(name);
     }
     if (Object.keys(patch).length > 0) {
       this.fields.set(at, { ...(this.fields.get(at) ?? {}), ...patch, id: change.id });
     }
     if (unknown.length > 0 && this.fill) {
       // The event says what changed, not what to: ask the server for the model again.
-      const at2 = key(change.kind, change.id);
-      this.fields.delete(at2);
-      this.ensure(change.kind, change.id).catch(() => {});
+      if (this.fields.has(at)) this.refresh(change.kind, change.id);
+      else this.ensure(change.kind, change.id).catch(() => {});
     }
     this.notify({ kind: change.kind, id: change.id, keys: change.keys, patch });
+  }
+
+  /** The fills asking again for a model the cache holds, the last one asked for each. */
+  private readonly refreshing = new Map<string, Promise<void>>();
+
+  /** Asks for `kind`'s model `id` again, keeping what it holds until the answer, which replaces it. */
+  private refresh(kind: string, id: string) {
+    const at = key(kind, id);
+    const fill = this.fill;
+    if (!fill) return;
+    const run: Promise<void> = fill(kind, id).then(
+      (fields) => {
+        // An answer to an older ask is left for the newer one's.
+        if (this.refreshing.get(at) !== run) return;
+        this.refreshing.delete(at);
+        if (!fields || !this.fields.has(at)) return;
+        this.fields.set(at, { ...this.fields.get(at), ...fields, id });
+        this.notify({ kind, id, keys: Object.keys(fields), patch: fields });
+      },
+      () => {
+        if (this.refreshing.get(at) === run) this.refreshing.delete(at);
+      },
+    );
+    this.refreshing.set(at, run);
   }
 
   /** The models of `kind` through their class, made once per id: `a === b` for the same id. */
