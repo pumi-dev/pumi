@@ -4,7 +4,7 @@ use super::Parent;
 use gpui::{App, Bounds, Pixels, Size, Window};
 use std::path::PathBuf;
 use wry::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
+use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, WebViewExtWindows};
 /// What Windows and Linux pages share; macOS keeps its own whole surface in `macos.rs`.
 #[path = "surface.rs"]
 mod surface;
