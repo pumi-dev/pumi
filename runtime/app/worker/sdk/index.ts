@@ -39,7 +39,7 @@ export type {
   Self,
 } from "./core.ts";
 export { ApiError } from "./runtime.ts";
-export type { Disposer, Manifest, OptionSpec, Paths } from "./runtime.ts";
+export type { Caller, Disposer, Manifest, OptionSpec, Paths } from "./runtime.ts";
 export { Model } from "./model.ts";
 export { Pane, Plugin, Request, Session, Tab, View } from "./models.gen.ts";
 export {

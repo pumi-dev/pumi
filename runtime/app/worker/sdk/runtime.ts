@@ -5,8 +5,12 @@
 //
 // host → plugin: reply {id, ok | error} · callback {fn, args} · event {subscription, event} ·
 //   serve {id, name, args, caller}
-// plugin → host: call {id, name, args} · provide {id, name, spec} · withdraw {names} ·
+// plugin → host: call {id, name, args, caller?} · provide {id, name, spec} · withdraw {names} ·
 //   reply {id, ok | error} · log {stream, line} · ui {topic, data}
+//
+// A call made while the plugin serves one (`serve`) carries that call's `caller`: what it does
+// with no id given is about the caller's tab, not the plugin host's.
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 
 /** Where the module's messages go: the host's side of the worker, or a fake app. */
@@ -66,6 +70,42 @@ export interface Init {
   session?: string | null;
   tab?: string | null;
   args?: Record<string, unknown>;
+}
+
+/**
+ * Who called a function the plugin serves (`fn.set`, a command, an export its `ui.tsx` calls):
+ * `self.caller` while it runs, `null` outside one.
+ */
+export interface Caller {
+  /** The client (an app attached to the server) it came through; `null` for the plugin host's own app, a script or the CLI. */
+  client: number | null;
+  /** The tab its calls are about (`%3`): the caller's own, or the one in front where it is. */
+  tab: string | null;
+  /** Who it is, as provenance says it (`pumi-app`, `cli`, `owner/name`). */
+  source: string | null;
+}
+
+/** The call being served, as the host sent it (`wire`) and as `self.caller` reads it. */
+interface Serving {
+  wire: { tab?: number; client?: number };
+  caller: Caller;
+}
+const serving = new AsyncLocalStorage<Serving>();
+
+/** The caller of the function being served, or `null`. */
+export function currentCaller(): Caller | null {
+  return serving.getStore()?.caller ?? null;
+}
+
+function servingOf(given: any): Serving {
+  const number = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : undefined);
+  const tab = number(given?.tab);
+  const client = number(given?.client);
+  const wire: Serving["wire"] = {};
+  if (tab !== undefined) wire.tab = tab;
+  if (client !== undefined) wire.client = client;
+  const source = typeof given?.name === "string" ? given.name : null;
+  return { wire, caller: { client: client ?? null, tab: tab === undefined ? null : `%${tab}`, source } };
 }
 
 /** A call the API or a provider refused: `kind` is the export's error kind (`not_found`, …). */
@@ -161,7 +201,9 @@ class Connection {
     let list = args.map((a) => this.encode(a, refs));
     // Trailing arguments left out are absent, not null.
     while (list.length > 0 && list.at(-1) === undefined) list = list.slice(0, -1);
-    return this.request({ t: "call", name, args: list.map((a) => (a === undefined ? null : a)) });
+    const asked = serving.getStore()?.wire;
+    const caller = asked && Object.keys(asked).length > 0 ? { caller: asked } : {};
+    return this.request({ t: "call", name, args: list.map((a) => (a === undefined ? null : a)), ...caller });
   }
 
   /** Runs `fn` with each event of subscription `handle`, and with those it heard before. */
@@ -285,7 +327,8 @@ export const deliver = {
     if (!f) return reply({ error: { kind: "not_found", message: `${connection.init?.pkg} does not provide ${m.name}` } });
     let result: any;
     try {
-      result = f(...(Array.isArray(m.args) ? m.args : m.args == null ? [] : [m.args]));
+      const args = Array.isArray(m.args) ? m.args : m.args == null ? [] : [m.args];
+      result = serving.run(servingOf(m.caller), () => f(...args));
     } catch (err) {
       return reply({ error: fail(err) });
     }

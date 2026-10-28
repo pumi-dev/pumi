@@ -8,8 +8,8 @@ import { mkdirSync } from "node:fs";
 import { FUNCTIONS } from "./api.gen.ts";
 import type { EventName, Events, FunctionName, Functions, Layout, Nouns, TabId, ViewId } from "./api.types.gen.ts";
 import { cache } from "./model.ts";
-import type { Disposer, Manifest, OptionSpec, Paths } from "./runtime.ts";
-import { connection } from "./runtime.ts";
+import type { Caller, Disposer, Manifest, OptionSpec, Paths } from "./runtime.ts";
+import { connection, currentCaller } from "./runtime.ts";
 import type { WireEvent, WireOnOptions } from "./transport.ts";
 import { connect, wireFill, workspace } from "./workspace.ts";
 import { connectionWire } from "./wire.ts";
@@ -20,8 +20,16 @@ const wire = connectionWire();
 /** Bun's `process`, under a name of its own: the SDK exports the API's `process.*` noun. */
 const runtime = globalThis.process;
 
-/** The caller's own objects: its session and tab (`pumi do --session --tab`, else its environment's). */
+/**
+ * The caller's own objects: while the plugin serves a call, its caller's tab and where it is;
+ * else its session and tab (`pumi do --session --tab`, else its environment's).
+ */
 function caller() {
+  const asked = currentCaller()?.tab;
+  if (asked) {
+    const tab = cache.get("tab", asked) as { session?: string; view?: string | null } | undefined;
+    return { session: tab?.session ?? null, view: tab?.view ?? null, tab: asked };
+  }
   const init = connection.init;
   return {
     session: init?.session ?? runtime.env.PUMI_SESSION ?? null,
@@ -230,10 +238,15 @@ export interface Self {
     /** `name` with the prefix: `bar` is `owner.name.bar`; a name that has it already is kept. */
     prefixed(name: string): string;
   };
-  /** Its own session: the event handler's, or `pumi do --session`, or the one it was opened in. */
+  /** Its own session: the caller's while it serves a call, or `pumi do --session`, or the one it was opened in. */
   readonly session: string | null;
-  /** Its own tab: `PUMI_TAB`, or the one it was opened in. */
+  /** Its own tab: the caller's while it serves a call, or `PUMI_TAB`, or the one it was opened in. */
   readonly tab: string | null;
+  /**
+   * Who called the function it is serving (`fn.set`, a command, an export its `ui.tsx` calls),
+   * while it runs: their client and tab. `null` outside one.
+   */
+  readonly caller: Caller | null;
   /** What it was called with (`pumi do FILE k=v`). */
   readonly args: Record<string, unknown>;
 }
@@ -261,6 +274,9 @@ export const self: Self = {
   },
   get tab(): string | null {
     return caller().tab;
+  },
+  get caller(): Caller | null {
+    return currentCaller();
   },
   get args(): Record<string, unknown> {
     return connection.init?.args ?? {};

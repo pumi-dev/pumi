@@ -53,6 +53,7 @@ export class AppWindow {
           if (this.active) manager.front(this)
           // Their release goes to the window in front now (⌘-Tab away): none are held here.
           else this.held.clear()
+          manager.activated()
           this.changed()
         }
         if (event.eventType === "windowFullscreen") {
@@ -177,11 +178,41 @@ export class WindowManager {
   private next = 1
   private loop?: { stop(): void }
 
+  /** Whether the server was last told one of the app's windows has the focus. */
+  private reported?: boolean
+  private reporting?: ReturnType<typeof setTimeout>
+
   constructor(private content: (window: AppWindow) => ReactNode) {
     on("app", (data: { reopen?: boolean }) => {
       if (data?.reopen) this.reopen()
     })
     menus.watch(this)
+    // A new connection is a new client, which the server knows nothing of yet.
+    let connected = false
+    store.subscribe(() => {
+      const now = !!store.get().snapshot
+      if (now && !connected) {
+        this.reported = undefined
+        this.activated()
+      }
+      connected = now
+    })
+  }
+
+  /**
+   * Tells the server whether one of the app's windows has the focus (`client_active`, which fires
+   * `app.changed`), once it settles: moving between two windows blurs one before the other is in front.
+   */
+  activated() {
+    clearTimeout(this.reporting)
+    this.reporting = setTimeout(() => {
+      const active = this.windows.some((w) => w.active)
+      if (active === this.reported) return
+      this.reported = active
+      call("core.setOptionValue", "client_active", active, { scope: "client" }).catch(() => {
+        if (this.reported === active) this.reported = undefined
+      })
+    }, 50)
   }
 
   /** A menu item was clicked: run its command in the window in front. */

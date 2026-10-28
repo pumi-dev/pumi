@@ -169,7 +169,7 @@ impl Pumid {
                 let provided: Vec<Value> = lock(&self.provided).values().cloned().collect();
                 for function in provided {
                     let name = function["name"].as_str().unwrap_or_default().to_string();
-                    if let Err(err) = conn.call("fn.set", json!([name, spec_of(&function)])) {
+                    if let Err(err) = set_function(&name, &function, |args| conn.call("fn.set", args)) {
                         eprintln!("pumi: registering {name}: {}", err.message);
                     }
                 }
@@ -362,6 +362,25 @@ impl Default for Pumid {
         Self::new()
     }
 }
+/// Provides `function` as `name` with `set` (a `fn.set` call); a server from before `runsOn`
+/// refuses that field, and is given the function without it.
+fn set_function<E: std::fmt::Display>(
+    name: &str,
+    function: &Value,
+    mut set: impl FnMut(Value) -> std::result::Result<Value, E>,
+) -> std::result::Result<Value, E> {
+    let spec = spec_of(function);
+    match set(json!([name, spec])) {
+        Err(err) if spec.get("runsOn").is_some() && err.to_string().contains("runsOn") => {
+            let mut older = spec;
+            if let Some(fields) = older.as_object_mut() {
+                fields.remove("runsOn");
+            }
+            set(json!([name, older]))
+        }
+        done => done,
+    }
+}
 /// A function the app's JS provides, as `fn.set` takes it: what it does, its arguments and its
 /// answer. The app describes it as the export does (`params_schema`), the wire spells it camelCase.
 fn spec_of(function: &Value) -> Value {
@@ -369,6 +388,11 @@ fn spec_of(function: &Value) -> Value {
     let mut spec = json!({ "desc": function["desc"].as_str().unwrap_or_default() });
     if let Some(effect) = field("effect") {
         spec["effect"] = effect;
+    }
+    // The app's own (its clipboard, its updater) answer its own client's calls; a plugin's are
+    // the plugin host's, for everyone.
+    if function["runs_on"] == "client" {
+        spec["runsOn"] = json!("client");
     }
     for (from, to) in [("params_schema", "paramsSchema"), ("returns_schema", "returnsSchema")] {
         if let Some(schema) = field(from) {
@@ -505,7 +529,7 @@ impl Runtime for Pumid {
     fn provide(&self, function: Value) -> Result<()> {
         let name = function["name"].as_str().unwrap_or_default().to_string();
         lock(&self.provided).insert(name.clone(), function.clone());
-        match self.request("fn.set", json!([&name, spec_of(&function)])) {
+        match set_function(&name, &function, |args| self.request("fn.set", args)) {
             Err(Error::Unreachable(_)) => Ok(()),
             done => done.map(drop),
         }

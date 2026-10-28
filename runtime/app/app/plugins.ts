@@ -204,7 +204,8 @@ function provide(pkg: string, name: string, spec: Record<string, unknown>): Prom
     name,
     since: 1,
     provider: pkg,
-    runs_on: "client",
+    // The plugin host answers it for every client: its worker is the one that runs.
+    runs_on: "server",
     effect: "write",
     agent: false,
     desc: "",
@@ -279,18 +280,32 @@ function bind(pkg: string, value: any): any {
   return value
 }
 
-async function callFor(pkg: string, name: string, args: any[], caller?: unknown): Promise<any> {
+/**
+ * Who `pkg`'s call is made as: the plugin itself, about the tab of the call it is serving (its
+ * worker sends that call's `caller`), so what it does with no id is about its caller's tab.
+ */
+function callerFor(pkg: string, serving: any): Record<string, unknown> {
+  const as: Record<string, unknown> = { name: pkg }
+  for (const key of ["tab", "client"]) {
+    const n = serving?.[key]
+    if (Number.isInteger(n) && n > 0) as[key] = n
+  }
+  return as
+}
+
+async function callFor(pkg: string, name: string, args: any[], serving?: unknown): Promise<any> {
+  const caller = callerFor(pkg, serving)
   // A function another plugin provides is served here, not by the server.
   const provider = provided.get(name)
-  if (provider) return serve(provider, name, args, { name: pkg })
+  if (provider) return serve(provider, name, args, caller)
   const params = bind(pkg, args)
   // A plugin's subscription is the app channel's, made for the plugin: its events go to its worker.
   const result =
     name === "event.on"
-      ? await listen(params[0], params[1] ?? {}, (event, subscription) => host?.frame({ type: "event", pkg, subscription, event }), caller ?? { name: pkg })
+      ? await listen(params[0], params[1] ?? {}, (event, subscription) => host?.frame({ type: "event", pkg, subscription, event }), { name: pkg })
       : name === "event.off"
         ? await unlisten(params[0])
-        : await engine.call(name, params, caller ?? { name: pkg })
+        : await engine.call(name, params, caller)
   if (!made.has(pkg)) made.set(pkg, new Made())
   made.get(pkg)!.record(name, params, result)
   return result
