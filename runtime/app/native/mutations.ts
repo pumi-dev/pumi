@@ -159,6 +159,7 @@ export const UNIVERSAL_PROPS: ReadonlySet<string> = new Set([
   "testId",
   "title",
   "highlight",
+  "textFlow",
   "role",
   "aria-label",
   "aria-description",

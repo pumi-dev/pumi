@@ -488,6 +488,9 @@ pub fn group_id(tree: &RetainedTree, id: u64) -> Option<u64> {
     if !is_text_leaf(element) {
         return None;
     }
+    if let Some(flow) = flow_of(tree, element) {
+        return Some(flow);
+    }
     let parent = tree.elements.get(&element.parent?)?;
     let position = parent.children.iter().position(|child| *child == id)?;
     let mut first = id;
@@ -500,11 +503,55 @@ pub fn group_id(tree: &RetainedTree, id: u64) -> Option<u64> {
     Some(first)
 }
 
+/// Whether `element` declares `textFlow`: its text, in however many elements it is drawn (a
+/// paragraph's words, each a box of its own in a wrapping row), is one line.
+pub fn is_flow(element: &crate::retained_tree::RetainedElement) -> bool {
+    element.custom_props().get("textFlow").and_then(|value| value.as_bool()) == Some(true)
+}
+
+/// The nearest ancestor of `element` that declares `textFlow`, if any: the group its text is in.
+fn flow_of(tree: &RetainedTree, element: &crate::retained_tree::RetainedElement) -> Option<u64> {
+    let mut parent = element.parent;
+    while let Some(id) = parent {
+        let ancestor = tree.elements.get(&id)?;
+        if is_flow(ancestor) {
+            return Some(id);
+        }
+        parent = ancestor.parent;
+    }
+    None
+}
+
+/// Every text leaf of `id`'s subtree, in document order, as one group's parts.
+fn collect_flow(tree: &RetainedTree, id: u64, parts: &mut Vec<(Arc<str>, Range<usize>)>, text: &mut String) {
+    let Some(element) = tree.elements.get(&id) else {
+        return;
+    };
+    if is_text_leaf(element) {
+        if let Some(content) = element.content.as_ref().filter(|content| !content.is_empty()) {
+            let start = text.len();
+            text.push_str(content);
+            parts.push((crate::text::selection_key(id, 0), start..text.len()));
+        }
+        return;
+    }
+    for &child in &element.children {
+        collect_flow(tree, child, parts, text);
+    }
+}
+
 fn collect_into(tree: &RetainedTree, id: u64, is_root: bool, out: &mut Vec<Group>) {
     let Some(element) = tree.elements.get(&id) else {
         return;
     };
     if !is_root && element.custom_props().contains_key("highlight") {
+        return;
+    }
+    // A flow is one line, as `group_id` says for copy.
+    if is_flow(element) {
+        let (mut parts, mut text) = (Vec::new(), String::new());
+        collect_flow(tree, id, &mut parts, &mut text);
+        flush(&mut parts, &mut text, out);
         return;
     }
     // Own content is a line of its own. Only for built-ins: `build_custom`
@@ -969,6 +1016,26 @@ mod tests {
         assert_eq!(group_id(&tree, 5), Some(3));
         // The wrapper is not a primitive leaf, so it never merges.
         assert_eq!(group_id(&tree, 2), None);
+    }
+
+    /// `textFlow`: words drawn each in a styled box of its own are one line, for copy and search.
+    #[test]
+    fn a_flow_is_one_group_however_deep_its_text() {
+        let mut tree = RetainedTree::new();
+        tree.create_element(1, "div".to_string());
+        tree.set_custom_prop(1, "textFlow".to_string(), serde_json::json!(true));
+        for (wrapper, leaf, text) in [(2, 3, "a "), (4, 5, "fox "), (6, 7, "here")] {
+            tree.create_element(wrapper, "text".to_string());
+            tree.append_child(1, wrapper);
+            tree.create_element(leaf, "text".to_string());
+            tree.append_child(wrapper, leaf);
+            tree.set_text(leaf, text.to_string());
+        }
+        let groups = GroupList::collect(&tree, 1);
+        assert_eq!(groups.groups.len(), 1);
+        assert_eq!(groups.groups[0].text, "a fox here");
+        assert_eq!(resolve(&groups, &HighlightSet { specs: vec![spec("fox here")] }).total, 1);
+        assert_eq!([group_id(&tree, 3), group_id(&tree, 5), group_id(&tree, 7)], [Some(1); 3]);
     }
 
     /// An empty interpolation must not split a line.

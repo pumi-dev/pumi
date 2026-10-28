@@ -515,6 +515,13 @@ export interface HostProps {
    */
   highlight?: HighlightSpec | HighlightSpec[] | null
 
+  /**
+   * Its text is one line, in however many elements it is drawn: a paragraph whose words are each
+   * a box of their own in a wrapping row. A selection copies its runs with nothing between them
+   * (not a line each), and a search finds a match across them. `div` and `text`.
+   */
+  textFlow?: boolean
+
   // ── Focus props ────────────────────────────────────────────────
   /** Take keyboard focus when the element first mounts. Required for `<input>`:
    *  without it, or a click, the field never receives key events. */
