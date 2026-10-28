@@ -13,9 +13,13 @@ on:
 permissions:
   contents: read
 
+# A pull request's run is grouped by its branch, and main's by the push. A pull request
+# event that arrives as its branch is merged reports `github.ref` as main, and with one
+# group for both it cancelled main's run: main then never finished, never saved its Rust
+# cache, and every pull request built from cold. A push to main is never cancelled.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   RUSTUP_TOOLCHAIN: "1.97.1"
@@ -40,6 +44,11 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
+      # Saved by main only: the repository's caches hold 10 GB, and one per pull request
+      # evicted main's. A pull request restores main's.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: bun install --frozen-lockfile
         working-directory: runtime/app
       - run: cargo build --locked -p pumid -p pumi-host -p pumi-cli
@@ -76,6 +85,8 @@ jobs:
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: bun install --frozen-lockfile
         working-directory: runtime/app
       - run: cargo build --locked -p pumid -p pumi-host -p pumi-cli
@@ -99,6 +110,8 @@ jobs:
         with:
           version: 0.16.0
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo build --locked -p pumid -p pumi-host -p pumi-cli
       - run: cargo xtask platform
       # Not blocking yet: the integration tests start /bin/sh and

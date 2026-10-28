@@ -1,5 +1,7 @@
 [alias]
-xtask = "run --quiet --release --package xtask --"
+# The dev profile: it shares what `cargo build` already compiled, where `--release` built
+# pumid and pumi-host again with thin LTO, 1 to 4 minutes on each CI runner.
+xtask = "run --quiet --package xtask --"
 [env]
 ZIG = { value = "zig", force = false }
 # libghostty-vt-sys picks the Zig mode from Cargo's `DEBUG`, so a profile that keeps debug info —
