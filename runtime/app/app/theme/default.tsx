@@ -21,7 +21,9 @@ import * as drop from "./drop.tsx"
 import { useGpuix } from "../../react/hooks/use-gpuix.ts"
 import * as sidebar from "./sidebar.ts"
 import * as moves from "./moves.ts"
+import { confirm } from "../../sdk/dialogs.ts"
 import {
+  agentsOf,
   useAgentOf,
   useAgents,
   useApp,
@@ -1174,8 +1176,8 @@ const PANE_TAB_MIN = 72
  * a `PaneTab`; a tab dropped on it goes in there); else its one tab's title, which drags the
  * tab. Then what plugins put at
  * `tab.toolbar` (the front tab's), and its buttons: a new tab (while panes hold tabs), a split
- * (`SplitButton`: a menu of the four sides), a zoom (while the view has other panes, or it is zoomed) and, with no strip,
- * a close. The buttons show on the focused pane and the one under the mouse (`over`); with a
+ * (`SplitButton`: a menu of the four sides), a zoom (while the view has other panes, or it is zoomed) and a close:
+ * the pane's with a strip (`closePane`), else its one tab's. The buttons show on the focused pane and the one under the mouse (`over`); with a
  * strip they are a section of their own at the bar's end, an edge before them, which the strip
  * never pushes out or covers. A double click on the bar outside the strip zooms the pane. In the
  * title bar's row (a top pane's, beside the side bar), the strip's empty end and the room round
@@ -1214,6 +1216,7 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
       .catch(swallow)
   }
   const zoom = () => call(via(id, "pane.update"), id, { zoom: !zoomed }).catch(swallow)
+  const close = () => closePane(id, tabs).catch(swallow)
   const bar = {
     display: "flex",
     flexDirection: "row",
@@ -1233,7 +1236,7 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
       {strip ? <NewTabButton pane={id} color={color} onOpen={setAdding} /> : null}
       <SplitButton color={color} split={split} onOpen={setSplitting} />
       {zoomable ? <IconButton icon={zoomed ? "minimize" : "maximize"} title={zoomed ? "Restore the layout" : "Fill the view"} color={color} onClick={zoom} /> : null}
-      {strip ? null : <IconButton icon="close" title="Close Tab" color={color} onClick={() => call(via(front, "tab.close"), front).catch(swallow)} />}
+      {strip ? <IconButton icon="close" title="Close Pane" color={color} onClick={close} /> : <IconButton icon="close" title="Close Tab" color={color} onClick={() => call(via(front, "tab.close"), front).catch(swallow)} />}
     </div>
   )
   if (strip) {
@@ -1293,6 +1296,25 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
       {buttons}
     </div>
   )
+}
+
+/**
+ * Closes a pane and its tabs: at once, unless an agent in them is working, when it asks first
+ * (naming the one, or counting them).
+ */
+async function closePane(pane: string, tabs: string[]) {
+  const working = agentsOf(store.get().snapshot).filter((a) => a.agent_status === "working" && tabs.includes(a.tab_id))
+  if (working.length) {
+    const one = working.length === 1 ? working[0]! : undefined
+    const yes = await confirm({
+      title: one ? `${one.name || one.agent} is still working` : `${working.length} agents are still working`,
+      detail: "Closing the pane stops them and closes its tabs.",
+      confirm: "Close Pane",
+      danger: true,
+    })
+    if (!yes) return
+  }
+  await call(via(pane, "pane.close"), pane)
 }
 
 type SplitSide = "right" | "left" | "up" | "down"
