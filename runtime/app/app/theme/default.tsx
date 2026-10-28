@@ -1949,22 +1949,151 @@ function placement(place: any, cells: { w: number; h: number }): Record<string, 
   }
 }
 
-/** A pane floating over the view (`kind: "float"`): its box, its backdrop, and Escape closing it. */
+/** Where a float's drag started: the mouse, the box's corner in the view, and the room it moves in. */
+interface FloatDrag {
+  x: number
+  y: number
+  left: number
+  top: number
+  room: { width: number; height: number }
+  free: { width: number; height: number }
+}
+
+/** A float's place as `tab.update` takes it, from the core's (`zindex`, its view a number), at `left`/`top` in the room. */
+function floatPlaceAt(place: any, view: string, at: { left: number; top: number }, room: { width: number; height: number }): Record<string, unknown> {
+  // In shares of the room, so it keeps its spot as the window is resized.
+  const share = (v: number, of: number) => `${of > 0 ? Math.round((v / of) * 10000) / 100 : 0}%`
+  const out: Record<string, unknown> = {
+    kind: "float",
+    view,
+    anchor: "NW",
+    row: share(at.top, room.height),
+    col: share(at.left, room.width),
+    width: place.width ?? "50%",
+    height: place.height ?? "50%",
+    relative: place.relative,
+    border: place.border,
+    focusable: place.focusable,
+    mouse: place.mouse,
+    dismiss: place.dismiss,
+    backdrop: place.backdrop,
+    zIndex: place.zindex ?? place.zIndex,
+    focus: false,
+  }
+  for (const key of Object.keys(out)) if (out[key] === undefined || out[key] === null) delete out[key]
+  return out
+}
+
+/**
+ * A float's bar: its tab's status or kind, its title and a close button. Pressing it starts a
+ * drag that moves the float (`onPress`; the float follows the mouse from there).
+ */
+function FloatBar({ tab: id, held, onPress }: { tab: string; held: boolean; onPress(e: any): void }) {
+  const ts = useTextSize()
+  const t = useTheme()
+  const tab = useTab(id)
+  const status = useTabStatus(id)
+  if (!tab) return null
+  return (
+    <div
+      onMouseDown={onPress}
+      title={tab.cwd ?? undefined}
+      style={{
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        height: 30,
+        flexShrink: 0,
+        paddingLeft: 10,
+        paddingRight: 4,
+        userSelect: "none",
+        borderBottomWidth: 1,
+        borderColor: t.border,
+        cursor: held ? "grabbing" : "grab",
+      }}
+    >
+      {status ? <StatusIcon status={status} size={12} /> : <Icon name={KIND_ICON[tab.block] ?? "box"} size={12} color={t.faint} />}
+      <text style={{ fontSize: ts(12), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabTitle(tab)}</text>
+      <div style={{ flexGrow: 1 }} />
+      <IconButton icon="close" title="Close Tab" color={t.text} onClick={() => call(via(id, "tab.close"), id).catch(swallow)} />
+    </div>
+  )
+}
+
+/**
+ * A pane floating over the view (`kind: "float"`): its box with a bar that drags it about, its
+ * backdrop, and Escape closing it. The box takes the wheel, so scrolling it never scrolls the
+ * panes under it.
+ */
 function Float({ tab: id }: { tab: string }) {
   const t = useTheme()
   const m = useMetrics()
   const C = useComponents()
   const tab = useTab(id)
+  const { renderer } = useGpuix()
   const place: any = (tab as any)?.place ?? {}
   const close = () => call(via(id, "tab.close"), id).catch(swallow)
   const dismiss: string[] = place.dismiss ?? []
-  const style = placement(place, { w: 7.8, h: 18 })
+  const roomRef = useRef<number | undefined>(undefined)
+  const boxRef = useRef<number | undefined>(undefined)
+  const drag = useRef<FloatDrag | undefined>(undefined)
+  // Where the box is drawn while it is dragged, and after, until the core's place says it.
+  const [at, setAt] = useState<{ left: number; top: number } | undefined>()
+  const [held, setHeld] = useState(false)
+  useEffect(() => setAt(undefined), [place.anchor, place.row, place.col])
+  const press = (e: any) => {
+    const room = roomRef.current === undefined ? null : renderer?.getElementBounds?.(roomRef.current)
+    const box = boxRef.current === undefined ? null : renderer?.getElementBounds?.(boxRef.current)
+    if (!room || !box) return
+    const start = { left: box.x - room.x, top: box.y - room.y }
+    drag.current = {
+      x: e.x ?? 0,
+      y: e.y ?? 0,
+      ...start,
+      room: { width: room.width, height: room.height },
+      free: { width: Math.max(0, room.width - box.width), height: Math.max(0, room.height - box.height) },
+    }
+    setHeld(true)
+    setAt(start)
+  }
+  const move = (e: any) => {
+    const d = drag.current
+    if (!d) return
+    // No button down any more: the release was missed (it ended outside the window).
+    if (e.pressedButton === undefined || e.pressedButton === null) return drop()
+    const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max)
+    setAt({ left: clamp(d.left + (e.x ?? d.x) - d.x, d.free.width), top: clamp(d.top + (e.y ?? d.y) - d.y, d.free.height) })
+  }
+  const drop = () => {
+    const d = drag.current
+    // The box and the room both hear a release: the first one ends the drag.
+    if (!d) return
+    drag.current = undefined
+    setHeld(false)
+    if (!at || !tab) return setAt(undefined)
+    if (at.left === d.left && at.top === d.top) return setAt(undefined)
+    call(via(id, "tab.update"), id, { place: floatPlaceAt(place, tab.view_id, at, d.room) }).catch(() => setAt(undefined))
+  }
+  const placed = placement(place, { w: 7.8, h: 18 })
+  const style = at ? { ...placed, left: at.left, top: at.top, right: undefined, bottom: undefined, marginLeft: 0, marginTop: 0 } : placed
   return (
     <div
+      ref={(it: { id: number } | null) => {
+        roomRef.current = it?.id
+      }}
       style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", backgroundColor: place.backdrop ? `#000000${Math.round((place.backdrop / 100) * 255).toString(16).padStart(2, "0")}` : undefined }}
       onMouseDown={dismiss.includes("press") || dismiss.includes("press-outside") ? close : undefined}
+      // While it is dragged, the mouse can outrun the bar: the room and the box follow it too.
+      onMouseMove={held ? move : undefined}
+      onMouseUp={held ? drop : undefined}
     >
       <div
+        ref={(it: { id: number } | null) => {
+          boxRef.current = it?.id
+        }}
+        onMouseMove={held ? move : undefined}
+        onMouseUp={held ? drop : undefined}
         autoFocus
         tabIndex={0}
         onKeyDown={(e: any) => {
@@ -1984,9 +2113,12 @@ function Float({ tab: id }: { tab: string }) {
           borderWidth: 1,
           borderColor: t.border,
           boxShadow: { offsetX: 0, offsetY: 10, blurRadius: 30, spreadRadius: 0, color: "#00000080" },
+          // An absolute box lets the wheel through to what is under it unless it takes the pointer.
+          pointerEvents: "auto",
           ...style,
         }}
       >
+        <FloatBar tab={id} held={held} onPress={press} />
         <C.Pane pane={id} tabs={[id]} active={id} focused zoomed={false} />
       </div>
     </div>
