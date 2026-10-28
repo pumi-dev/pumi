@@ -228,7 +228,7 @@ pub fn builtin() -> Vec<Decl> {
             Boolean,
             Value::Null,
             Client,
-            "The client's app is in front (it fires app.focused and app.blurred); unset until it says.",
+            "The client's app is in front: one of its windows has the focus (`app.changed`); unset until it says.",
         ),
         Decl::new(
             "client_tab",

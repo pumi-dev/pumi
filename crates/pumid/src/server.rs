@@ -500,7 +500,7 @@ impl Loop<'_> {
         crate::kernel::queue::chan_closed(self.kernel, chan);
         crate::kernel::waits::chan_closed(self.kernel, chan);
         self.kernel.events.chan_closed(chan);
-        self.kernel.routes.retain(|_, route| route.chan != chan);
+        self.kernel.withdraw_routes(chan, None);
         if self.kernel.fallback == Some(chan) {
             self.kernel.fallback = None;
         }
@@ -544,7 +544,11 @@ impl Loop<'_> {
         if pumi_api::Registry::core(target).is_some() && target != "call.atomic" {
             return Line::Local;
         }
-        if let Some(route) = self.kernel.routes.get(target)
+        // The client a call is made for: the one a plugin serving that client's call names, else
+        // the caller's own channel. A function each app answers for its own client goes there.
+        let given = message.get("rpc.caller").and_then(|c| c["client"].as_u64());
+        let client = given.filter(|c| self.kernel.model.chans.get(c).is_some_and(|c| c.ui.is_some())).unwrap_or(chan);
+        if let Some(route) = self.kernel.route(target, client)
             && let Some(reference) = &route.callback
         {
             let params = message.get("params").cloned().unwrap_or(Value::Null);
@@ -567,7 +571,7 @@ impl Loop<'_> {
                 id: message.get("id").cloned(),
             };
         }
-        let to = match self.kernel.routes.get(target) {
+        let to = match self.kernel.route(target, client) {
             Some(route) => Some(route.chan),
             None if target == "call.atomic" && !self.atomic_here(&message) => self.kernel.fallback,
             None if target == "call.atomic" => None,
@@ -600,7 +604,7 @@ impl Loop<'_> {
                 self.turn(id.map(|id| (chan, pumi_api::rpc::reply(&id, Ok(Value::Null)))));
             }
             Line::Route { to, mut message } => {
-                let caller = self.caller(chan);
+                let caller = self.caller(chan, message.get("rpc.caller"));
                 if let Some(their_id) = message.remove("id") {
                     self.routed.next += 1;
                     let id = self.routed.next;
@@ -691,14 +695,22 @@ impl Loop<'_> {
             }
         }
     }
-    fn caller(&self, chan: u64) -> Value {
+    /// Who a call routed from `chan` comes from, as its provider hears it in `rpc.caller`: the
+    /// channel; the name, tab and client the call says it is made as (a plugin's, for the call it
+    /// serves), else the channel's own.
+    fn caller(&self, chan: u64, given: Option<&Value>) -> Value {
         let c = self.kernel.model.chans.get(&chan);
-        let current = self.kernel.model.current(&Caller { channel: chan, ..Caller::default() });
+        let tab = given.and_then(|g| g["tab"].as_u64()).filter(|t| self.kernel.model.tabs.contains_key(t));
+        let current = self.kernel.model.current(&Caller { channel: chan, tab, ..Caller::default() });
+        let name =
+            given.and_then(|g| g["name"].as_str()).map(str::to_string).or_else(|| c.map(|c| c.info.name.clone()));
+        let is_client = |chan: &u64| self.kernel.model.chans.get(chan).is_some_and(|c| c.ui.is_some());
+        let client = given.and_then(|g| g["client"].as_u64()).filter(is_client).or(Some(chan).filter(is_client));
         json!({
             "chan": chan,
-            "name": c.map(|c| c.info.name.clone()),
+            "name": name,
             "tab": current.map(|c| c.tab),
-            "client": c.and_then(|c| c.ui.as_ref()).map(|_| chan),
+            "client": client,
         })
     }
     fn api_info(&self) -> Value {

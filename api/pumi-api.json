@@ -1192,7 +1192,7 @@
       "provider": "core",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Provide a function every surface can call (`pumi call git.status`, a script's\n`pumi.api[\"git.status\"]`): calls to it from any channel come to this one as requests, with\nthe caller in `rpc.caller`, and its answers go back; or, for one with a `callback`, as a\n`rpc.callback` notification, while the call answers `null`. It appears in `api.getInfo` with\nthe rest. A core function cannot be provided. One another channel provides moves to this one.\n`null` withdraws it; it goes with the channel too.",
+      "desc": "Provide a function every surface can call (`pumi call git.status`, a script's\n`pumi.api[\"git.status\"]`): calls to it from any channel come to this one as requests, with\nthe caller in `rpc.caller`, and its answers go back; or, for one with a `callback`, as a\n`rpc.callback` notification, while the call answers `null`. It appears in `api.getInfo` with\nthe rest. A core function cannot be provided, and nor can one another channel provides as\nsomeone else (another plugin, another program): it is theirs until they withdraw it. With\n`runsOn: \"client\"` each app provides its own, for its own client. `null` withdraws it; it goes\nwith the channel too.",
       "parameters": [
         [
           "String",
@@ -1267,6 +1267,23 @@
                   },
                   "callback": {
                     "description": "Send each call here as a `rpc.callback` notification, with its arguments in order, and\nanswer `null`: `{\"chan\": 0, \"ref\": …}`, a reference a channel holds. Without one the\ncall comes to the channel as a request, and its answer is the call's.",
+                    "default": null
+                  },
+                  "runsOn": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "server",
+                          "client"
+                        ],
+                        "description": "Where a provided function runs: for everyone (`server`), or in each client's own app."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "`client`: each app that provides it answers the calls made for its own client (its\nclipboard, its updater), and others' go to the first app that does. `server` by default:\none channel answers every call.",
                     "default": null
                   }
                 },
@@ -10485,16 +10502,21 @@
     },
     {
       "name": "app.changed",
-      "provider": "app",
-      "desc": "The app changed in the named fields (`isFocused`).",
-      "match": "",
+      "provider": "core",
+      "desc": "A client's app came to the front or went behind (`isFocused`): one of its windows has the focus, or none has; `client` says whose.",
+      "match": "the client's id",
       "data": [
+        "client",
         "keys",
         "patch"
       ],
       "params_schema": {
         "type": "object",
         "properties": {
+          "client": {
+            "type": "integer",
+            "minimum": 1
+          },
           "keys": {
             "type": "array",
             "items": {
@@ -10519,6 +10541,7 @@
           }
         },
         "required": [
+          "client",
           "keys",
           "patch"
         ],
@@ -10527,6 +10550,7 @@
       "examples": [
         {
           "args": {
+            "client": 3,
             "keys": [
               "isFocused"
             ],

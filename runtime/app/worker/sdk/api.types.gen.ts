@@ -482,8 +482,10 @@ export interface Functions {
    * `pumi.api["git.status"]`): calls to it from any channel come to this one as requests, with
    * the caller in `rpc.caller`, and its answers go back; or, for one with a `callback`, as a
    * `rpc.callback` notification, while the call answers `null`. It appears in `api.getInfo` with
-   * the rest. A core function cannot be provided. One another channel provides moves to this one.
-   * `null` withdraws it; it goes with the channel too.
+   * the rest. A core function cannot be provided, and nor can one another channel provides as
+   * someone else (another plugin, another program): it is theirs until they withdraw it. With
+   * `runsOn: "client"` each app provides its own, for its own client. `null` withdraws it; it goes
+   * with the channel too.
    */
   "fn.set": { args: [name: string, spec: {
     desc: string;
@@ -503,6 +505,12 @@ export interface Functions {
      * call comes to the channel as a request, and its answer is the call's.
      */
     callback?: unknown;
+    /**
+     * `client`: each app that provides it answers the calls made for its own client (its
+     * clipboard, its updater), and others' go to the first app that does. `server` by default:
+     * one channel answers every call.
+     */
+    runsOn?: "server" | "client" | null;
   } | null]; returns: null };
   /**
    * The entries of a folder on the server's machine: `~` and `~/…` are its home, a relative path
@@ -1868,8 +1876,13 @@ export interface Events {
     new: unknown;
     source: string | null;
   };
-  /** The app changed in the named fields (`isFocused`). */
+  /**
+   * A client's app came to the front or went behind (`isFocused`): one of its windows has the focus, or none has; `client` says whose.
+   *
+   * Its `match` is the client's id.
+   */
   "app.changed": {
+    client: number;
     keys: ("isFocused")[];
     patch: {
       isFocused: boolean;
@@ -2098,8 +2111,10 @@ export interface Nouns {
      * `pumi.api["git.status"]`): calls to it from any channel come to this one as requests, with
      * the caller in `rpc.caller`, and its answers go back; or, for one with a `callback`, as a
      * `rpc.callback` notification, while the call answers `null`. It appears in `api.getInfo` with
-     * the rest. A core function cannot be provided. One another channel provides moves to this one.
-     * `null` withdraws it; it goes with the channel too.
+     * the rest. A core function cannot be provided, and nor can one another channel provides as
+     * someone else (another plugin, another program): it is theirs until they withdraw it. With
+     * `runsOn: "client"` each app provides its own, for its own client. `null` withdraws it; it goes
+     * with the channel too.
      *
      * @example
      * await fn.set("hello.greet", { desc: "Greet.", effect: "read" })
@@ -2122,6 +2137,12 @@ export interface Nouns {
      * call comes to the channel as a request, and its answer is the call's.
      */
     callback?: unknown;
+    /**
+     * `client`: each app that provides it answers the calls made for its own client (its
+     * clipboard, its updater), and others' go to the first app that does. `server` by default:
+     * one channel answers every call.
+     */
+    runsOn?: "server" | "client" | null;
   } | null): Promise<null>;
   };
   fs: {

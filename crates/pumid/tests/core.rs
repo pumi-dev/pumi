@@ -354,3 +354,90 @@ fn an_agent_is_told_what_listeners_answer_and_takes_what_waits_for_it() {
     let taken = c.ok("agent.take", json!([tab_ref(tab), { "session": "s-1" }]));
     assert_eq!(taken["text"], "kept across a restart");
 }
+/// The next request `c` is asked, past the redraws it hears as a client.
+fn asked(c: &mut Conn) -> Value {
+    loop {
+        let message = c.read();
+        if message.get("id").is_some() && message.get("method").is_some() {
+            return message;
+        }
+    }
+}
+/// A connection that says it is `name` and, as an app does, attaches as a client.
+fn app(core: &Core, name: &str) -> (Conn, u64) {
+    let mut c = Conn::open(&core.socket);
+    c.ok("channel.setInfo", json!([name, {}, "ui", {}, {}]));
+    let client = c.ok("client.attach", json!([{ "width": 80, "height": 24 }]))["client"].as_u64().unwrap();
+    (c, client)
+}
+#[test]
+fn a_function_someone_else_provides_is_theirs_until_they_withdraw_it() {
+    let core = Core::start();
+    let mut first = Conn::open(&core.socket);
+    first.ok("channel.setInfo", json!(["first", {}, "plugin", {}, {}]));
+    first.ok("fn.set", json!(["hello.greet", {"desc": "Greet."}]));
+    let mut other = Conn::open(&core.socket);
+    other.ok("channel.setInfo", json!(["other", {}, "cli", {}, {}]));
+    let (taken, _) = other.call("fn.set", json!(["hello.greet", {"desc": "Mine now."}]));
+    let err = taken.expect_err("another's function is not taken");
+    assert!(err["message"].as_str().unwrap().contains("provided by first"), "{err}");
+    // The same source on another connection (the app, connecting again) takes it over.
+    let mut again = Conn::open(&core.socket);
+    again.ok("channel.setInfo", json!(["first", {}, "plugin", {}, {}]));
+    again.ok("fn.set", json!(["hello.greet", {"desc": "Greet."}]));
+    drop(again);
+    drop(first);
+    until("its providers to go", || other.call("fn.set", json!(["hello.greet", {"desc": "Mine now."}])).0.is_ok());
+}
+#[test]
+fn a_function_each_app_provides_answers_its_own_clients_calls() {
+    let core = Core::start();
+    let (mut a, _) = app(&core, "pumi-app");
+    let (mut b, client_b) = app(&core, "pumi-app");
+    for c in [&mut a, &mut b] {
+        c.ok("fn.set", json!(["app.where", {"desc": "Which app.", "effect": "read", "runsOn": "client"}]));
+    }
+    let mut caller = Conn::open(&core.socket);
+    caller.next = 100;
+    // Made for b's client (a plugin serving its call says so): b answers.
+    let asked_for = |client: Option<u64>| {
+        let mut message = json!({ "jsonrpc": "2.0", "id": 101, "method": "app.where", "params": [] });
+        if let Some(client) = client {
+            message["rpc.caller"] = json!({ "name": "me/office", "client": client });
+        }
+        message
+    };
+    caller.send(asked_for(Some(client_b)));
+    let asked = self::asked(&mut b);
+    assert_eq!((asked["method"].clone(), asked["rpc.caller"]["client"].clone()), (json!("app.where"), json!(client_b)));
+    assert_eq!(asked["rpc.caller"]["name"], "me/office");
+    b.send(json!({ "jsonrpc": "2.0", "id": asked["id"], "result": "b" }));
+    assert_eq!(caller.read()["result"], "b");
+    // For no client: the first app that provides it.
+    caller.send(asked_for(None));
+    let asked = self::asked(&mut a);
+    a.send(json!({ "jsonrpc": "2.0", "id": asked["id"], "result": "a" }));
+    assert_eq!(caller.read()["result"], "a");
+    // Without a, b's is everyone's.
+    drop(a);
+    until("a to go", || caller.ok("channel.list", json!([{ "ui": true }])).as_array().unwrap().len() == 1);
+    caller.send(asked_for(None));
+    let asked = self::asked(&mut b);
+    b.send(json!({ "jsonrpc": "2.0", "id": asked["id"], "result": "b" }));
+    assert_eq!(caller.read()["result"], "b");
+}
+#[test]
+fn an_app_coming_to_the_front_fires_app_changed_with_its_client() {
+    let core = Core::start();
+    let (mut c, client) = app(&core, "pumi-app");
+    c.ok("event.on", json!(["app.changed", { "match": client.to_string() }]));
+    let (set, notes) = c.call("core.setOptionValue", json!(["client_active", true, { "scope": "client" }]));
+    set.unwrap();
+    let mut heard = notes;
+    while !heard.iter().any(|n| n["method"] == "rpc.event") {
+        heard.push(c.read());
+    }
+    let event = heard.iter().find(|n| n["method"] == "rpc.event").unwrap()["params"][1].clone();
+    assert_eq!(event["match"], json!(client.to_string()));
+    assert_eq!(event["data"], json!({ "client": client, "keys": ["isFocused"], "patch": { "isFocused": true } }));
+}

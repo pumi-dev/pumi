@@ -125,5 +125,12 @@ pub fn builtin() -> Vec<Decl> {
         ),
         Decl::new("client_width", Number, json!(0), Client, "The client's size in cells.").readonly(),
         Decl::new("client_height", Number, json!(0), Client, "The client's size in cells.").readonly(),
+        Decl::new(
+            "client_active",
+            Boolean,
+            Value::Null,
+            Client,
+            "The client's app is in front: one of its windows has the focus (`app.changed`); unset until it says.",
+        ),
     ]
 }

@@ -79,6 +79,18 @@ pub struct FnSpec {
     /// call comes to the channel as a request, and its answer is the call's.
     #[serde(default)]
     pub callback: Option<Value>,
+    /// `client`: each app that provides it answers the calls made for its own client (its
+    /// clipboard, its updater), and others' go to the first app that does. `server` by default:
+    /// one channel answers every call.
+    #[serde(default)]
+    pub runs_on: Option<FnRunsOn>,
+}
+/// Where a provided function runs: for everyone (`server`), or in each client's own app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum FnRunsOn {
+    Server,
+    Client,
 }
 /// A JSON Schema, as a provided function takes one: an object, and what it says.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -107,8 +119,10 @@ pub enum FnEffect {
 /// `pumi.api["git.status"]`): calls to it from any channel come to this one as requests, with
 /// the caller in `rpc.caller`, and its answers go back; or, for one with a `callback`, as a
 /// `rpc.callback` notification, while the call answers `null`. It appears in `api.getInfo` with
-/// the rest. A core function cannot be provided. One another channel provides moves to this one.
-/// `null` withdraws it; it goes with the channel too.
+/// the rest. A core function cannot be provided, and nor can one another channel provides as
+/// someone else (another plugin, another program): it is theirs until they withdraw it. With
+/// `runsOn: "client"` each app provides its own, for its own client. `null` withdraws it; it goes
+/// with the channel too.
 #[api(
     name = "fn.set",
     example(
@@ -126,7 +140,7 @@ pub enum FnEffect {
 pub fn pumi_fn_set(cx: &mut Cx, name: String, spec: Nullable<FnSpec>) -> Result<()> {
     let (caller, k) = kernel(cx)?;
     let Some(spec) = spec.into_option() else {
-        k.routes.retain(|route, r| route != &name || r.chan != caller.channel);
+        k.withdraw_routes(caller.channel, Some(&name));
         k.emit("registry.changed", "fn", About::default(), json!({ "kind": "fn", "names": [name] }));
         return Ok(());
     };
@@ -159,7 +173,10 @@ pub fn pumi_fn_set(cx: &mut Cx, name: String, spec: Nullable<FnSpec>) -> Result<
         name,
         since: 1,
         provider: source.clone(),
-        runs_on: RunsOn::Server,
+        runs_on: match spec.runs_on.unwrap_or(FnRunsOn::Server) {
+            FnRunsOn::Server => RunsOn::Server,
+            FnRunsOn::Client => RunsOn::Client,
+        },
         effect: match spec.effect.unwrap_or(FnEffect::Write) {
             FnEffect::Read => Effect::Read,
             FnEffect::Write => Effect::Write,
@@ -178,7 +195,29 @@ pub fn pumi_fn_set(cx: &mut Cx, name: String, spec: Nullable<FnSpec>) -> Result<
     info.validate()?;
     let chan = callback.as_ref().map_or(caller.channel, |(chan, _)| *chan);
     let name = info.name.clone();
-    k.routes.insert(name.clone(), Route { chan, info, callback: callback.map(|(_, reference)| reference) });
+    // Someone else's while they are connected: a channel may move its own, and an app may
+    // take over from the app before it (the same source), not from a script or a plugin.
+    let others = k.routes.get(&name).into_iter().chain(k.client_routes.get(&name).into_iter().flat_map(|a| a.values()));
+    if let Some(theirs) =
+        others.filter(|r| r.chan != chan && k.model.chans.contains_key(&r.chan)).find(|r| r.info.source != info.source)
+    {
+        return Err(Error::invalid_params(format!(
+            "`{name}` is provided by {}: it is theirs until they withdraw it",
+            theirs.info.source
+        )));
+    }
+    let per_client = info.runs_on == RunsOn::Client;
+    let route = Route { chan, info, callback: callback.map(|(_, reference)| reference) };
+    if per_client {
+        k.client_routes.entry(name.clone()).or_default().insert(chan, route.clone());
+        // Everyone else's calls stay with the app that had it, while it does.
+        if k.routes.get(&name).is_none_or(|r| r.chan == chan || !k.model.chans.contains_key(&r.chan)) {
+            k.routes.insert(name.clone(), route);
+        }
+    } else {
+        k.client_routes.remove(&name);
+        k.routes.insert(name.clone(), route);
+    }
     k.emit("registry.changed", "fn", About::default(), json!({ "kind": "fn", "names": [name] }));
     Ok(())
 }

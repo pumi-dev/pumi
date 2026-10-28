@@ -98,6 +98,10 @@ pub struct Kernel {
     pub restart: bool,
     /// Functions channels provide, by name: calls to them are passed on.
     pub routes: BTreeMap<String, Route>,
+    /// The functions each app provides for its own client (`runsOn: "client"`), by name and its
+    /// channel: a call made for a client goes to that client's app; `routes` has the one every
+    /// other call goes to.
+    pub client_routes: BTreeMap<String, BTreeMap<ChanId, Route>>,
     /// The channel that gets calls nobody else provides (the host).
     pub fallback: Option<ChanId>,
     activity: u64,
@@ -153,6 +157,7 @@ impl Kernel {
             stop: false,
             restart: false,
             routes: BTreeMap::new(),
+            client_routes: BTreeMap::new(),
             fallback: None,
             activity: 0,
             ext: anymap::Ext::default(),
@@ -286,6 +291,32 @@ impl Kernel {
         self.emit("client.changed", &session, About::default(), data);
     }
     /// Sets an option, fires `option.changed`, and tells a tab's type about its own option.
+    /// The provider a call to `name` made for `client` (a channel) goes to: that client's app
+    /// when it answers `name` for its own client, else the one everyone's calls go to.
+    pub fn route(&self, name: &str, client: ChanId) -> Option<&Route> {
+        self.client_routes.get(name).and_then(|apps| apps.get(&client)).or_else(|| self.routes.get(name))
+    }
+    /// `chan` no longer provides `name` (every name with `None`): its routes go, and a function
+    /// another app still provides for its client is everyone's again, the primary app's first.
+    pub fn withdraw_routes(&mut self, chan: ChanId, name: Option<&str>) {
+        let ours = |n: &str| name.is_none_or(|name| name == n);
+        self.routes.retain(|n, route| !ours(n) || route.chan != chan);
+        for (n, apps) in self.client_routes.iter_mut() {
+            if ours(n) {
+                apps.remove(&chan);
+            }
+        }
+        self.client_routes.retain(|_, apps| !apps.is_empty());
+        let primary = crate::api::ui::primary(self);
+        for (n, apps) in &self.client_routes {
+            if !self.routes.contains_key(n) {
+                let next = primary.and_then(|p| apps.get(&p)).or_else(|| apps.values().next());
+                if let Some(route) = next {
+                    self.routes.insert(n.clone(), route.clone());
+                }
+            }
+        }
+    }
     pub fn set_option(&mut self, name: &str, key: Key, value: Value, source: &str, internal: bool) -> Result<bool> {
         if let Key::Tab(tab) = key
             && let Some(decl) = self.model.options.decl(name)
@@ -350,6 +381,18 @@ impl Kernel {
                     about,
                     json!({ noun: text, "keys": keys, "patch": patch }),
                 );
+            }
+            // A client's app came to the front or went behind: `app.changed`, matched by its id.
+            Key::Client(client) if change.name == "client_active" => {
+                let focused = change.new == json!(true);
+                if (change.old == json!(true)) != focused {
+                    self.emit(
+                        "app.changed",
+                        &client.to_string(),
+                        about,
+                        json!({ "client": client, "keys": ["isFocused"], "patch": { "isFocused": focused } }),
+                    );
+                }
             }
             Key::Client(_) => {}
         }
