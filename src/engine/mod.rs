@@ -209,7 +209,7 @@ impl Engine {
             .map_err(Error::from_reason)
     }
 
-    /// Whether web pages get their inspector (the browser plugin's `webview_devtools` option).
+    /// Whether web pages get their inspector (the `webview_devtools` option).
     #[napi]
     pub fn set_web_devtools(&self, on: bool) {
         crate::ui::webview::DEVTOOLS.store(on, std::sync::atomic::Ordering::Relaxed);

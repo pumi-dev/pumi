@@ -34,7 +34,7 @@ export declare class Engine {
    * Answers its state.
    */
   webview(handle: string, method: string, arg?: any | undefined | null): any
-  /** Whether web pages get their inspector (the browser plugin's `webview_devtools` option). */
+  /** Whether web pages get their inspector (the `webview_devtools` option). */
   setWebDevtools(on: boolean): void
   /**
    * Whether the app's windows are light or dark now: its theme's look (`dark` or `light`).

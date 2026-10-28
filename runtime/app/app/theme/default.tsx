@@ -1380,7 +1380,7 @@ interface NewKind {
   open(at: string, place: NewPlace): Promise<unknown>
 }
 
-const BROWSER = "pumi.browser.page"
+const BROWSER = "pumi_dev.browser.page"
 const SIMULATOR = "amresyd.simulator.device"
 
 /** The agents a new tab can run, as `pumi skill` knows them: their program, and their name. */
@@ -1422,7 +1422,7 @@ function serverShortcut(tables: unknown, fn: string): string | undefined {
  */
 function useNewKinds(at: string): NewKind[] {
   const blocks = useRegistry<{ id: string }>("block")
-  const [home] = useOption<string>("pumi.browser.home_url")
+  const [home] = useOption<string>("pumi_dev.browser.home_url")
   const tables = useApp((s) => s.options.keys)
   const local = !serverOf(at)
   return useMemo(() => {
@@ -1431,7 +1431,7 @@ function useNewKinds(at: string): NewKind[] {
     const out: NewKind[] = [{ id: "terminal", title: "Terminal", icon: "terminal", letter: "T", keys: shortcut("new_tab"), group: "open", open: opening("terminal", {}) }]
     if (has.has(BROWSER)) {
       // The block's option, set as it opens: the page it starts on (empty: the address bar).
-      out.push({ id: "browser", title: "Browser", icon: "tool_web", letter: "B", keys: serverShortcut(tables, "pumi.browser.open"), group: "open", open: opening(BROWSER, { "pumi.browser.url": home ?? "" }) })
+      out.push({ id: "browser", title: "Browser", icon: "tool_web", letter: "B", keys: serverShortcut(tables, "pumi_dev.browser.open"), group: "open", open: opening(BROWSER, { "pumi_dev.browser.url": home ?? "" }) })
     }
     out.push({
       id: "file",

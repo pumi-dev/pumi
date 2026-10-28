@@ -74,9 +74,9 @@ const begin = () => {
 const stop = store.subscribe(begin)
 begin()
 store.subscribe(() => manager.follow())
-// Web pages get their inspector as the browser plugin's `webview_devtools` says.
+// Web pages get their inspector as `webview_devtools` says.
 let devtools: unknown
 store.subscribe(() => {
-  const on = store.get().options["pumi.browser.webview_devtools"] ?? true
+  const on = store.get().options.webview_devtools ?? true
   if (on !== devtools) engine.setWebDevtools((devtools = on) !== false)
 })

@@ -14,8 +14,7 @@ use std::time::Duration;
 use wry::raw_window_handle::{HandleError, HasWindowHandle, RawWindowHandle, WindowHandle};
 use wry::{NewWindowResponse, PageLoadEvent, WebView, http};
 pub const ZOOM_RANGE: (f64, f64) = (0.3, 3.0);
-/// Whether pages are built with their inspector (the browser plugin's `webview_devtools` option, as
-/// the app says).
+/// Whether pages are built with their inspector (the `webview_devtools` option, as the app says).
 pub static DEVTOOLS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 /// Every page's own script: focus and navigation, and the app's keys. A trusted keydown the app's
 /// bindings take (`take`, or every key while `all`), and the page doesn't `keep`, goes to the window
