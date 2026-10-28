@@ -71,6 +71,9 @@ pub struct Kernel {
     /// The last of the core's events whose change the model has (`core.model`'s `events`): one
     /// up to here moves nothing.
     pub events_seen: u64,
+    /// The last of the core's events heard ([`Kernel::mirror_event`]). A read of the model can
+    /// be ahead of it: what moved is in the model while its event is still on its way.
+    pub events_heard: u64,
     /// Values the server and the host's modules keep beside the model, by type.
     pub ext: anymap::Ext,
     /// Messages for the user, oldest first.
@@ -124,6 +127,7 @@ impl Kernel {
             reads: HashSet::new(),
             stale: false,
             events_seen: 0,
+            events_heard: 0,
             ext: anymap::Ext::default(),
             messages: Default::default(),
             started: state::epoch(),
@@ -186,6 +190,7 @@ impl Kernel {
     /// An event from the core: what it moved is in the core's model, read again before the
     /// mirror is used, unless the mirror has it already.
     pub fn mirror_event(&mut self, event: &events::Event) {
+        self.events_heard = self.events_heard.max(event.seq);
         match event.event.as_str() {
             // Internal, or one of the host's own: it moved nothing in the model.
             "terminal.osc" | "plugin.reloadRequested" => {}

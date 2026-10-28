@@ -152,7 +152,13 @@ struct Held {
     deadline: Option<Instant>,
     /// Its program's end, as `tab.changed` said it: the tab may be gone by the next tick.
     ended: Option<Option<i32>>,
+    /// The tab was gone from the model: when, and the last of the core's events the model had
+    /// then. Its program's end comes before that in the events, and may still be on its way.
+    gone: Option<(Instant, u64)>,
 }
+/// How long a wait for a gone tab's exit code waits for the event that says it, when the events
+/// do not show it is not coming.
+const GONE_GRACE: Duration = Duration::from_secs(1);
 /// Keeps the exit code a waited-on tab's program ended with (`tab.changed` of `exitCode`).
 pub fn heard(kernel: &mut Kernel, event: &crate::kernel::events::Event) {
     let Some(tab) = event.about.tab else { return };
@@ -200,7 +206,7 @@ fn wait(cx: &mut Cx, tab: u64, args: &Value) -> Result<Value> {
         return Err(Error::exception("wait is held until it is answered: it cannot be called inside another function"));
     };
     in_flight.held = true;
-    k.ext.get_or_default::<Waiting>().0.push(Held { id, tab, ask, deadline, ended: None });
+    k.ext.get_or_default::<Waiting>().0.push(Held { id, tab, ask, deadline, ended: None, gone: None });
     Ok(Value::Null)
 }
 /// What the tab says now, when it already says what the wait asked for.
@@ -231,8 +237,11 @@ pub fn tick(kernel: &mut Kernel) {
     kernel.sync();
     let held = std::mem::take(&mut kernel.ext.get_or_default::<Waiting>().0);
     let mut keep = Vec::new();
-    for wait in held {
+    for mut wait in held {
         let open = kernel.model.tabs.contains_key(&wait.tab);
+        if !open && wait.gone.is_none() {
+            wait.gone = Some((Instant::now(), kernel.events_seen));
+        }
         let screen = if open && wait.ask.text.is_some() {
             match kernel
                 .core()
@@ -247,7 +256,12 @@ pub fn tick(kernel: &mut Kernel) {
         let ended = wait.ended.or_else(|| if open { ended(kernel, wait.tab) } else { None });
         let answer = wait.ask.met(&screen, ended).or_else(|| {
             let late = wait.deadline.is_some_and(|at| Instant::now() >= at);
-            (!open || late).then(|| json!({ "match": null, "exitCode": null }))
+            // A tab read as gone before its `tab.changed` of `exitCode` was heard: that
+            // event is still to come, unless every event the read had was heard.
+            let told = wait
+                .gone
+                .is_some_and(|(at, seen)| !wait.ask.exit || kernel.events_heard >= seen || at.elapsed() >= GONE_GRACE);
+            ((!open && told) || late).then(|| json!({ "match": null, "exitCode": null }))
         });
         match answer {
             Some(answer) => {
