@@ -653,8 +653,16 @@ pub fn builtin() -> Vec<Decl> {
             .label("Key bindings")
             .group("Keys")
             .control("keymap"),
-        // The webview's inspector is the browser plugin's option (`pumi.browser.webview_devtools`),
-        // its Settings page showing it: the browser is what draws pages.
+        // Every plugin's pages are the app's webview: its inspector is the app's to turn on.
+        Decl::new(
+            "webview_devtools",
+            Boolean,
+            json!(true),
+            Global,
+            "Inspect and debug the web pages plugins show with alt+cmd+i.",
+        )
+        .label("Web Inspector")
+        .group("Plugins"),
         Decl::new(
             "agents.permissions",
             Boolean,

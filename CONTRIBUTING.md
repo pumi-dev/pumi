@@ -83,7 +83,7 @@ stale. `api/plugin-manifest.schema.json` is not generated: keep it in step with
 | `runtime/app/react`, `runtime/app/native` | React's bindings to the renderer. |
 | `runtime/app/gen` | What writes the SDK's `*.gen.ts` from `api/pumi-api.json`. |
 | `runtime/app/template` | What `pumi plugin new` writes. |
-| `runtime/bundled` | The plugins that ship with the app: `terminal`, `browser`, `launcher`. |
+| `runtime/bundled` | The plugins that ship with the app: `terminal` and `launcher`. |
 | `xtask` | `cargo xtask api`, `platform` and `budget` (the core's size). |
 | `scripts/` | Building from a checkout, and the release scripts (`scripts/release/`, see [Releasing](docs/releasing.md)). |
 | `vendor/` | GPUI, from Zed. |

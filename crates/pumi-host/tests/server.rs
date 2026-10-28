@@ -653,26 +653,23 @@ fn the_bundled_terminal_plugin_is_listed_turned_off_and_never_removed() {
     client.call("plugin.update", json!(["pumi/terminal", {"enabled": true}]));
     assert_eq!(terminal(&mut client)["active"], true);
 }
-/// The browser is a bundled plugin, not the app's: its block and options are there while it is on,
-/// and gone when it is turned off.
+/// A bundled plugin is listed as one, and its block is there while it is on and gone when it is
+/// turned off.
 #[test]
-fn the_bundled_browser_s_page_and_options_go_when_it_is_turned_off() {
+fn a_bundled_plugin_s_block_goes_when_it_is_turned_off() {
     let dir = Server::dir();
     let server = Server::start_home(dir.path());
     let mut client = server.client();
     let blocks = |client: &mut Client| -> Vec<Value> {
         client.call("registry.list", json!(["block"])).as_array().unwrap().iter().map(|b| b["id"].clone()).collect()
     };
-    let listed = client.call("registry.list", json!(["plugin", {"name": "browser"}]));
-    let browser = listed.as_array().unwrap().iter().find(|p| p["spec"]["name"] == "browser").cloned().expect("listed");
-    assert_eq!((browser["id"].clone(), browser["bundled"].clone()), (json!("pumi/browser"), json!(true)));
-    assert!(blocks(&mut client).contains(&json!("pumi.browser.page")), "its page, while it is on");
-    let home = client.call("registry.list", json!(["option", {"name": "pumi.browser.home_url"}]));
-    assert_eq!(home.as_array().map(Vec::len), Some(1), "its options are its own: {home}");
-    let core = client.try_call("registry.list", json!(["option", {"name": "browser.home_url"}]));
-    assert!(core.is_err(), "the core declares none: {core:?}");
-    client.call("plugin.update", json!(["pumi/browser", {"enabled": false}]));
-    assert!(!blocks(&mut client).contains(&json!("pumi.browser.page")), "off, the page goes");
+    let listed = client.call("registry.list", json!(["plugin", {"name": "launcher"}]));
+    let launcher =
+        listed.as_array().unwrap().iter().find(|p| p["spec"]["name"] == "launcher").cloned().expect("listed");
+    assert_eq!((launcher["id"].clone(), launcher["bundled"].clone()), (json!("pumi/launcher"), json!(true)));
+    assert!(blocks(&mut client).contains(&json!("pumi.launcher.new")), "its block, while it is on");
+    client.call("plugin.update", json!(["pumi/launcher", {"enabled": false}]));
+    assert!(!blocks(&mut client).contains(&json!("pumi.launcher.new")), "off, the block goes");
 }
 #[test]
 fn a_plugin_from_a_repository_installs_at_the_ref_it_follows_and_goes() {
