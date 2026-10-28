@@ -104,6 +104,7 @@ export class SettingsWindow {
       trafficLights: TRAFFIC_LIGHTS,
       setBackground: (mode) => this.renderer.setWindowBackground(mode),
       setBlur: (radius) => this.renderer.setWindowBlur(radius),
+      setGlass: (opacity) => this.renderer.setWindowGlass(opacity),
     }
     this.shown = { key, info }
     return info

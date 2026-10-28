@@ -126,6 +126,9 @@ export interface WindowInfo {
   setBackground(mode: "opaque" | "transparent" | "blurred"): void
   /** How much what shows through a background that is not opaque is blurred, in px; 0 is not at all. */
   setBlur(radius: number): void
+  /** How much of what is behind the window every background hides, 0–1 (1 is all of it) while
+   *  the background is not opaque: each keeps its own colour, and text and images stay opaque. */
+  setGlass(opacity: number): void
   /** The modifiers held down now, what `useHeldModifiers` reads. */
   held?: HeldModifiers
 }

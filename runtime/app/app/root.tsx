@@ -12,7 +12,6 @@ import {
   LIGHT,
   METRICS,
   ThemeContext,
-  withOpacity,
   type Appearance,
   type TerminalPalette,
   type ThemeSpec,
@@ -203,16 +202,9 @@ export function useResolvedTheme(safe: boolean, failed?: string): { state: Theme
       ? { ...scheme, ...(own.opacity === undefined ? {} : { opacity: own.opacity }) }
       : { ...TERMINAL[appearance], background: made.tokens.window, ...own }
     const resolved = follows ? { ...made, tokens: { ...made.tokens, ...drawn.fromPalette!(given, appearance) } as ThemeState["tokens"] } : made
-    // The default window, see-through, tints the panes' room in the terminals' colour itself
-    // (`backgroundOpacity`): a terminal painting its own on top would make it opaque again.
-    const glass = resolved.metrics.backgroundOpacity < 1 && resolved.components.Window === DEFAULT.Window
-    const palette = glass ? { ...given, opacity: 0 } : given
-    // A highlight drawn opaque on a see-through bar would be a solid block in it: the text's
-    // colour, faint, lights a row as much and leaves what is behind showing.
-    const tokens = glass
-      ? { ...resolved.tokens, hover: withOpacity(resolved.tokens.text, 0.1), active: withOpacity(resolved.tokens.text, 0.14), selected: withOpacity(resolved.tokens.text, 0.16) }
-      : resolved.tokens
-    return { ...resolved, tokens, palette }
+    // See-through (`backgroundOpacity`), the window still paints its colours as they are: the
+    // renderer lets the desktop through every background by as much (`window.setGlass`).
+    return { ...resolved, palette: given }
   }, [drawn, appearance, prefix, scheme, matched, accent, pumi, follows])
   return { state, shown, drawn, plugin }
 }
@@ -273,14 +265,16 @@ export function Root({ safe }: { safe: boolean }) {
   }, [state, renderer])
   const background = drawn.window?.background ?? "opaque"
   const blur = background === "opaque" ? 0 : (drawn.window?.blur ?? 0)
+  const glass = background === "opaque" ? 1 : Math.min(Math.max(state.metrics.backgroundOpacity ?? 1, 0), 1)
   useEffect(() => {
     try {
       window.setBackground(background)
       window.setBlur(blur)
+      window.setGlass(glass)
     } catch (err) {
       console.error("pumi: the window's background:", (err as Error)?.message ?? err)
     }
-  }, [background, blur, window])
+  }, [background, blur, glass, window])
   // The native chrome (a webview tab's) follows the look the theme resolved to, not macOS's.
   useEffect(() => {
     try {

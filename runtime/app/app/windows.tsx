@@ -137,6 +137,7 @@ export class AppWindow {
       trafficLights: MACOS && !this.fullscreened ? TRAFFIC_LIGHTS : undefined,
       setBackground: (mode) => this.renderer.setWindowBackground(mode),
       setBlur: (radius) => this.renderer.setWindowBlur(radius),
+      setGlass: (opacity) => this.renderer.setWindowGlass(opacity),
       held: this.held,
     }
     this.shown = { key, info }

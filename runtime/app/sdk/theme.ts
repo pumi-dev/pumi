@@ -56,10 +56,11 @@ export interface Metrics {
   /** How much a terminal fades while another pane has the focus: 0 (not at all) to 1 (gone). */
   paneFade: number
   /**
-   * How much the default `Window`'s backgrounds (side bar, title bar, the panes' room) hide what is
-   * behind the window: 1 is opaque, lower lets it show through (with `window.blur`, blurred). Under
-   * 1 the window's background is `"transparent"` unless the theme says otherwise, and the
-   * terminals paint no background of their own: the room under them is tinted their colour.
+   * How much the window's backgrounds hide what is behind it: 1 is opaque, lower lets it show
+   * through (with `window.blur`, blurred). Under 1 the default theme's window is `"transparent"`.
+   * The parts paint their colours as they are, and the renderer lets the desktop through every
+   * background by as much, however many are stacked: each keeps its own colour, and text, icons
+   * and images stay opaque. macOS only for now; elsewhere the window stays opaque.
    */
   backgroundOpacity: number
   [metric: string]: number

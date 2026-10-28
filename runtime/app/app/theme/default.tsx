@@ -40,7 +40,7 @@ import {
   type HeldModifiers,
   type Tree,
 } from "../state.ts"
-import { METRICS, useComponents, useMetrics, usePalette, useTheme, withOpacity, type Components, type DialogProps, type IconButtonProps, type Metrics, type MenuProps } from "../../sdk/theme.ts"
+import { METRICS, useComponents, useMetrics, useTheme, withOpacity, type Components, type DialogProps, type IconButtonProps, type Metrics, type MenuProps } from "../../sdk/theme.ts"
 import { useHover } from "../../sdk/kit.tsx"
 import { useOption, useRegistry, useTab as useTabModel } from "../../sdk/state.ts"
 import { serverOf } from "../ids.ts"
@@ -111,32 +111,20 @@ function DefaultIconButton({ icon, onClick, title, active, color }: IconButtonPr
   )
 }
 
-/**
- * How see-through the window's backgrounds are (`backgroundOpacity`), while they are: under 1,
- * each part of the window has one translucent layer (the side bar, the title bar, the panes' room)
- * and nothing opaque on it, or it would hide the desktop again. Undefined while it is opaque.
- */
-function useGlass(): number | undefined {
-  const opacity = useMetrics().backgroundOpacity ?? 1
-  return opacity < 1 ? Math.max(opacity, 0) : undefined
-}
-
 function Window() {
   const t = useTheme()
   const m = useMetrics()
   const C = useComponents()
-  const glass = useGlass()
-  const palette = usePalette()
   const [shown, setShown] = useSidebar()
   const [width, setWidth] = useLocal(PREFS.sidebarWidth, 260)
   const swipe = useSidebarSwipe(() => setShown(false))
   const overlays = useSlot("window.overlay").components
   return (
-    <div style={{ display: "flex", flexDirection: "row", width: "100%", height: "100%", position: "relative", backgroundColor: glass === undefined ? t.window : undefined, color: t.text, fontSize: m.fontSize }}>
+    <div style={{ display: "flex", flexDirection: "row", width: "100%", height: "100%", position: "relative", backgroundColor: t.window, color: t.text, fontSize: m.fontSize }}>
       <ProjectTracker />
       {/* Open, the side bar runs top to bottom: the title bar at its top, its tree holding the views (a section with no header), the sections plugins put there, the buttons for their groups at its foot. */}
       {shown ? (
-        <div cache onScroll={swipe} style={{ display: "flex", flexDirection: "column", width, flexShrink: 0, minWidth: 0, backgroundColor: withOpacity(t.surface, glass), borderRightWidth: 1, borderColor: t.border, position: "relative" }}>
+        <div cache onScroll={swipe} style={{ display: "flex", flexDirection: "column", width, flexShrink: 0, minWidth: 0, backgroundColor: t.surface, borderRightWidth: 1, borderColor: t.border, position: "relative" }}>
           <SidebarHeader />
           <SessionHeader />
           <C.Panel point="panel" />
@@ -145,10 +133,9 @@ function Window() {
         </div>
       ) : null}
       {/* The panes run top to bottom beside it, their title bars in the title bar's row; with it hidden, the views are a header over them. */}
-      {/* See-through, the panes' room is the terminals' colour: they paint no background of their own then (app/root.tsx). */}
-      <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, backgroundColor: glass === undefined ? t.editor : undefined }}>
+      <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, backgroundColor: t.editor }}>
         {shown ? null : <Header />}
-        <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0, backgroundColor: glass === undefined ? undefined : withOpacity(palette?.background ?? t.editor, glass) }}>
+        <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0 }}>
           <C.Layout />
         </div>
       </div>
@@ -188,10 +175,9 @@ const TOP_EDGE = 4
 function Header() {
   const t = useTheme()
   const C = useComponents()
-  const glass = useGlass()
   const [, setOpen] = useSidebar()
   return (
-    <div cache style={{ display: "flex", flexDirection: "row", alignItems: "center", height: TITLE_BAR, flexShrink: 0, gap: 6, paddingLeft: TITLE_INSET, paddingRight: 8, backgroundColor: withOpacity(t.surface, glass), position: "relative", appRegion: "drag" }}>
+    <div cache style={{ display: "flex", flexDirection: "row", alignItems: "center", height: TITLE_BAR, flexShrink: 0, gap: 6, paddingLeft: TITLE_INSET, paddingRight: 8, backgroundColor: t.surface, position: "relative", appRegion: "drag" }}>
       {/* The bar's bottom edge, drawn first so the front view can paint over it and open into the pane below. */}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 1, backgroundColor: t.border }} />
       <IconButton icon="layout_sidebar_left" title="Show Side Bar" onClick={() => setOpen(true)} />
@@ -204,12 +190,11 @@ function Header() {
 /** The side bar's top, the title bar while it shows: the traffic lights' room, the button that hides it, the session, and at its far end the button that opens a folder. */
 function SidebarHeader() {
   const t = useTheme()
-  const glass = useGlass()
   const window = useWindow()
   const [, setOpen] = useSidebar()
   return (
     // Its bottom edge is the top panes' title bars' bottom edge, in one line across the window.
-    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", height: TITLE_BAR, flexShrink: 0, gap: 4, paddingLeft: TITLE_INSET, paddingRight: 8, backgroundColor: glass === undefined ? t.surface : undefined, borderBottomWidth: 1, borderColor: t.border, appRegion: "drag" }}>
+    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", height: TITLE_BAR, flexShrink: 0, gap: 4, paddingLeft: TITLE_INSET, paddingRight: 8, backgroundColor: t.surface, borderBottomWidth: 1, borderColor: t.border, appRegion: "drag" }}>
       <IconButton icon="layout_sidebar_left" title="Hide Side Bar" onClick={() => setOpen(false)} />
       <SessionButton shrink />
       <div style={{ flexGrow: 1, minWidth: 0 }} />
@@ -426,8 +411,7 @@ function View({ view: id, active }: { view: string; active: boolean; index: numb
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
-  const glass = useGlass()
-  const front = withOpacity(t.editor, glass)
+  const front = t.editor
   const view = useView(id)
   const { actions } = useSlot("view.actions")
   const label = useViewName(id)
@@ -466,7 +450,7 @@ function View({ view: id, active }: { view: string; active: boolean; index: numb
         hover: { backgroundColor: active ? front : t.hover, color: t.text },
       }}
     >
-      <ViewIcons view={id} ring={active ? front : hovered ? t.hover : withOpacity(t.surface, glass)} />
+      <ViewIcons view={id} ring={active ? front : hovered ? t.hover : t.surface} />
       {view.worktree ? <Icon name="git_worktree" size={12} color={t.faint} /> : null}
       <text style={{ fontSize: ts(13), whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{label}</text>
       <Slot slot="view.badge" args={{ view: id }} />
@@ -1194,7 +1178,6 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
   const tree = useLayout(tab?.view_id)
   const draggable = useDraggable<moves.Carried>({ kind: "pumi.tab", tab: front ?? "" })
   const toolbar = useMemo(() => ({ tab: front }), [front])
-  const glass = useGlass()
   // With the side bar hidden, the title bar is the header over the panes instead.
   const [sidebarShown] = useSidebar()
   const inTitleBar = useContext(AtTop) && sidebarShown
@@ -1250,7 +1233,7 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
         }}
         // No bottom edge of its own: each tab but the front one draws its own, and so does the
         // rest of the bar, so the front tab opens into its body as Zed's does.
-        style={{ ...bar, alignItems: "stretch", borderBottomWidth: 0, backgroundColor: withOpacity(t.surface, glass) }}
+        style={{ ...bar, alignItems: "stretch", borderBottomWidth: 0, backgroundColor: t.surface }}
       >
         <div style={{ display: "flex", flexDirection: "row", alignItems: "stretch", alignSelf: "stretch", minWidth: 0, flexShrink: 1, overflowX: "scroll" }}>
           {tabs.map((tab, index) => (
@@ -1645,8 +1628,7 @@ function PaneTab({ tab: id, pane, index, active, focused }: { tab: string; pane:
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
-  const glass = useGlass()
-  const frontColor = withOpacity(t.editor, glass)
+  const frontColor = t.editor
   const tab = useTab(id)
   const status = useTabStatus(id)
   const tree = useLayout(tab?.view_id)
@@ -2520,7 +2502,6 @@ function MoveGhost() {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
-  const glass = useGlass()
   const drag = useDragState()
   const it = moves.carried(drag?.data)
   const agent = useAgentOf(it?.kind === "pumi.tab" ? it.tab : undefined)
@@ -2542,7 +2523,7 @@ function MoveGhost() {
             maxWidth: PANE_TAB_MAX,
             paddingLeft: 14,
             paddingRight: 14,
-            backgroundColor: withOpacity(t.editor, glass),
+            backgroundColor: t.editor,
             borderWidth: 1,
             borderColor: t.border,
             opacity: 0.92,
@@ -3242,9 +3223,7 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
   const { open, show, menu, shown } = useMenu(["view.menu", "view.actions"], { view: id })
   const draggable = useDraggable<moves.Carried>({ kind: "pumi.view", view: id }, { disabled: renaming })
   const row = useMemo<moves.Row>(() => ({ kind: "view", session, view: id }), [session, id])
-  // See-through, a row at rest is the side bar's colour by drawing none (its icons' ring has one).
-  const glass = useGlass()
-  const background = front ? t.selected : hovered ? t.hover : glass === undefined ? t.surface : undefined
+  const background = front ? t.selected : hovered ? t.hover : t.surface
   return (
     <>
       {/* A compartment of its own: a working agent's spinner draws its row again, not the list. */}
@@ -3257,7 +3236,7 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
           onMouseLeave={() => setHovered(false)}
           style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, height: VIEW_ROW, flexShrink: 0, paddingLeft: ROW_PAD, paddingRight: 8, position: "relative", cursor: "pointer", userSelect: "none", backgroundColor: background }}
         >
-          {expanded ? null : <ViewIcons view={id} ring={background ?? withOpacity(t.surface, glass)} />}
+          {expanded ? null : <ViewIcons view={id} ring={background} />}
           {input ? (
             <RenameField input={input} />
           ) : (
