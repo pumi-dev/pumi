@@ -17,6 +17,8 @@ import { GroupSection, openPath, showLog, useUpdates } from "../shared.tsx"
 /** One installed plugin, as `registry.list("plugin")` describes it. */
 export interface Installed {
   name: string
+  /** What people read it as: its package.json's `displayName`, else `name`. */
+  title: string
   /** `owner/name`, or the name while it has no manifest. */
   id: string
   owner?: string
@@ -40,6 +42,7 @@ export function installedOf(p: any): Installed {
   const src: string | undefined = p?.spec?.src
   return {
     name,
+    title: (typeof p?.meta?.displayName === "string" && p.meta.displayName) || name,
     id,
     owner: owner === "local" ? undefined : owner,
     version,
@@ -57,9 +60,9 @@ export function asideOf(p: Installed): string {
   return [p.version, p.bundled ? "Bundled with pumi" : p.owner ? `By ${p.owner}` : undefined].filter(Boolean).join(" ")
 }
 
-/** Whether every word of `query` is in its name, id or description. */
+/** Whether every word of `query` is in its name, title, id or description. */
 export function matchesInstalled(p: Installed, query: string): boolean {
-  return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => [p.name, p.id, p.description].some((t) => t.toLowerCase().includes(w)))
+  return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => [p.name, p.title, p.id, p.description].some((t) => t.toLowerCase().includes(w)))
 }
 
 /** The installed plugins, read again when one is installed, removed or reloaded. */
@@ -93,7 +96,7 @@ function PluginMenu({ p, at, close, busy, run, uninstall }: { p: Installed; at: 
   const settings = useSettings()
   const item = (id: string, title: string, icon: string, go: () => void, more: Partial<Action> = {}): Action => ({ id, title, icon, plugin: "pumi", run: () => (close(), go()), ...more })
   const actions: Action[] = [
-    item("reload", "Reload", "rotate_cw", () => run(`Reloading ${p.name}…`, [["plugin.update", [p.id, {}]]]), { disabled: busy }),
+    item("reload", "Reload", "rotate_cw", () => run(`Reloading ${p.title}…`, [["plugin.update", [p.id, {}]]]), { disabled: busy }),
     item("log", "Show log", "terminal", () => {
       settings?.report(showLog(p.id))
     }),
@@ -112,20 +115,20 @@ function InstalledRow({ p, pages, busy, pending, run }: { p: Installed; pages: P
   const update = plugins.found?.find((u) => u.name === p.name || u.name === p.id)
   const page = pages.find((x) => x.plugin === p.id)
   const uninstall = async () => {
-    const yes = await confirm({ title: `Uninstall ${p.name}?`, detail: "Its settings and data stay.", confirm: "Uninstall", danger: true })
-    if (yes) run(`Uninstalling ${p.name}…`, [["plugin.remove", [p.id, {}]]])
+    const yes = await confirm({ title: `Uninstall ${p.title}?`, detail: "Its settings and data stay.", confirm: "Uninstall", danger: true })
+    if (yes) run(`Uninstalling ${p.title}…`, [["plugin.remove", [p.id, {}]]])
   }
   return (
     <Row
       link={p.name}
       testId={`plugin-${p.id}`}
-      title={p.name}
+      title={p.title}
       aside={asideOf(p)}
       description={p.description}
       control={
         <>
           {update ? (
-            <Button primary title={update.to ? `Update to ${update.to}` : "Update"} onClick={() => run(`Updating ${p.name}…`, [["plugin.update", [p.id, {}]]], [p.name])}>
+            <Button primary title={update.to ? `Update to ${update.to}` : "Update"} onClick={() => run(`Updating ${p.title}…`, [["plugin.update", [p.id, {}]]], [p.name])}>
               Update
             </Button>
           ) : null}
@@ -135,7 +138,7 @@ function InstalledRow({ p, pages, busy, pending, run }: { p: Installed; pages: P
             <Button ghost icon="ellipsis" title="More" onClick={() => setMenu(menu ? undefined : pressedAt.current)} testId={`plugin-menu-${p.id}`} />
           </div>
           {pending ? <Spinner testId={`plugin-pending-${p.id}`} /> : null}
-          <Switch checked={p.on} disabled={pending} aria-label={`${p.name} on`} testId={`plugin-on-${p.id}`} onChange={(on) => run(undefined, [["plugin.update", [p.id, { enabled: on }]]], [], p.id)} />
+          <Switch checked={p.on} disabled={pending} aria-label={`${p.title} on`} testId={`plugin-on-${p.id}`} onChange={(on) => run(undefined, [["plugin.update", [p.id, { enabled: on }]]], [], p.id)} />
           {menu ? <PluginMenu p={p} at={menu} busy={busy} close={() => setMenu(undefined)} run={run} uninstall={uninstall} /> : null}
         </>
       }

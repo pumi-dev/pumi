@@ -71,7 +71,7 @@ export interface PluginSettings {
   id: string
   /** `owner.name.`: its options, pages and sections start with it. */
   prefix: string
-  /** What the nav calls a page made of its options: its name alone (`npm-scripts`). */
+  /** What the nav calls a page made of its options: its display name (`Chat UI`), else its name alone (`npm-scripts`). */
   name: string
   pages?: { id: string; title: string; icon?: string; component: string; keywords?: string[] }[]
   sections?: { id: string; page: string; title: string; component: string; keywords?: string[] }[]

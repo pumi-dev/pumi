@@ -55,6 +55,8 @@ export interface Slot {
 export interface Entry {
   /** `owner/name`; `local/<name>` while linked from disk. */
   id: string
+  /** Its name as people read it: package.json's `displayName` (`Chat UI`), when it has one. */
+  title?: string
   prefix: string
   dir: string
   manifest: Manifest
@@ -140,6 +142,7 @@ async function catalog() {
     const dir: string = p.path
     const manifest: Manifest | string = p.error ? String(p.error) : (p.manifest ?? readManifest(dir))
     const id: string = p.id ?? p.spec?.name ?? dir
+    const title: string | undefined = typeof p.meta?.displayName === "string" && p.meta.displayName ? p.meta.displayName : undefined
     seen.add(id)
     if (typeof manifest === "string") {
       entries.set(id, { id, prefix: prefixOf(id), dir, manifest: { name: id }, state: "disabled", error: manifest, active: false, sent: false })
@@ -147,12 +150,13 @@ async function catalog() {
     }
     if ((manifest.api ?? 0) !== API_LEVEL) {
       const error = `it is written for API level ${manifest.api ?? "(none)"}; this pumi runs ${API_LEVEL}`
-      entries.set(id, { id, prefix: prefixOf(id), dir, manifest, state: "disabled", error, active: false, sent: false })
+      entries.set(id, { id, title, prefix: prefixOf(id), dir, manifest, state: "disabled", error, active: false, sent: false })
       continue
     }
     const old = entries.get(id)
     const entry: Entry = {
       id,
+      title,
       prefix: prefixOf(id),
       dir,
       manifest,

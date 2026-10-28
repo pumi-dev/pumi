@@ -13,6 +13,8 @@ export const WEB_STORE = "https://pumi.dev/plugins/"
 export interface Listing {
   id?: string
   name?: string
+  /** Its name as people read it (package.json's `displayName`), when it has one. */
+  displayName?: string
   description?: string
   install?: string
   version?: string
@@ -47,9 +49,9 @@ export function holds(kind: Kind, e: Listing): boolean {
   return kind === "all" || (e.tags ?? []).includes(kind)
 }
 
-/** Whether a listing has every word of `query` in its id, name, description, tags or keywords. */
+/** Whether a listing has every word of `query` in its id, name, display name, description, tags or keywords. */
 export function matches(e: Listing, query: string): boolean {
-  const text = [e.id, e.name, e.description, ...(e.tags ?? []), ...(e.keywords ?? [])].filter(Boolean).join(" ").toLowerCase()
+  const text = [e.id, e.name, e.displayName, e.description, ...(e.tags ?? []), ...(e.keywords ?? [])].filter(Boolean).join(" ").toLowerCase()
   return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => text.includes(w))
 }
 
@@ -175,7 +177,7 @@ export function StorePage() {
             return (
               <Row
                 key={`${id}-${at}`}
-                title={e.name ?? id}
+                title={e.displayName || e.name || id}
                 aside={[what, e.version ? `v${e.version}` : undefined].filter(Boolean).join(" · ")}
                 description={e.description ? `${e.description}\n${stats}` : stats}
                 control={

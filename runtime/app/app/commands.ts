@@ -285,7 +285,7 @@ function pluginCommands(): CommandDef[] {
       out.push({
         name,
         label: command.title || humanize(command.id),
-        group: entry.manifest.title as string ?? entry.manifest.name,
+        group: entry.title ?? entry.manifest.name,
         scope: "global",
         run: (c) => engine.call(name, c.args === undefined ? [] : [c.args], c.tab ? { tab: c.tab } : undefined),
       })

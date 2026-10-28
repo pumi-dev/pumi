@@ -39,7 +39,7 @@ export function usePluginSettings(): PluginSettings[] {
     const next = [...plugins.entries.values()].map((e) => ({
       id: e.id,
       prefix: e.prefix,
-      name: e.manifest.name ?? e.id.split("/").pop() ?? e.id,
+      name: e.title ?? e.manifest.name ?? e.id.split("/").pop() ?? e.id,
       pages: e.manifest.contributes?.settings?.pages,
       sections: e.manifest.contributes?.settings?.sections,
     }))
