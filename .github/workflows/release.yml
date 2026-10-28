@@ -148,6 +148,7 @@ jobs:
         run: |
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal \
             --target ${{ matrix.arch }}-unknown-linux-gnu
+      - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.arch }}
