@@ -3,7 +3,8 @@
 // On macOS it also mends the dylib: Xcode 27's ld leaves the LINKEDIT string pool 4-byte
 // aligned when the indirect symbol table has an odd count, and dyld then refuses the library
 // ("mis-aligned LINKEDIT string pool"). The pool is moved into the padding before the code
-// signature, and the library is signed again.
+// signature, or, in a library ld did not sign (x86_64), where the pool ends the file, the file
+// grows by the padding. Then the library is signed again.
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { addonName, crossCompiling, napiAddonName, nodeTarget, targetTriple } from "./target.ts"
@@ -82,28 +83,56 @@ export function keepDeclarations(next: string, previous: string): string {
 
 /** Moves a 64-bit Mach-O's string pool to an 8-byte offset. True when the file changed. */
 export function alignStringPool(path: string): boolean {
-  const file = readFileSync(path)
-  const view = new DataView(file.buffer, file.byteOffset, file.byteLength)
+  const aligned = alignedStringPool(readFileSync(path), path)
+  if (aligned) writeFileSync(path, aligned)
+  return aligned !== null
+}
+
+/** `file` with its string pool at an 8-byte offset, or null when it is there already. */
+export function alignedStringPool(file: Buffer, path = "the library"): Buffer | null {
+  const read = (f: Buffer) => new DataView(f.buffer, f.byteOffset, f.byteLength)
+  let view = read(file)
   if (view.getUint32(0, true) !== 0xfeedfacf) throw new Error(`${path}: not a 64-bit Mach-O`)
   const ncmds = view.getUint32(16, true)
   let at = 32
   let symtab = -1
+  let linkedit = -1
+  let signed = false
   let limit = file.byteLength
   for (let i = 0; i < ncmds; i++) {
     const cmd = view.getUint32(at, true)
     if (cmd === 0x2) symtab = at
-    if (cmd === 0x1d) limit = view.getUint32(at + 8, true) // LC_CODE_SIGNATURE dataoff
+    if (cmd === 0x19 && file.toString("latin1", at + 8, at + 24).replace(/\0+$/, "") === "__LINKEDIT") linkedit = at
+    if (cmd === 0x1d) {
+      signed = true
+      limit = view.getUint32(at + 8, true) // LC_CODE_SIGNATURE dataoff
+    }
     at += view.getUint32(at + 4, true)
   }
-  if (symtab < 0) return false
+  if (symtab < 0) return null
   const stroff = view.getUint32(symtab + 16, true)
   const strsize = view.getUint32(symtab + 20, true)
   const pad = (8 - (stroff % 8)) % 8
-  if (pad === 0) return false
-  if (stroff + strsize + pad > limit) throw new Error(`${path}: no room to align the string pool`)
+  if (pad === 0) return null
+  if (stroff + strsize + pad > limit) {
+    // Unsigned, with the pool last in the file and in __LINKEDIT: the file and the segment grow.
+    const end = linkedit < 0 ? -1 : Number(view.getBigUint64(linkedit + 40, true) + view.getBigUint64(linkedit + 48, true))
+    if (signed || stroff + strsize !== file.byteLength || end !== file.byteLength) {
+      throw new Error(`${path}: no room to align the string pool`)
+    }
+    const grown = Buffer.alloc(file.byteLength + pad)
+    file.copy(grown)
+    file = grown
+    view = read(file)
+    const filesize = view.getBigUint64(linkedit + 48, true) + BigInt(pad)
+    view.setBigUint64(linkedit + 48, filesize, true)
+    const page = 0x4000n
+    if (filesize > view.getBigUint64(linkedit + 32, true)) {
+      view.setBigUint64(linkedit + 32, ((filesize + page - 1n) / page) * page, true)
+    }
+  }
   file.copyWithin(stroff + pad, stroff, stroff + strsize)
   file.fill(0, stroff, stroff + pad)
   view.setUint32(symtab + 16, stroff + pad, true)
-  writeFileSync(path, file)
-  return true
+  return file
 }
