@@ -231,7 +231,8 @@ impl CustomElement for PreviewElement {
 /// `<webview handle="b1" src="https://…" zoom={1} autoFocus>`: a web page, the platform's own
 /// (WKWebView). `handle` names it, unique in the app: the page says what it does as `webview`
 /// events (`{handle, url, title, loading, progress, back, forward, devtools}`, `{handle, open}`
-/// for a new window, `{handle, notice}`, `{handle, focused}`, `{handle, bridge}`) and
+/// for a new window, `{handle, notice}`, `{handle, focused}`, `{handle, bridge}`, `{handle, reply}`,
+/// `{handle, snapshot, error}`) and
 /// `Engine.webview(handle, method, arg)` drives it. With `plugin` and `dir` it is a plugin's
 /// page: `src` is one of its files (served as `pumi-plugin://<plugin>/…`), and its `window.pumi`
 /// reaches the API through `bridge` events. Changing `src` loads it.
@@ -312,6 +313,8 @@ impl CustomElement for WebElement {
                         json!({ "handle": from, "focused": true })
                     }
                     WebviewEvent::Bridge(body) => json!({ "handle": from, "bridge": body }),
+                    WebviewEvent::Reply(body) => json!({ "handle": from, "reply": body }),
+                    WebviewEvent::Snapshot(path, error) => json!({ "handle": from, "snapshot": path, "error": error }),
                 };
                 crate::engine::emit("webview", data);
             });
@@ -421,7 +424,9 @@ fn rgba(color: &str) -> Option<wry::RGBA> {
 }
 
 /// `Engine.webview(handle, method, arg)`: `back`, `forward`, `reload`, `hardReload`, `stop`,
-/// `devtools`, `zoom` (a factor), `eval` (a script), `load` (a URL), `focus`, `state`, `edit` (`copy`,
+/// `devtools`, `zoom` (a factor), `eval` (a script; what it hands `__pumiReply(id, ok, value)` comes
+/// back as a `{handle, reply}` event), `snapshot` (a PNG's path, written as the page shows now, then
+/// a `{handle, snapshot, error}` event), `load` (a URL), `focus`, `state`, `edit` (`copy`,
 /// `cut`, `paste`, `selectAll`, `undo`, `redo`), `drag` (`{kind, x, y, data}`: one of the app's
 /// drags over a plugin's page, in window px; answers `inside` too).
 pub fn webview(handle: &str, method: &str, arg: &Value, cx: &mut gpui::App) -> Result<Value, String> {
@@ -437,6 +442,7 @@ pub fn webview(handle: &str, method: &str, arg: &Value, cx: &mut gpui::App) -> R
             "devtools" => page.toggle_devtools(cx),
             "zoom" => page.set_zoom(arg.as_f64().ok_or("zoom takes a factor")?, cx),
             "eval" => page.eval(arg.as_str().ok_or("eval takes a script")?),
+            "snapshot" => page.snapshot(arg.as_str().ok_or("snapshot takes the PNG's path")?)?,
             "load" => page.load(arg.as_str().ok_or("load takes a URL")?, cx)?,
             "focus" => page.focus_in_window(cx),
             "state" => {}

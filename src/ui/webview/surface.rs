@@ -85,4 +85,8 @@ impl Surface {
     pub fn dock_inspector(&self, _: &WebView) -> bool {
         true
     }
+    /// A picture of the page: only macOS's WKWebView takes one for now.
+    pub fn snapshot(&self, _: &WebView, _: &str, done: Box<dyn FnOnce(Result<(), String>)>) {
+        done(Err("a picture of a web page needs macOS for now".into()));
+    }
 }

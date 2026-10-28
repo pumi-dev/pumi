@@ -72,6 +72,34 @@ const SCRIPT: &str = r##"(() => {
     post({ t: "key", k: KEY, key: s.key, m: [e.ctrlKey, e.altKey, s.shift, e.metaKey] });
   }, true);
   if (window.top !== window) return;
+  // What a script the app runs in the page answers (`Webview::run`'s callers): `{t:"r", id, ok, v}`,
+  // the value as JSON says it. The page could call it too, and say no more than its DOM could.
+  Object.defineProperty(window, "__pumiReply", { value: (id, ok, v) => {
+    let body;
+    try { body = JSON.stringify({ t: "r", id: String(id), ok: !!ok, v: v === undefined ? null : v }); }
+    catch (e) { body = JSON.stringify({ t: "r", id: String(id), ok: false, v: "the answer is not JSON: " + e }); }
+    if (send) send(body);
+  } });
+  // The page's last console lines and errors, for whoever drives it (the browser's `console`).
+  const said = [];
+  const show = (v) => {
+    if (typeof v === "string") return v;
+    if (v instanceof Error) return v.stack || String(v);
+    try { return JSON.stringify(v); } catch { return String(v); }
+  };
+  const keep = (level, args) => {
+    let text = Array.prototype.map.call(args, show).join(" ");
+    if (text.length > 4000) text = text.slice(0, 4000) + "…";
+    said.push({ level, text, at: Date.now() });
+    if (said.length > 300) said.shift();
+  };
+  for (const level of ["log", "info", "warn", "error", "debug"]) {
+    const f = console[level];
+    if (typeof f === "function") console[level] = function (...a) { try { keep(level, a); } catch {} return f.apply(this, a); };
+  }
+  addEventListener("error", (e) => keep("error", [`${e.message} (${e.filename}:${e.lineno}:${e.colno})`]));
+  addEventListener("unhandledrejection", (e) => keep("error", ["unhandled rejection:", e.reason]));
+  Object.defineProperty(window, "__pumiConsole", { value: () => said.slice() });
   // Where the page is in its history, for the app's back and forward buttons: the engine's own
   // count, where it has the Navigation API to ask (WebView2's Chromium). Where it has none
   // (WebKitGTK) the message carries no count, and the app keeps both buttons enabled.
@@ -409,6 +437,10 @@ enum Native {
     Ipc(Ipc),
     Key(gpui::Keystroke),
     Bridge(String),
+    /// What a script the app ran answered (`__pumiReply`), as the page sent it.
+    Reply(String),
+    /// A picture of the page written to the path, or why not.
+    Snapshot(String, Result<(), String>),
     System(String),
     NewWindow(String),
     Download(String, Option<String>, bool),
@@ -420,6 +452,10 @@ pub enum WebviewEvent {
     Notice(String),
     Loaded,
     Bridge(String),
+    /// What a script the app ran answered: `{t:"r", id, ok, v}`.
+    Reply(String),
+    /// `snapshot`'s picture is at the path, or the error says why not.
+    Snapshot(String, Option<String>),
 }
 pub struct Webview {
     focus: FocusHandle,
@@ -529,6 +565,16 @@ impl Webview {
         if let Some(w) = &self.webview {
             let _ = w.evaluate_script(js);
         }
+    }
+    /// Writes a PNG of what the page shows to `path`; `WebviewEvent::Snapshot` says when it is there.
+    pub fn snapshot(&self, path: &str) -> Result<(), String> {
+        let (Some(w), Some(surface)) = (&self.webview, &self.surface) else {
+            return Err("the page is not in a window yet".into());
+        };
+        let tx = self.native.clone();
+        let to = path.to_string();
+        surface.snapshot(w, path, Box::new(move |result| drop(tx.unbounded_send(Native::Snapshot(to, result)))));
+        Ok(())
     }
     pub fn focus_in_window(&self, cx: &mut App) {
         let Some((handle, _)) = &self.host else { return };
@@ -767,6 +813,10 @@ impl Webview {
                     {
                         ipc(Native::Bridge(body.clone()));
                     }
+                } else if body.starts_with(r#"{"t":"r","#) {
+                    if body.len() <= BRIDGE_MAX {
+                        ipc(Native::Reply(body.clone()));
+                    }
                 } else if let Some(m) = parse_ipc(body) {
                     ipc(Native::Ipc(m))
                 } else if let Some(k) = parse_key(body, &nonce) {
@@ -808,6 +858,8 @@ impl Webview {
                 }
             }
             Native::Bridge(body) => cx.emit(WebviewEvent::Bridge(body)),
+            Native::Reply(body) => cx.emit(WebviewEvent::Reply(body)),
+            Native::Snapshot(path, result) => cx.emit(WebviewEvent::Snapshot(path, result.err())),
             Native::Ipc(Ipc::Focus) => cx.emit(WebviewEvent::Focused),
             Native::Ipc(Ipc::Nav(nav)) => {
                 if let Some(surface) = &self.surface {

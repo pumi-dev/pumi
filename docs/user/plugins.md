@@ -385,6 +385,13 @@ pumi.on("tab.changed", { match: pumi.tab }, render);
 pumi.onTheme((t) => (document.body.style.color = t.text));
 ```
 
+`webviewRun(handle, body)` runs an async function body in any page, the web's included, and answers what it returns as JSON says it; `webviewSnapshot(handle, path)` writes a PNG of what a page shows (macOS). The browser's agent tools are made of them.
+
+```tsx
+const title = await webviewRun<string>(handle, "return document.title")
+await webviewSnapshot(handle, "/tmp/page.png")
+```
+
 ## Files
 
 `pumi plugin dev` links a folder, so its own files are what runs. What it keeps between runs goes in `paths`: `paths.config`, `paths.state` and `paths.cache`, a directory each under pumi's, for that plugin alone. An option in the `plugin` scope is the store pumi keeps for it.
@@ -420,6 +427,6 @@ Both files import from `"pumi"`.
 | theme | `defineTheme` `useTheme` `usePalette` `useMetrics` `useAppearance` `useFont` |
 | hooks | `useChannel` `useChannelListener` `useEvent` `usePlugin` |
 | elements | `div` `text` `img` `svg` `scroll` `input` `terminal` `Icon` `IconButton` |
-| web | `WebView` `useWebview` `webview` |
+| web | `WebView` `useWebview` `webview` `webviewRun` `webviewSnapshot` |
 | kit | `motion` `Select` `useDraggable` `useDroppable` `useDragState` `useHover` `useInterval` `useNow` |
 | settings | `Page` `Section` `Row` `OptionRow` `Switch` `Slider` `Stepper` `TextField` `Button` `KeyRecorder` `KeyChip` `ChoiceGrid` `ImageCards` `useSettings` `haptic` `openSettings` `keyGlyphs` |

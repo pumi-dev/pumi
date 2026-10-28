@@ -379,6 +379,22 @@ impl Surface {
             std::ptr::eq(parent.cast_const(), Retained::as_ptr(&self.container).cast())
         }
     }
+    /// Writes a PNG of what the page shows to `path`: WKWebView's own picture of it, at the
+    /// window's scale. `done` hears when it is written, or why not.
+    pub fn snapshot(&self, w: &WebView, path: &str, done: Box<dyn FnOnce(Result<(), String>)>) {
+        let wk = wk(w);
+        let path = path.to_string();
+        let done = std::cell::RefCell::new(Some(done));
+        let block = block2::RcBlock::new(move |image: *mut AnyObject, error: *mut AnyObject| {
+            let Some(done) = done.borrow_mut().take() else { return };
+            // SAFETY: WebKit hands its completion an NSImage or an NSError, either of them nil.
+            done(unsafe { write_png(image, error, &path) });
+        });
+        unsafe {
+            let _: () =
+                msg_send![&*wk, takeSnapshotWithConfiguration: null_mut::<AnyObject>(), completionHandler: &*block];
+        }
+    }
     pub fn dock_inspector(&self, w: &WebView) -> bool {
         let Some(inspector) = Self::inspector(w) else { return false };
         unsafe {
@@ -390,6 +406,30 @@ impl Surface {
             }
         }
         true
+    }
+}
+/// A snapshot's `image` (an NSImage) as a PNG at `path`; else what `error` (an NSError) says.
+unsafe fn write_png(image: *mut AnyObject, error: *mut AnyObject, path: &str) -> Result<(), String> {
+    unsafe {
+        if image.is_null() {
+            let what: *mut NSString = if error.is_null() { null_mut() } else { msg_send![error, localizedDescription] };
+            return Err(what.as_ref().map_or_else(|| "WebKit took no picture of the page".into(), |s| s.to_string()));
+        }
+        let tiff: *mut AnyObject = msg_send![image, TIFFRepresentation];
+        let rep: *mut AnyObject = if tiff.is_null() {
+            null_mut()
+        } else {
+            msg_send![objc2::class!(NSBitmapImageRep), imageRepWithData: tiff]
+        };
+        let props: *mut AnyObject = msg_send![objc2::class!(NSDictionary), dictionary];
+        // NSBitmapImageFileTypePNG.
+        let png: *mut AnyObject =
+            if rep.is_null() { null_mut() } else { msg_send![rep, representationUsingType: 4usize, properties: props] };
+        if png.is_null() {
+            return Err("the page's picture could not be made a PNG".into());
+        }
+        let written: bool = msg_send![png, writeToFile: &*NSString::from_str(path), atomically: true];
+        if written { Ok(()) } else { Err(format!("could not write {path}")) }
     }
 }
 impl Drop for Surface {

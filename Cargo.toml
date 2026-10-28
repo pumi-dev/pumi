@@ -53,6 +53,7 @@ napi-build = "2.4.4"
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui_macos.workspace = true
 core-foundation-sys = "=0.8.7"
+block2 = "=0.6.2"
 objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
     "std",

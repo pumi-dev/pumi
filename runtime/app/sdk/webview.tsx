@@ -51,9 +51,20 @@ const opens = new Map<string, (url: string) => void>()
 /** The plugin each of its own pages is of (`owner/name`), by handle. */
 const owners = new Map<string, string>()
 
-on("webview", (data: { handle: string; bridge?: string; open?: string; notice?: string; focused?: boolean; url?: string } & Partial<WebState>) => {
+/** What `webviewRun` and `webviewSnapshot` wait for, by the id the page answers with (a snapshot's
+ * by its handle and path). */
+const waiting = new Map<string, { handle: string; done(ok: boolean, value: unknown): void }>()
+
+on("webview", (data: { handle: string; bridge?: string; reply?: string; snapshot?: string; error?: string | null; open?: string; notice?: string; focused?: boolean; url?: string } & Partial<WebState>) => {
   const { handle } = data
   if (data.bridge !== undefined) return bridge(handle, data.bridge)
+  if (data.reply !== undefined) return replied(handle, data.reply)
+  if (data.snapshot !== undefined) {
+    const key = `${handle}\n${data.snapshot}`
+    const wait = waiting.get(key)
+    waiting.delete(key)
+    return wait?.done(!data.error, data.error ?? data.snapshot)
+  }
   if (data.focused) return pages.get(handle)?.focused()
   if (data.open !== undefined) return (opens.get(handle) ?? openOutside)(data.open)
   if (data.notice !== undefined) return console.error(`pumi: web page ${handle}: ${data.notice}`)
@@ -118,6 +129,66 @@ async function bridge(handle: string, body: string) {
   }
 }
 
+/** A page's answer to `webviewRun` (`{t:"r", id, ok, v}`): only one that page was asked for counts. */
+function replied(handle: string, body: string) {
+  let msg: { id?: unknown; ok?: unknown; v?: unknown }
+  try {
+    msg = JSON.parse(body)
+  } catch {
+    return
+  }
+  const wait = typeof msg.id === "string" ? waiting.get(msg.id) : undefined
+  if (!wait || wait.handle !== handle) return
+  waiting.delete(msg.id as string)
+  wait.done(msg.ok === true, msg.v)
+}
+
+/** Waits for `key`'s answer, at most `ms`; `start` sends what is answered. */
+function answer<T>(key: string, handle: string, ms: number, late: string, start: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      waiting.delete(key)
+      reject(new Error(late))
+    }, ms)
+    waiting.set(key, {
+      handle,
+      done(ok, value) {
+        clearTimeout(timer)
+        if (ok) resolve(value as T)
+        else reject(new Error(typeof value === "string" ? value : JSON.stringify(value)))
+      },
+    })
+    try {
+      start()
+    } catch (err) {
+      clearTimeout(timer)
+      waiting.delete(key)
+      reject(err)
+    }
+  })
+}
+
+/**
+ * Runs `body` in the page `handle` and answers what it returns, as JSON carries it. `body` is an
+ * async function's body (it may `await`; `return` is its answer), and runs in the page's own world:
+ * any site's, which is what makes it the page's tool and not the plugin's. A throw rejects; so does
+ * a page that does not answer within `timeout` ms (10 s): one that navigated away, or a body that
+ * does not parse.
+ */
+export function webviewRun<T = unknown>(handle: string, body: string, opts: { timeout?: number } = {}): Promise<T> {
+  const id = `${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}`
+  const ms = Math.min(Math.max(opts.timeout ?? 10_000, 1), 120_000)
+  const script =
+    `(async () => {\n${body}\n})().then((v) => window.__pumiReply(${JSON.stringify(id)}, true, v),` +
+    ` (e) => window.__pumiReply(${JSON.stringify(id)}, false, String((e && e.message) || e)))`
+  return answer<T>(id, handle, ms, `the page ${handle} did not answer in ${ms} ms`, () => engine.webview(handle, "eval", script))
+}
+
+/** Writes a PNG of what the page `handle` shows to `path` (absolute), and answers it. macOS only for now. */
+export function webviewSnapshot(handle: string, path: string): Promise<string> {
+  return answer<string>(`${handle}\n${path}`, handle, 15_000, `the page ${handle} took no picture`, () => engine.webview(handle, "snapshot", path))
+}
+
 /** What the page `handle` shows, following it. */
 export function useWebview(handle: string): WebState | undefined {
   const [, redraw] = useState(0)
@@ -133,7 +204,7 @@ export function useWebview(handle: string): WebState | undefined {
 
 /** Drives the page `handle`: `back`, `forward`, `reload`, `hardReload`, `stop`, `devtools`, `zoom`,
  *  `eval`, `load`, `focus`, `state`, `edit` (`copy`, `cut`, `paste`, `selectAll`, `undo`, `redo`).
- *  Answers its state. */
+ *  Answers its state. `webviewRun` is `eval` with an answer, `webviewSnapshot` a picture. */
 export function webview(handle: string, method: string, arg?: unknown): WebState {
   return engine.webview(handle, method, arg as any) as WebState
 }

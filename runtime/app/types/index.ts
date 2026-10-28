@@ -30,7 +30,7 @@ export { openSettings } from "../app/settings/open.ts"
 export { useFont, type Font } from "../sdk/font.ts"
 export { useChannel, useChannelListener } from "../sdk/channels.ts"
 export { useEvent, type UseEventOptions, type WindowEvent } from "../sdk/events.ts"
-export { useWebview, webview, WebView, type WebState, type WebViewProps } from "../sdk/webview.tsx"
+export { useWebview, webview, webviewRun, webviewSnapshot, WebView, type WebState, type WebViewProps } from "../sdk/webview.tsx"
 export { Icon, IconButton, type IconProps } from "../sdk/elements.tsx"
 // The renderer's own kit, for a theme or a component: native motion (keyframes, repeats, springs),
 // presence, portals, and the headless select to style.

@@ -30,7 +30,8 @@ export declare class Engine {
   restartToUpdate(): void
   /**
    * Drives the `<webview>` named `handle`: `back`, `forward`, `reload`, `hardReload`, `stop`,
-   * `devtools`, `zoom` (a factor), `eval` (a script), `load` (a URL), `focus`. Answers its state.
+   * `devtools`, `zoom` (a factor), `eval` (a script), `snapshot` (a PNG's path), `load` (a URL), `focus`.
+   * Answers its state.
    */
   webview(handle: string, method: string, arg?: any | undefined | null): any
   /** Whether web pages get their inspector (the browser plugin's `webview_devtools` option). */

@@ -32,7 +32,7 @@ export { useFont, type Font } from "./font.ts"
 export { useChannel, useChannelListener } from "./channels.ts"
 export { useEvent, type UseEventOptions, type WindowEvent } from "./events.ts"
 export { conversationNames, type ConversationChanged, type ConversationProvider, type ConversationRead } from "../worker/sdk/conversation.ts"
-export { useWebview, webview, WebView, type WebState, type WebViewProps } from "./webview.tsx"
+export { useWebview, webview, webviewRun, webviewSnapshot, WebView, type WebState, type WebViewProps } from "./webview.tsx"
 export { Icon, IconButton, type IconProps } from "./elements.tsx"
 // The renderer's own kit, for a theme or a component: native motion (keyframes, repeats, springs),
 // presence, portals, and the headless select to style.
