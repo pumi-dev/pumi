@@ -50,6 +50,13 @@ transform of its own — a glyph `scale_factor` — and nothing composed with it
   crates by git at the same commit), `[lints.rust] unexpected_cfgs` allows `cfg(rust_analyzer)`,
   and the examples are dropped with `examples/`, `tests/` and `docs/`.
 
+**gpui_macos** (`vendor/gpui_macos`) is vendored the same way, for one change:
+
+- `src/text_system.rs`: a glyph rasterised with no dilation (a terminal with Settings' Thicken
+  text off) is drawn with `set_should_smooth_fonts(false)`. CoreGraphics smooths a bitmap
+  context's text unless told not to, so "off" still thickened every stem (about 16% more ink at
+  Menlo 12).
+
 **Re-vendoring.** Check out the crate at the new rev, copy `build.rs`, `README.md`, `resources/`
 and `src/` over this directory, write its `Cargo.toml` with the workspace's fields resolved, and
 apply the `pumi:` source changes again (`git diff` against the pristine crate shows them). The

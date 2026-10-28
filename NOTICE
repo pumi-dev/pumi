@@ -28,10 +28,10 @@ gpuix
   (LICENSE-APACHE). Changed for pumi.
 
 GPUI and Zed
-  GPUI (vendor/gpui, vendor/gpui_linux, vendor/gpui_windows, and the git dependencies named in
-  Cargo.toml) is part of Zed, https://github.com/zed-industries/zed, and comes from gpuix's fork
-  at https://github.com/remorses/zed. Copyright Zed Industries, Inc. Licensed under the Apache
-  License, Version 2.0 (vendor/gpui/LICENSE-APACHE). Changed for pumi.
+  GPUI (vendor/gpui, vendor/gpui_linux, vendor/gpui_macos, vendor/gpui_windows, and the git
+  dependencies named in Cargo.toml) is part of Zed, https://github.com/zed-industries/zed, and
+  comes from gpuix's fork at https://github.com/remorses/zed. Copyright Zed Industries, Inc.
+  Licensed under the Apache License, Version 2.0 (vendor/gpui/LICENSE-APACHE). Changed for pumi.
 
   crates/pumi-gpuix/src/custom_elements/input.rs follows GPUI's input example
   (crates/gpui/examples/input.rs, Apache-2.0).

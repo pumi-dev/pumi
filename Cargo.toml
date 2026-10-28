@@ -11,7 +11,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 [workspace]
 members = ["crates/pumi-proto", "crates/pumi-keys", "crates/pumid", "crates/pumi-host", "crates/pumi-mirror", "crates/pumi-cli", "crates/pumi-api", "crates/pumi-lang", "crates/pumi-layout", "crates/pumi-model", "crates/pumi-api-macros", "crates/pumi-os", "crates/pumi-gpuix", "crates/pumi-ui", "crates/pumi-sys", "xtask"]
-exclude = ["vendor/gpui", "vendor/gpui_windows", "vendor/gpui_linux"]
+exclude = ["vendor/gpui", "vendor/gpui_windows", "vendor/gpui_linux", "vendor/gpui_macos"]
 [workspace.dependencies]
 gpui = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
 gpui_platform = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
@@ -113,3 +113,4 @@ async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd
 gpui = { path = "vendor/gpui" }
 gpui_windows = { path = "vendor/gpui_windows" }
 gpui_linux = { path = "vendor/gpui_linux" }
+gpui_macos = { path = "vendor/gpui_macos" }
