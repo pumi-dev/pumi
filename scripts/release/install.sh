@@ -20,12 +20,17 @@
 # What is checked: the release manifest's minisign signature (when `minisign` is installed;
 # otherwise only HTTPS vouches for it), and the archive's SHA-256 against that manifest.
 #
+# It also puts `pumi` (the CLI) on PATH: a link in ~/.local/bin, and that directory added to
+# the shell's startup file when it is not on PATH already.
+#
 # Env:
-#   PUMI_VERSION=0.42.0        install this version instead of the newest
+#   PUMI_INSTALL_VERSION=0.42.0  install this version instead of the newest (not PUMI_VERSION:
+#                             pumi sets that in every tab, to the version that is running)
 #   PUMI_DIR=<dir>            where the app goes (macOS: /Applications, else ~/Applications;
 #                             Linux: ~/.local)
 #   PUMI_GITHUB_TOKEN=<tok>   for a release that is not public; kept for the app's updater
 #   PUMI_NO_OPEN=1            do not launch pumi when done
+#   PUMI_NO_BIN=1             do not put `pumi` on PATH
 #   PUMI_REPO, PUMI_SITE      where releases and the manifest live
 
 set -eu
@@ -38,9 +43,70 @@ APP_ID="dev.pumi.app"
 # The update keys (src/updater/manifest.rs): the primary CI signs with, and the backup.
 KEYS="RWQGWJa1jK6fXLhk2t8/zrWDojiRPRykE5DkbUI0/xcdWcU9YfczkJ79 RWQe/SSsIy1UiLqkZRlz4FJoUwBTAkRbMcEgsddiFiXHblnemzQvvQ2K"
 
-say()  { printf '\033[1m==>\033[0m %s\n' "$*"; }
-warn() { printf '\033[1m==>\033[0m \033[33m%s\033[0m\n' "$*" >&2; }
-die()  { printf '\033[1m==>\033[0m \033[31m%s\033[0m\n' "$*" >&2; exit 1; }
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  GREEN="$(printf '\033[32m')" YELLOW="$(printf '\033[33m')" RED="$(printf '\033[31m')"
+  DIM="$(printf '\033[2m')" BOLD="$(printf '\033[1m')" OFF="$(printf '\033[0m')"
+else
+  GREEN="" YELLOW="" RED="" DIM="" BOLD="" OFF=""
+fi
+# ok <what> <detail>: one step done.
+ok()   { printf '  %s✓%s %-10s %s\n' "$GREEN" "$OFF" "$1" "$2"; }
+warn() { printf '  %s!%s %s\n' "$YELLOW" "$OFF" "$*" >&2; }
+die()  { printf '  %s✗%s %s\n' "$RED" "$OFF" "$*" >&2; exit 1; }
+# ~ for the home directory, in what is shown.
+short() { case "$1" in "$HOME"/*) printf '~%s' "${1#"$HOME"}" ;; *) printf '%s' "$1" ;; esac; }
+
+# logo: the app icon (assets/brand/app-icon.png) traced to 28x28 pixels, one letter each: g its
+# green, d the green of its lines, w the face, . outside. Two pixels a cell, in half blocks, in
+# 256 colours; only on a colour terminal.
+logo() {
+  [ -n "$GREEN" ] || return 0
+  echo
+  awk '
+    BEGIN { c["g"] = 71; c["d"] = 29; c["w"] = 255; e = "\033" }
+    NR % 2 { top = $0; next }
+    {
+      line = "  "
+      for (i = 1; i <= length(top); i++) {
+        t = substr(top, i, 1); b = substr($0, i, 1)
+        if (t == "." && b == ".") line = line e "[0m "
+        else if (t == ".") line = line e "[0;38;5;" c[b] "m\342\226\204"
+        else if (b == ".") line = line e "[0;38;5;" c[t] "m\342\226\200"
+        else line = line e "[38;5;" c[t] ";48;5;" c[b] "m\342\226\200"
+      }
+      print line e "[0m"
+    }' <<'EOF'
+.....gggggggggggggggggg.....
+...gggggggggggggggggggggg...
+..gggggggggggggggggggggggg..
+.gggggggggggggggggggggggggg.
+.gggggggggggggggggggggggggg.
+gggggggggggggggggggggggggggg
+gggggggggggwwwwwwggggggggggg
+ggggggggwwwwwwwwwwwwgggggggg
+ggggwwwwdwwwwwwwwwwdwwwwgggg
+ggwwwwwwdwwwwwwwwwwdwwwwwwgg
+ddwwwwwwdwwwwwwwwwwdwwwwwwdd
+ddwwwwwwdwwwwwwwwwwdwwwwwwdd
+dwwwwwwddwwwwwwwwwwddwwwwwwd
+dwwwwwwdwwwwwwwwwwwwdwwwwwwd
+dwwwwwwdwdwwwwwwwwwwdwwwwwwd
+dwwwwwwdwwddwwwwwwwwdwwwwwwd
+dwwwwwddwddwwwwwdddwddwwwwwd
+dwwwwwddwdwwddddwwwwddwwwwwd
+dwwwwwdwwwwwddddwwwwwdwwwwwd
+dwwwwwdwwwwwwddwwwwwwddwwwwd
+ddwwwdwwwwwddwwddwwwwwdwwwdd
+wdddddwwwwwwddddwwwwwwdddddw
+wwdddwwwwwwwwwwwwwwwwwwwddww
+.wwwwwwwwwwwwwwwwwwwwwwwwww.
+.wwwwwwwwwwwwwwwwwwwwwwwwww.
+..wwwwwwwwwwwwwwwwwwwwwwww..
+...wwwwwwwwwwwwwwwwwwwwww...
+.....wwwwwwwwwwwwwwwwww.....
+EOF
+  echo
+}
 
 usage() {
   cat <<'EOF'
@@ -51,21 +117,21 @@ pumi installer
 Options
   --version <x.y.z>   install a specific version
   --dir <path>        where pumi goes (macOS: /Applications; Linux: ~/.local)
-  --bin               (macOS) also link `pumi` into ~/.local/bin, so it works outside pumi's tabs
-                      (Linux always links it)
+  --no-bin            do not put `pumi` on PATH (~/.local/bin)
   --no-open           do not launch pumi when it is installed
   --uninstall         remove pumi (settings in ~/.config/pumi are left alone)
   -h, --help
 
-Env: PUMI_VERSION, PUMI_DIR, PUMI_GITHUB_TOKEN, PUMI_NO_OPEN
+Env: PUMI_INSTALL_VERSION, PUMI_DIR, PUMI_GITHUB_TOKEN, PUMI_NO_OPEN, PUMI_NO_BIN
 EOF
 }
 
 # ---- arguments -------------------------------------------------------------
 
-VERSION="${PUMI_VERSION:-}"
+VERSION="${PUMI_INSTALL_VERSION:-}"
 DIR="${PUMI_DIR:-}"
-WANT_BIN=0
+WANT_BIN=1
+[ -z "${PUMI_NO_BIN:-}" ] || WANT_BIN=0
 OPEN=1
 UNINSTALL=0
 [ -z "${PUMI_NO_OPEN:-}" ] || OPEN=0
@@ -76,7 +142,8 @@ while [ $# -gt 0 ]; do
     --version=*) VERSION="${1#*=}"; shift ;;
     --dir) [ $# -ge 2 ] || die "--dir wants a value"; DIR="$2"; shift 2 ;;
     --dir=*) DIR="${1#*=}"; shift ;;
-    --bin) WANT_BIN=1; shift ;;
+    --bin) WANT_BIN=1; shift ;; # the default now; kept so older instructions still work
+    --no-bin) WANT_BIN=0; shift ;;
     --no-open) OPEN=0; shift ;;
     --uninstall) UNINSTALL=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -148,18 +215,20 @@ CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/$APP"
 # ---- uninstall -------------------------------------------------------------
 
 if [ "$UNINSTALL" = 1 ]; then
-  say "removing $APP_PATH"
   rm -rf "$APP_PATH" "$dest/.$APP.app.old"
-  [ -L "$LINK" ] && rm -f "$LINK" && say "removed $LINK"
+  ok removed "$(short "$APP_PATH")"
+  if [ -L "$LINK" ]; then rm -f "$LINK" && ok removed "$(short "$LINK")"; fi
   if [ "$OS" = linux ]; then
     rm -f "$DATA/applications/$APP_ID.desktop"
     rm -f "$DATA"/icons/hicolor/*/apps/"$APP_ID".png
   else
     security delete-generic-password -s dev.pumi.github-token >/dev/null 2>&1 || true
   fi
-  echo "    settings and plugin data are still in ~/.config/pumi"
+  printf '  %sSettings and plugin data stay in ~/.config/pumi.%s\n' "$DIM" "$OFF"
   exit 0
 fi
+
+logo
 
 # ---- where the release is ---------------------------------------------------
 
@@ -257,9 +326,9 @@ if command -v minisign >/dev/null 2>&1; then
     get latest.json.minisig "$TMP/latest.json.minisig" || die "the release has no latest.json.minisig"
   fi
   signed || die "the release manifest is not signed by a pumi release key."
-  say "signature:   the manifest is signed by pumi's release key"
+  VERIFIED="signature and checksum"
 else
-  warn "signature:   not checked (install minisign to check it); trusting HTTPS"
+  VERIFIED="checksum (install minisign to check the signature too)"
 fi
 
 # field <platform> <key>: one value of one asset in the manifest (pretty-printed by
@@ -276,17 +345,26 @@ NAME="$(field "$PLATFORM" name)"
 SHA="$(field "$PLATFORM" sha256)"
 URL="$(field "$PLATFORM" url)"
 [ -n "$NAME" ] && [ -n "$SHA" ] || die "pumi $manifest_version has no build for $PLATFORM."
+SIZE="$(field "$PLATFORM" size)"
+
+case "$PLATFORM" in
+  macos-aarch64) LABEL="macOS, Apple silicon" ;;
+  macos-x86_64) LABEL="macOS, Intel" ;;
+  linux-aarch64) LABEL="Linux, arm64" ;;
+  *) LABEL="Linux, x86_64" ;;
+esac
+printf '  %spumi %s%s %s· %s%s\n\n' "$BOLD" "$manifest_version" "$OFF" "$DIM" "$LABEL" "$OFF"
 
 # ---- fetch -----------------------------------------------------------------
 
-say "downloading pumi $manifest_version for $PLATFORM"
 get "$NAME" "$TMP/$NAME" "$URL" || die "download failed: $NAME"
 if command -v shasum >/dev/null 2>&1; then have="$(shasum -a 256 "$TMP/$NAME" | awk '{print $1}')"
 else have="$(sha256sum "$TMP/$NAME" | awk '{print $1}')"; fi
 [ "$have" = "$SHA" ] || die "the download does not match the signed manifest.
    expected $SHA
    got      $have"
-say "checksum:    matches the manifest"
+ok downloaded "$(awk -v b="${SIZE:-0}" 'BEGIN { printf "%d MB", b / 1048576 + 0.5 }')"
+ok verified "$VERIFIED"
 
 # ---- install ---------------------------------------------------------------
 
@@ -315,12 +393,10 @@ fi
 # Only the app is quit, never the terminal server (`pumid`) beside it: it holds every
 # terminal, and the new app hands it over to its own binary.
 if pgrep -f "^$EXE\$" >/dev/null 2>&1; then
-  say "quitting the running copy"
   pkill -f "^$EXE\$" 2>/dev/null || true
   sleep 1
 fi
 
-say "installing to $APP_PATH"
 mkdir -p "$dest" || die "cannot create $dest"
 rm -rf "$dest/.$APP.app.old"
 [ -e "$APP_PATH" ] && { mv "$APP_PATH" "$dest/.$APP.app.old" 2>/dev/null || die "could not replace $APP_PATH.
@@ -332,22 +408,19 @@ if ! mv "$TMP/unpacked/$APP.app" "$APP_PATH"; then
   die "could not write $APP_PATH"
 fi
 rm -rf "$dest/.$APP.app.old"
+ok installed "$(short "$APP_PATH")"
 
 if [ "$OS" = macos ]; then
   # Nothing above set the quarantine flag, but a copy a browser put here earlier would still
   # carry it, and it is what makes Gatekeeper hold the first launch.
   xattr -cr "$APP_PATH" 2>/dev/null || true
-  if codesign --verify --deep --strict "$APP_PATH" >/dev/null 2>&1; then
-    say "signature:   the app's seal is intact"
-  else
-    warn "signature:   INVALID — this copy may not launch"
-  fi
+  codesign --verify --deep --strict "$APP_PATH" >/dev/null 2>&1 \
+    || warn "the app's code signature does not verify; it may not launch"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -f "$APP_PATH" >/dev/null 2>&1 || true
   # The updater reads the token from here while the repository is private.
   if [ -n "${PUMI_GITHUB_TOKEN:-}" ]; then
-    security add-generic-password -U -s dev.pumi.github-token -a pumi -w "$PUMI_GITHUB_TOKEN" >/dev/null 2>&1 \
-      && say "token:       kept in the login keychain for updates"
+    security add-generic-password -U -s dev.pumi.github-token -a pumi -w "$PUMI_GITHUB_TOKEN" >/dev/null 2>&1 || true
   fi
 else
   # The desktop entry, its icon, and `pumi://` links. Exec is quoted as the desktop entry spec
@@ -367,27 +440,49 @@ else
   if [ -n "${PUMI_GITHUB_TOKEN:-}" ]; then
     mkdir -p "$CONFIG"
     (umask 077 && printf '%s\n' "$PUMI_GITHUB_TOKEN" > "$CONFIG/github-token")
-    say "token:       kept in $CONFIG/github-token for updates"
   fi
-  WANT_BIN=1
 fi
 
+# rc_file: the startup file of the user's login shell, and the line that puts ~/.local/bin on
+# its PATH.
+rc_file() {
+  case "$(basename "${SHELL:-sh}")" in
+    zsh) RC="${ZDOTDIR:-$HOME}/.zshrc"; RC_LINE='export PATH="$HOME/.local/bin:$PATH"' ;;
+    bash)
+      # macOS' Terminal opens login shells, which read .bash_profile and not .bashrc.
+      if [ "$OS" = macos ]; then RC="$HOME/.bash_profile"; else RC="$HOME/.bashrc"; fi
+      RC_LINE='export PATH="$HOME/.local/bin:$PATH"' ;;
+    fish) RC="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/pumi.fish"; RC_LINE='fish_add_path -g $HOME/.local/bin' ;;
+    *) RC="$HOME/.profile"; RC_LINE='export PATH="$HOME/.local/bin:$PATH"' ;;
+  esac
+}
+
+NEW_SHELL=0
 if [ "$WANT_BIN" = 1 ]; then
   mkdir -p "$(dirname "$LINK")"
   ln -sf "$CLI" "$LINK"
-  say "linked $LINK"
-  case ":$PATH:" in
-    *":$HOME/.local/bin:"*) ;;
-    *) echo "    (add ~/.local/bin to your PATH to run \`pumi\` from a shell)" ;;
-  esac
+  rc_file
+  # Already on PATH: this shell has it (a pumi tab's PATH has it whatever the shell's startup
+  # file says, so it does not count), or the startup file names it.
+  on_path=0
+  case ":$PATH:" in *":$HOME/.local/bin:"*) [ -n "${PUMI_TAB:-}" ] || on_path=1 ;; esac
+  grep -qs '\.local/bin' "$RC" && on_path=1
+  if [ "$on_path" = 1 ]; then
+    ok linked "$(short "$LINK")"
+  else
+    mkdir -p "$(dirname "$RC")"
+    printf '\n# pumi\n%s\n' "$RC_LINE" >> "$RC"
+    ok linked "$(short "$LINK") (on PATH from $(short "$RC"))"
+    NEW_SHELL=1
+  fi
 fi
 
-say "pumi $manifest_version is installed"
-echo "    app:      $APP_PATH"
-if [ "$OS" = macos ]; then echo "    settings: ~/.config/pumi/settings.json"
-else echo "    settings: $CONFIG/settings.json"; fi
-echo "    updates:  automatic — pumi tells you when one is ready (Settings → General → Updates)"
-echo "    docs:     $SITE/docs/"
+echo
+if [ "$OS" = macos ]; then where="Open pumi from Applications"; else where="Open pumi from your app menu"; fi
+if [ "$WANT_BIN" = 0 ]; then echo "  $where."
+elif [ "$NEW_SHELL" = 1 ]; then echo "  $where, or run \`pumi\` in a new terminal."
+else echo "  $where, or run \`pumi\`."; fi
+echo
 
 if [ "$OPEN" = 1 ]; then
   if [ "$OS" = macos ]; then

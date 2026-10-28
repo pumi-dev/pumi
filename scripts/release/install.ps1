@@ -18,14 +18,15 @@
 # looks at a file PowerShell downloaded (it has no mark-of-the-web), so nothing prompts.
 #
 # Env:
-#   PUMI_VERSION=0.42.0        install this version instead of the newest
+#   PUMI_INSTALL_VERSION=0.42.0  install this version instead of the newest (not PUMI_VERSION:
+#                             pumi sets that in every tab, to the version that is running)
 #   PUMI_DIR=<dir>            where the app goes (%LOCALAPPDATA%\Programs\pumi)
 #   PUMI_GITHUB_TOKEN=<tok>   for a release that is not public
 #   PUMI_NO_OPEN=1            do not launch pumi when done
 #   PUMI_REPO, PUMI_SITE      where releases and the manifest live
 
 param(
-  [string]$Version = $env:PUMI_VERSION,
+  [string]$Version = $env:PUMI_INSTALL_VERSION,
   [string]$Dir = $env:PUMI_DIR,
   [switch]$Uninstall,
   [switch]$NoOpen,
@@ -75,7 +76,7 @@ Options
   -Uninstall         remove pumi (settings in %APPDATA%\pumi are left alone)
   -Help
 
-Env: PUMI_VERSION, PUMI_DIR, PUMI_GITHUB_TOKEN, PUMI_NO_OPEN
+Env: PUMI_INSTALL_VERSION, PUMI_DIR, PUMI_GITHUB_TOKEN, PUMI_NO_OPEN
 "@
 }
 

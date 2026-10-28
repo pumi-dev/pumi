@@ -27,13 +27,13 @@ Flags go after `sh -s --` (`curl -fsSL https://pumi.dev/install.sh | sh -s -- --
 | --- | --- |
 | `--version X` | Install a specific version. |
 | `--dir PATH` | Where `pumi.app` goes. macOS: `/Applications`, or `~/Applications` when that is not writable. Linux: `~/.local`. |
-| `--bin` | macOS: also link `pumi` into `~/.local/bin`, so it works outside pumi's tabs. Linux always does. |
+| `--no-bin` | Don't put `pumi` on your `PATH`. By default the installer links it into `~/.local/bin` and, when that is not on your `PATH`, adds it in your shell's startup file (`~/.zshrc`, `~/.bash_profile` or `~/.bashrc`, fish's `conf.d`). |
 | `--no-open` | Don't open pumi when it is installed. |
 | `--uninstall` | Remove the app. Your settings stay. |
 
 On Windows the same are `-Version`, `-Dir` (`%LOCALAPPDATA%\Programs\pumi` by default), `-NoOpen` and `-Uninstall`: `& ([scriptblock]::Create((irm https://pumi.dev/install.ps1))) -Version 0.42.0`. The installer adds `pumi` to your user `PATH` and pumi to the Start menu, and Settings → Apps can uninstall it.
 
-The environment variables `PUMI_VERSION`, `PUMI_DIR` and `PUMI_NO_OPEN` do what the flags do. The installer checks the archive's SHA-256 against the release manifest, and the manifest's signature when `minisign` is installed. On Linux it also tells you which desktop libraries (GTK, WebKitGTK, xkbcommon, Vulkan) are missing.
+The environment variables `PUMI_INSTALL_VERSION`, `PUMI_DIR`, `PUMI_NO_BIN` and `PUMI_NO_OPEN` do what the flags do. The installer checks the archive's SHA-256 against the release manifest, and the manifest's signature when `minisign` is installed. On Linux it also tells you which desktop libraries (GTK, WebKitGTK, xkbcommon, Vulkan) are missing.
 
 Updates download in the background and apply on restart; set `autoupdate` to `false` to turn them off.
 
