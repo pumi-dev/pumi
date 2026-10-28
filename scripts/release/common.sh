@@ -169,11 +169,17 @@ zip_bundle() {
 }
 
 # The same for anything but macOS: `-X` leaves out the attributes `ditto` exists to strip, and
-# Windows' installer unpacks it with Expand-Archive.
+# Windows' installer unpacks it with Expand-Archive. Git Bash on GitHub's Windows runner has no
+# `zip`, but has 7-Zip, which writes none of those attributes.
 zip_plain() {
   rm -f "$2"
-  command -v zip >/dev/null 2>&1 || die "zip is missing: it packs the Windows artifact"
-  (cd "$(dirname "$1")" && zip -qrX "$2" "$(basename "$1")")
+  if command -v zip >/dev/null 2>&1; then
+    (cd "$(dirname "$1")" && zip -qrX "$2" "$(basename "$1")")
+  elif command -v 7z >/dev/null 2>&1; then
+    (cd "$(dirname "$1")" && 7z a -tzip -bso0 -bsp0 "$2" "$(basename "$1")")
+  else
+    die "zip (or 7z) is missing: it packs the Windows artifact"
+  fi
 }
 
 # The CLI, into <dir>/bin: `pumi-cli`, and `pumi` as its second name: a link, or a copy of it

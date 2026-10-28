@@ -209,13 +209,14 @@ else
   github_manifest
 fi
 
-# asset_api <name>: a release asset's API URL, from the release JSON (pretty-printed, one
-# key per line, each asset's "url" before its "name").
+# asset_api <name>: a release asset's API URL, from the release JSON, each asset's "url" before
+# its "name". GitHub's API sends it on one line: split at the commas, one key per line (a comma
+# inside a value only splits text no pattern here matches).
 asset_api() {
-  awk -v want="$1" '
-    /"url": "https:\/\/api\.github\.com\/repos\/.*\/releases\/assets\// { sub(/.*"url": "/, ""); sub(/".*/, ""); url = $0 }
-    /"name": / { line = $0; sub(/.*"name": "/, "", line); sub(/".*/, "", line); if (line == want && url != "") { print url; exit } }
-  ' "$TMP/release.json"
+  tr ',' '\n' < "$TMP/release.json" | awk -v want="$1" '
+    /"url": *"https:\/\/api\.github\.com\/repos\/.*\/releases\/assets\// { sub(/.*"url": *"/, ""); sub(/".*/, ""); url = $0 }
+    /"name": *"/ { line = $0; sub(/.*"name": *"/, "", line); sub(/".*/, "", line); if (line == want && url != "") { print url; exit } }
+  '
 }
 
 # get <name> <out> [url]: a release file, from its public URL or through the API.

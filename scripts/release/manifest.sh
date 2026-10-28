@@ -30,6 +30,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 RELEASE_REPO="${PUMI_RELEASE_REPO:-pumi-dev/pumi}"
 TAG="v$VERSION"
+# Absolute: the script works from inside $OUT, and the workflow passes a relative one.
+OUT="$(cd "$OUT" && pwd)"
 MANIFEST="$OUT/latest.json"
 
 cd "$OUT"
