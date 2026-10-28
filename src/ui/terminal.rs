@@ -213,6 +213,9 @@ impl TerminalView {
         }
         font
     }
+    /// A cell: the font's advance and line, each rounded to whole device pixels (Menlo 12 on a 2x
+    /// screen: a 14.45px advance makes a 14px cell), so every column and row starts on the pixel
+    /// grid.
     pub(crate) fn metrics(window: &Window, settings: &Settings) -> Metrics {
         let size = px(settings.terminal.font_size);
         let text = window.text_system();
@@ -222,7 +225,9 @@ impl TerminalView {
             .map(|advance| f32::from(advance.width))
             .unwrap_or(settings.terminal.font_size * 0.6);
         let line_height = Self::natural_line_height(window, font_id, size) * Self::line_height_scale(settings);
-        Metrics { cell_width, line_height: line_height.round().max(1.) }
+        let scale = window.scale_factor().max(1.);
+        let device = |v: f32| (v * scale).round().max(1.) / scale;
+        Metrics { cell_width: device(cell_width), line_height: device(line_height) }
     }
     /// The font's own line at `size`: its ascent, descent and line gap, as Ghostty's cell is.
     pub(crate) fn natural_line_height(window: &Window, font_id: gpui::FontId, size: Pixels) -> f32 {
@@ -546,7 +551,7 @@ impl Render for TerminalView {
                     cols: cols as u16,
                     rows: rows as u16,
                     cell_width: metrics.cell_width.round() as u32,
-                    cell_height: metrics.line_height as u32,
+                    cell_height: metrics.line_height.round() as u32,
                 };
                 // Settled from here, where the size is measured, not from the next render: in a
                 // cached tab nothing renders the view again, and the session attaches only once
