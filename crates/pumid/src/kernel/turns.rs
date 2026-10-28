@@ -163,13 +163,14 @@ pub fn answer(turn: &Turn) -> TurnAnswer {
     let (context, from) = frame(&turn.answers);
     TurnAnswer { context, from, late: turn.waiting.iter().cloned().collect() }
 }
-/// Ends the turns whose deadline passed by `now` (Unix ms), and those whose tab closed.
+/// Ends the turns whose deadline passed by `now` (Unix ms), and those whose tab closed. Passed is
+/// after it: ms are whole, so a turn begun late in one ms would end short of its timeout at it.
 pub fn tick(kernel: &mut Kernel, now: u64) {
     let ended: Vec<u64> = kernel
         .turns
         .pending
         .iter()
-        .filter(|(_, t)| t.deadline <= now || !kernel.model.tabs.contains_key(&t.tab))
+        .filter(|(_, t)| t.deadline < now || !kernel.model.tabs.contains_key(&t.tab))
         .map(|(id, _)| *id)
         .collect();
     for id in ended {

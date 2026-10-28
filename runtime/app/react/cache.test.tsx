@@ -473,5 +473,6 @@ gpu("compartment", () => {
     expect(told(false)).toEqual([undefined])
     // With the rows in a compartment of their own, a frame it moves in draws little.
     expect(told(true)).toEqual([])
-  })
+    // Two windows of 400 rows, each drawn for most of a second: a CI machine takes over bun's 5s.
+  }, 30_000)
 })

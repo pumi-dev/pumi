@@ -8,14 +8,19 @@ use std::time::{Duration, Instant};
 
 /// pumid and pumi-host, built beside this crate's binary (the CLI finds them there).
 fn binaries() -> PathBuf {
+    // Once for every test: cargo links a binary afresh each build, even one it had, and a test
+    // starting it meanwhile would find nothing there.
+    static BUILT: std::sync::Once = std::sync::Once::new();
     let cli = PathBuf::from(env!("CARGO_BIN_EXE_pumi-cli"));
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    let mut build = Command::new(cargo);
-    build.args(["build", "-p", "pumid", "-p", "pumi-host"]);
-    if !cfg!(debug_assertions) {
-        build.arg("--release");
-    }
-    assert!(build.status().expect("cargo builds the server").success(), "building the server failed");
+    BUILT.call_once(|| {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let mut build = Command::new(cargo);
+        build.args(["build", "-p", "pumid", "-p", "pumi-host"]);
+        if !cfg!(debug_assertions) {
+            build.arg("--release");
+        }
+        assert!(build.status().expect("cargo builds the server").success(), "building the server failed");
+    });
     cli
 }
 
