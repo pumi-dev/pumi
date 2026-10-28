@@ -502,6 +502,13 @@ impl LineLayoutIndex {
     }
 }
 
+/// pumi: `start..end`, kept inside 0..`len` (and never inverted), so a range recorded by an
+/// older frame can be applied to a shorter one.
+fn span(start: usize, end: usize, len: usize) -> Range<usize> {
+    let start = start.min(len);
+    start..end.clamp(start, len)
+}
+
 impl LineLayoutCache {
     pub fn new(platform_text_system: Arc<dyn PlatformTextSystem>) -> Self {
         Self {
@@ -525,34 +532,49 @@ impl LineLayoutCache {
         let mut previous_frame = &mut *self.previous_frame.lock();
         let mut current_frame = &mut *self.current_frame.write();
 
-        for key in &previous_frame.used_lines[range.start.lines_index..range.end.lines_index] {
+        // pumi: the range was recorded by the paint being reused (`Window::reuse_paint`), which can
+        // be older than the frame it is applied to — a dropped frame, or a node whose text got
+        // shorter between paints. Clamp each list to what the previous frame still holds, rather
+        // than slicing past its end ("range start index 35 out of range for slice of length 10").
+        let lines = span(range.start.lines_index, range.end.lines_index, previous_frame.used_lines.len());
+        let wrapped = span(
+            range.start.wrapped_lines_index,
+            range.end.wrapped_lines_index,
+            previous_frame.used_wrapped_lines.len(),
+        );
+        let lines_by_hash = span(
+            range.start.lines_by_hash_index,
+            range.end.lines_by_hash_index,
+            previous_frame.used_lines_by_hash.len(),
+        );
+        let wrapped_by_hash = span(
+            range.start.wrapped_lines_by_hash_index,
+            range.end.wrapped_lines_by_hash_index,
+            previous_frame.used_wrapped_lines_by_hash.len(),
+        );
+
+        for key in &previous_frame.used_lines[lines] {
             if let Some((key, line)) = previous_frame.lines.remove_entry(key) {
                 current_frame.lines.insert(key, line);
             }
             current_frame.used_lines.push(key.clone());
         }
 
-        for key in &previous_frame.used_wrapped_lines
-            [range.start.wrapped_lines_index..range.end.wrapped_lines_index]
-        {
+        for key in &previous_frame.used_wrapped_lines[wrapped] {
             if let Some((key, line)) = previous_frame.wrapped_lines.remove_entry(key) {
                 current_frame.wrapped_lines.insert(key, line);
             }
             current_frame.used_wrapped_lines.push(key.clone());
         }
 
-        for key in &previous_frame.used_lines_by_hash
-            [range.start.lines_by_hash_index..range.end.lines_by_hash_index]
-        {
+        for key in &previous_frame.used_lines_by_hash[lines_by_hash] {
             if let Some((key, line)) = previous_frame.lines_by_hash.remove_entry(key) {
                 current_frame.lines_by_hash.insert(key, line);
             }
             current_frame.used_lines_by_hash.push(key.clone());
         }
 
-        for key in &previous_frame.used_wrapped_lines_by_hash
-            [range.start.wrapped_lines_by_hash_index..range.end.wrapped_lines_by_hash_index]
-        {
+        for key in &previous_frame.used_wrapped_lines_by_hash[wrapped_by_hash] {
             if let Some((key, line)) = previous_frame.wrapped_lines_by_hash.remove_entry(key) {
                 current_frame.wrapped_lines_by_hash.insert(key, line);
             }
