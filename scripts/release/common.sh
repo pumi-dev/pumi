@@ -114,13 +114,15 @@ copy_tree() {
   done < <(cd "$src" && find . -type f)
 }
 
-# What the app reads from <dir>/assets at run time: the icons every theme draws by name, and the
-# default theme's preview in Settings (`runtime/app/app/assets.ts`).
+# What the app reads from <dir>/assets at run time: the icons every theme draws by name, the app
+# icon the start screen shows, and the default theme's preview in Settings (`runtime/app/app/assets.ts`).
 copy_assets() {
   local dir="$1"
   [ -d "$REPO/assets/icons" ] || die "no icons at $REPO/assets/icons"
   rm -rf "$dir/assets"
   copy_tree "$REPO/assets/icons" "$dir/assets/icons"
+  mkdir -p "$dir/assets/brand"
+  cp "$REPO/assets/brand/app-icon-256.png" "$dir/assets/brand/app-icon-256.png"
   if [ -d "$REPO/assets/themes" ]; then copy_tree "$REPO/assets/themes" "$dir/assets/themes"; fi
 }
 

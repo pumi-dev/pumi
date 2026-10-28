@@ -1,5 +1,5 @@
-// What the app ships beside its code: the icons (assets/icons) and the default theme's preview
-// (assets/themes).
+// What the app ships beside its code: the icons (assets/icons), the app icon (assets/brand) and
+// the default theme's preview (assets/themes).
 import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { COMPILED } from "../native/platform.ts"
@@ -23,6 +23,11 @@ export const assets = {
   /** An icon's SVG file (`assets/icons/<name>.svg`), by name or by one of its other names. */
   icon(name: string): string | undefined {
     const path = join(ROOT, "icons", `${ALIASES[name] ?? name}.svg`)
+    return existsSync(path) ? path : undefined
+  },
+  /** The app's own icon (`assets/brand/app-icon-256.png`, a small copy of `app-icon.png`): the start screen's mark. */
+  appIcon(): string | undefined {
+    const path = join(ROOT, "brand", "app-icon-256.png")
     return existsSync(path) ? path : undefined
   },
   /** A built-in theme's preview for Settings → Appearance (`assets/themes/<name>.png`, or `.svg`). */

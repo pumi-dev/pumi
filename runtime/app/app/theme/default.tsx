@@ -920,6 +920,7 @@ function StartScreen() {
     return ids.slice(0, START_RECENT).map((id) => byId.get(id)!)
   }, [sessions, recent, window.session])
   const command = (name: string) => () => runCommand(name, window.id)
+  const appIcon = assets.appIcon()
   return (
     <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0, alignItems: "center", justifyContent: "center", overflowY: "scroll" }}>
       <motion.div
@@ -929,9 +930,13 @@ function StartScreen() {
         style={{ display: "flex", flexDirection: "column", width: 360, flexShrink: 1, minWidth: 0, paddingLeft: 24, paddingRight: 24, paddingTop: 32, paddingBottom: 32, gap: 28 }}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: m.radius + 8, backgroundColor: t.accent }}>
-            <Icon name="pumi" size={34} color={t.accentText} />
-          </div>
+          {appIcon ? (
+            <img src={appIcon} objectFit="contain" alt="pumi" style={{ width: 72, height: 72, flexShrink: 0 }} />
+          ) : (
+            <div style={{ display: "flex", width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: m.radius + 8, backgroundColor: t.accent }}>
+              <Icon name="pumi" size={34} color={t.accentText} />
+            </div>
+          )}
           <text style={{ fontSize: ts(20), fontWeight: 600, color: t.text, marginTop: 4 }}>{shown ? shown.label || "pumi" : "Welcome to pumi"}</text>
           <text style={{ fontSize: ts(12), color: t.muted, textAlign: "center" }}>
             {shown ? (shown.cwd ? tildePath(shown.cwd) : "Nothing is open in this session.") : "A terminal workspace for your coding agents."}
