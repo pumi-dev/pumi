@@ -17,6 +17,8 @@ hello/
 
 ## Quickstart
 
+[Build a plugin](build-a-plugin.md) walks through these steps, the SDK and sharing.
+
 ```sh
 pumi plugin new hello     # write a starter plugin
 pumi plugin dev hello     # link it and reload on save
@@ -421,7 +423,7 @@ A plugin from GitHub with `dependencies` in its `package.json` gets them on inst
 
 ## SDK
 
-Both files import from `"pumi"`.
+Both files import from `"pumi"`. The app provides it at run time; for type-checking and tests outside the app, install [`@pumi-dev/sdk`](#type-check-and-test).
 
 | `main.ts` | |
 | --- | --- |
@@ -440,3 +442,56 @@ Both files import from `"pumi"`.
 | web | `WebView` `useWebview` `webview` `webviewRun` `webviewSnapshot` |
 | kit | `motion` `Select` `useDraggable` `useDroppable` `useDragState` `useHover` `useInterval` `useNow` |
 | settings | `Page` `Section` `Row` `OptionRow` `Switch` `Slider` `Stepper` `TextField` `Button` `KeyRecorder` `KeyChip` `ChoiceGrid` `ImageCards` `useSettings` `haptic` `openSettings` `keyGlyphs` |
+
+## Type-check and test
+
+The app gives a plugin `pumi` when it runs it. For `tsc` and `bun test`, install the SDK, the npm package [`@pumi-dev/sdk`](https://www.npmjs.com/package/@pumi-dev/sdk), under the name `pumi`:
+
+```json
+"devDependencies": {
+  "pumi": "npm:@pumi-dev/sdk@0.2.0",
+  "@types/bun": "1.3.14",
+  "typescript": "5.9.3"
+}
+```
+
+The SDK's version is its own and moves when what a plugin can import changes; its README says which pumi version it was built from. It brings React at the app's version as a peer, so the plugin's code, its JSX and the test renderer share one React. The `tsconfig.json` needs no `paths`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "pumi",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
+  },
+  "exclude": ["node_modules"]
+}
+```
+
+`pumi`, `pumi/theme`, `pumi/jsx-runtime` and `pumi/jsx-dev-runtime` resolve to it, and so does an imported image (`import floor from "./floor.png"`, a path). `pumi` and `pumi/theme` have types but no code: in a test, each of their values is a stand-in. Code that imports one loads, a call gives a rejected promise, and using what it returned throws. A test replaces them before importing what uses them, and the mock must have every name the tested files import:
+
+```tsx
+import { describe, expect, mock, test } from "bun:test";
+mock.module("pumi", () => ({ useTheme: () => ({ text: "#fff" }), call: async () => null }));
+const { createTestRoot, hasNativeTestRenderer } = await import("pumi/testing");
+const { Counter } = await import("../src/ui.tsx");
+
+(hasNativeTestRenderer ? describe : describe.skip)("the counter", () => {
+  test("starts at 0", () => {
+    const { render, renderer } = createTestRoot({ width: 300, height: 100 });
+    render(<Counter />);
+    expect(renderer.getAllText()).toContain("Hello, 0");
+  });
+});
+```
+
+`pumi/testing` draws components with the app's native test renderer. The addon is the file `PUMI_ADDON` names, else the installed app's (`/Applications/pumi.app/Contents/MacOS/pumi.darwin-arm64.node`, `~/.local/pumi.app/bin/` on Linux, `%LOCALAPPDATA%\Programs\pumi\pumi.app\bin\` on Windows). A release build has no test renderer, so with the installed app `hasNativeTestRenderer` is false and those tests skip. To run them, build the addon in a pumi checkout (`bun run addon` in `runtime/app`) and point at it: `PUMI_ADDON=…/runtime/app/native/pumi.darwin-arm64.node bun test`. Linux has no test renderer.
