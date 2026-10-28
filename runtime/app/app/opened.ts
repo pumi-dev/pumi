@@ -3,10 +3,14 @@
 // window in front: a folder to the session whose directory it is; a file to the session with the
 // deepest directory holding it (the shown one, of equals), beside that session's current tab.
 // Without one, a new session: at the folder, or at the file's repository (else its folder).
+// A plugin's install link (`pumi://plugins/install/…`, `install-link.ts`) asks, then installs it.
 import { existsSync, statSync } from "node:fs"
 import { basename } from "node:path"
+import { confirm } from "../sdk/dialogs.ts"
+import { installedOf, listingOf, parseInstallLink, questionOf, type InstallLink, type Listing } from "./install-link.ts"
 import { pathOf, repoOf, route } from "./open-route.ts"
 import { call, engine, on, serverOf, store } from "./engine.ts"
+import { openSettings } from "./settings/open.ts"
 import type { WindowManager } from "./windows.tsx"
 
 /** A session's current tab, as the server has it now (one made a moment ago included). */
@@ -17,12 +21,50 @@ async function currentTab(session: string): Promise<string | undefined> {
   return typeof view?.activeTab === "string" ? view.activeTab : undefined
 }
 
-/** Opens what macOS asked to, in turn: a session made for one may be where the next goes. */
-async function openAll(manager: WindowManager, urls: string[]) {
-  const paths = urls.map(pathOf).filter((p): p is string => !!p && existsSync(p))
-  if (!paths.length) return
+/** The window in front, one opened when there is none, brought to the front. */
+function front(manager: WindowManager) {
   if (!manager.windows.length) manager.open()
   const window = manager.windows.find((w) => w.active) ?? manager.windows[0]!
+  window.renderer.activateWindow()
+  return window
+}
+
+/** Asks to install what `link` names, then installs it and says how that went. */
+async function install(manager: WindowManager, link: InstallLink) {
+  front(manager)
+  const [listings, installed] = await Promise.all([
+    call("registry.list", "plugin", { available: true }).catch(() => []) as Promise<Listing[]>,
+    call("registry.list", "plugin").catch(() => []) as Promise<any[]>,
+  ])
+  const listing = listingOf(link, listings ?? [])
+  const name = listing?.name ?? link.name
+  if (installedOf(link, installed ?? [], listing)) {
+    if (await confirm({ title: `${name} is installed already`, detail: "Its settings are in Settings → Plugins.", confirm: "Open Settings", cancel: "Done" })) openSettings("plugins")
+    return
+  }
+  if (!(await confirm(questionOf(link, listing)))) return
+  for (;;) {
+    try {
+      const id: string = await call("plugin.add", link.source, {})
+      if (await confirm({ title: `Installed ${id}`, detail: "Its settings are in Settings → Plugins.", confirm: "Open Settings", cancel: "Done" })) openSettings("plugins")
+      return
+    } catch (err) {
+      const why = String((err as Error)?.message ?? err)
+      console.error(`pumi: installing ${link.source}:`, why)
+      if (!(await confirm({ title: `Could not install ${name}`, detail: why, confirm: "Try again", cancel: "Close" }))) return
+    }
+  }
+}
+
+/** Opens what macOS asked to, in turn: a session made for one may be where the next goes. */
+async function openAll(manager: WindowManager, urls: string[]) {
+  for (const url of urls) {
+    const link = parseInstallLink(url)
+    if (link) await install(manager, link).catch((err) => console.error(`pumi: installing ${link.source}:`, err))
+  }
+  const paths = urls.map(pathOf).filter((p): p is string => !!p && existsSync(p))
+  if (!paths.length) return
+  const window = front(manager)
   /** The sessions made here, by directory: the snapshot may not list them yet. */
   const made = new Map<string, string>()
   for (const path of paths) {
