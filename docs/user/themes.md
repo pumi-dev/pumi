@@ -69,7 +69,7 @@ Each part of the window is a component. Give one in `components` and it draws th
 
 `Window` `Starting` `ViewBar` `View` `Layout` `Split` `Pane` `PaneTitle` `PaneTab` `TabBody` `Splitter` `Float` `Panel` `Sessions` `Agent` `AgentControls` `Action` `Menu` `Dialog` `IconButton`
 
-A `Pane` is given its id, its `tabs` and the one in front (`active`). Its `PaneTitle` draws the strip of its tabs, one `PaneTab` each, while panes hold tabs (`pane_tabs`, on by default), and the front tab's title while they don't. `TabBody` draws a tab: only the front tab's is drawn, and the others keep running behind it. A zoomed pane fills its view with its strip still on top.
+A `Pane` is given its id, its `tabs` and the one in front (`active`). Its `PaneTitle` draws the strip of its tabs, one `PaneTab` each, while panes hold tabs (`pane_tabs`, on by default), and the front tab's title while they don't. `TabBody` draws a tab: only the front tab's is drawn, and the others keep running behind it. A zoomed pane fills its view with its strip still on top. Draw the focus from the `focused` a part is given, or `useFocusedTab(view)` from `pumi/theme`, rather than from `view.activeTab`: they are the focus as this window has it.
 
 ```tsx
 import { useTheme } from "pumi";

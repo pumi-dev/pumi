@@ -105,7 +105,13 @@ await call("me.hello.greet", ["you"]);     // "hello you"
 await call([{ name: "me.hello.greet", args: ["you"] }, { name: "tab.focus", args: ["%3"] }]);   // one batch
 ```
 
-`null` withdraws a function: `fn.set("greet", null)`. A command, a key, a menu item and another plugin all call it by name.
+`null` withdraws a function: `fn.set("greet", null)`. A command, a key, a menu item and another plugin all call it by name. A name is its provider's while it is connected: another plugin or program setting it is refused until the provider withdraws it.
+
+While a function runs, `self.caller` says who called it: `{client, tab, source}`, the client (an app attached to the server) it came through, the tab it is about, and who it is (`pumi-app`, `cli`, `owner/name`). A call the function makes with no id given is about that caller's tab, as `workspace.currentTab` and `self.tab` are, so a function a window calls acts where that window is, not where the plugin runs. Outside a call `self.caller` is `null`.
+
+```ts
+fn.set("here", { desc: "Says where its caller is." }, () => `${self.caller?.source} in ${workspace.currentTab?.title}`);
+```
 
 ## Slots
 
@@ -147,6 +153,8 @@ import { call, workspace } from "pumi";
 const page = await workspace.openTab("me.hello.page", {}, { kind: "tiled", split: "right" });
 await call("tab.call", page.id, "navigate", { url });
 ```
+
+Keep what a block shows where every window reads it: the tab's options (`option.set("@page.url", url, { scope: "tab", id: tab.id })`), what it was opened with, or `main.ts`. A component's own state is that window's alone; another window drawing the same tab starts from nothing.
 
 `tab.call(tab, method, args)` is what a tab's block answers: `read`, `input`, `run`, `wait`, `selection`, `report` and `attach`, and the block's own methods. The block's own live in the plugin's functions, so `navigate` above is `me.hello.page.navigate`: the tab's id first, then the args. A renderer says what its tab shows with `describe`, and reads what it was opened with by `args`.
 
@@ -201,6 +209,8 @@ const tabs = await Promise.all(pane.tabs.map((tab) => tab.ready));
 ```
 
 What a tab is, in one read: `tab.block`, `tab.traits`, `tab.place`, `tab.title`, `tab.cwd`, `tab.foregroundCwd`, `tab.process`, `tab.scroll`, `tab.neighbors`, `tab.isFocused`, `tab.isZoomed`, `tab.options`. A view holds `layout` (its panes as they split, each with its `tabs` and the one in front), `activeTab`, `activePane` and `zoom`; a pane (`workspace.getPane(":4")`, `workspace.panes(view)`) holds its `view`, `tabs` and `activeTab`; a session holds its `views` and `activeView`. `pane.opened`, `pane.changed` and `pane.closed` say what changed of a view's panes.
+
+The focus is the server's, and every client showing a session shares it: a view's `activeTab` and `activePane`, a session's `activeView`, and `isFocused` (a client is in that tab) are the same for all of them, and `tab.focus` and `view.focus` move them for all. A component that draws where its window's focus is takes it from the window (a theme's `focused` prop, `useFocusedTab`), not from these.
 
 ## Tab methods
 
@@ -316,7 +326,7 @@ One call describes everything that is registered: `registry.list(kind, opts)`, w
 
 ## Events
 
-Each session, view, pane and tab has `opened`, `closed` and `changed {keys, patch}`; a model's `watch` is a filter over `changed`. What else fires: `tab.alerted {kind, message}`, `request.opened` and `request.closed {answer, reason}`, `agent.sending` and `agent.turned`, `option.changed`, `registry.changed {kind, names}`, and `app.changed {keys, patch}` (the window's `isFocused`).
+Each session, view, pane and tab has `opened`, `closed` and `changed {keys, patch}`; a model's `watch` is a filter over `changed`. What else fires: `tab.alerted {kind, message}`, `request.opened` and `request.closed {answer, reason}`, `agent.sending` and `agent.turned`, `option.changed`, `registry.changed {kind, names}`, and `app.changed {client, keys, patch}` (whether one of a client's app's windows has the focus, `isFocused`; its `match` is the client's id).
 
 `on(event, opts, fn)` runs `fn` with each one and returns its disposer; `opts.match` is a glob or a list of globs tested against the event's `match` (an object's id, a tab's block, a request's kind). `opts.once` hears one.
 
@@ -349,6 +359,8 @@ An agent transport builds a tab up from `agent.turn` and takes its queue with `a
 ## Worker and components
 
 `ui.tsx` calls `main.ts`'s exports as async functions. The other way, `ui.post` streams messages to the plugin's own components, fast enough for tokens. Components hear the server's events with `useEvent`, and re-render from the models.
+
+More than one app can show the same server. Each draws the plugins' components, and one of them, the plugin host, runs their workers; another app's components call `main.ts` through the server. `ui.post` reaches only the plugin host's own windows: what every window should see goes in an event (`emit`, heard with `useEvent`) or an option.
 
 ```ts
 ui.post("delta", { text });                                                // main.ts
