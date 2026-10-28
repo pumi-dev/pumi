@@ -519,6 +519,20 @@ impl GpuixRenderer {
             .map_err(Error::from_reason)
     }
 
+    /// How much of what is behind the window its backgrounds hide, 0–1 (1, the default, is all
+    /// of it): every background the tree paints lets the rest through, however many are stacked,
+    /// and keeps its own colour, while text, icons and images stay opaque. Seen while the
+    /// background is not `"opaque"`. macOS only; elsewhere it does nothing.
+    #[napi]
+    pub fn set_window_glass(&self, opacity: f64) -> Result<()> {
+        self.update_window(move |_view, window, _cx| {
+            let done = crate::backdrop::set_glass(window, opacity);
+            window.refresh();
+            done
+        })?
+        .map_err(Error::from_reason)
+    }
+
     /// Whether the window is full screen now (the traffic lights are hidden then). Changes
     /// reach the window's handler as `windowFullscreen`, `hovered` saying which.
     #[napi]

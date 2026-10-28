@@ -195,6 +195,13 @@ export declare class GpuixRenderer {
    */
   setWindowBlur(radius: number): void
   /**
+   * How much of what is behind the window its backgrounds hide, 0–1 (1, the default, is all
+   * of it): every background the tree paints lets the rest through, however many are stacked,
+   * and keeps its own colour, while text, icons and images stay opaque. Seen while the
+   * background is not `"opaque"`. macOS only; elsewhere it does nothing.
+   */
+  setWindowGlass(opacity: number): void
+  /**
    * Whether the window is full screen now (the traffic lights are hidden then). Changes
    * reach the window's handler as `windowFullscreen`, `hovered` saying which.
    */

@@ -3,3 +3,7 @@
 pub fn set_blur(_window: &gpui::Window, _radius: f64) -> Result<(), String> {
     Ok(())
 }
+
+pub fn set_glass(_window: &gpui::Window, _opacity: f64) -> Result<(), String> {
+    Ok(())
+}

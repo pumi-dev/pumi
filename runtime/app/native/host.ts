@@ -728,6 +728,7 @@ export type NativeRenderer = MutationHost &
       | "registerFont"
       | "setWindowBackground"
       | "setWindowBlur"
+      | "setWindowGlass"
       | "isFullscreen"
       | "setTooltipStyle"
       | "promptForPaths"

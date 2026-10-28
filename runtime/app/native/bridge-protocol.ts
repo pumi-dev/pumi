@@ -61,6 +61,7 @@ export const RENDERER_VOID = new Set([
   "close",
   "setWindowBackground",
   "setWindowBlur",
+  "setWindowGlass",
   "setTooltipStyle",
   "resetDebugFrameOverlayStats",
   "activateWindow",

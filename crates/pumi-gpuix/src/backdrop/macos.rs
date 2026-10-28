@@ -35,3 +35,31 @@ pub fn set_blur(window: &gpui::Window, radius: f64) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Sets the window's opacity on its layer (the content view's, GPUI's `CAMetalLayer`), under the
+/// key the renderer reads (`vendor/gpui_apple`'s `GLASS_KEY`): a CALayer keeps a value for any key.
+pub fn set_glass(window: &gpui::Window, opacity: f64) -> Result<(), String> {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let handle = HasWindowHandle::window_handle(window).map_err(|error| error.to_string())?;
+    let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
+        return Ok(());
+    };
+    let view = appkit.ns_view.as_ptr().cast::<AnyObject>();
+    let opacity = if opacity.is_finite() { opacity.clamp(0., 1.) } else { 1. };
+    // SAFETY: `view` is the window's live content view (the handle borrows the window); the
+    // number and the key are autoreleased Foundation objects, and `layer` and
+    // `setValue:forKey:` are NSView's and CALayer's own.
+    unsafe {
+        let layer: *mut AnyObject = msg_send![view, layer];
+        if layer.is_null() {
+            return Ok(());
+        }
+        let value: *mut AnyObject = msg_send![class!(NSNumber), numberWithDouble: opacity];
+        let key: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c"pumiGlass".as_ptr()];
+        let _: () = msg_send![layer, setValue: value, forKey: key];
+    }
+    Ok(())
+}
