@@ -388,9 +388,16 @@ pub struct Plugin {
     pub main: Option<String>,
     pub version: Option<String>,
     pub description: Option<String>,
+    /// `package.json`'s `displayName`: its name as people read it (`Chat UI`), shown where its
+    /// `name` (`chat-ui`) would be. Outside `pumi`, so a pumi that does not know it still loads it.
+    pub display_name: Option<String>,
     pub manifest: Manifest,
 }
 impl Plugin {
+    /// Its name as people read it: its `displayName`, else its `name`.
+    pub fn title(&self) -> &str {
+        self.display_name.as_deref().unwrap_or(&self.manifest.name)
+    }
     /// `owner.name.`, which its options, blocks, commands and events start with.
     pub fn prefix(&self) -> String {
         format!("{}.{}.", self.owner, self.manifest.name.replace('-', "_"))
@@ -509,6 +516,7 @@ pub fn parse(text: &str, dir: &Path, src: Option<&str>) -> Result<Plugin, String
         main: string("main"),
         version: string("version"),
         description: string("description"),
+        display_name: string("displayName").map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
         manifest,
     })
 }
@@ -555,9 +563,9 @@ pub fn validate(m: &Manifest) -> Result<(), String> {
         }
     }
     for image in &m.images {
-        let ext = image.path.rsplit_once('.').map(|(_, e)| e).unwrap_or_default();
-        if !["png", "jpg", "jpeg", "webp", "gif"].contains(&ext) {
-            return Err(format!("image {:?} is not a PNG, JPEG, WebP or GIF", image.path));
+        let ext = image.path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+        if !["png", "jpg", "jpeg", "webp", "gif", "svg"].contains(&ext.as_str()) {
+            return Err(format!("image {:?} is not a PNG, JPEG, WebP, GIF or SVG", image.path));
         }
         if image.alt.is_empty() {
             return Err(format!("image {:?} has no `alt`", image.path));
@@ -760,6 +768,26 @@ mod tests {
         assert!(declared.get("scope").is_none());
         assert!(p.secrets().is_empty());
         assert_eq!(data_dir(Path::new("/s"), &p.id), Path::new("/s/plugins/pumi_dev.queue"));
+    }
+    #[test]
+    fn its_title_is_its_display_name_else_its_name() {
+        let title = |extra: &str| {
+            let text = format!(r#"{{ {extra} "pumi": {{ "name": "chat-ui", "api": 1 }} }}"#);
+            parse(&text, Path::new("/p"), None).map(|p| p.title().to_string()).unwrap()
+        };
+        assert_eq!(title(r#""displayName": " Chat UI ","#), "Chat UI");
+        assert_eq!(title(r#""displayName": "","#), "chat-ui");
+        assert_eq!(title(""), "chat-ui");
+    }
+    #[test]
+    fn images_are_pictures_with_alt_text_and_may_be_svg() {
+        let with = |images: &str| {
+            parse(&format!(r#"{{ "pumi": {{ "name": "x", "api": 1, "images": {images} }} }}"#), Path::new("/p"), None)
+                .map(|p| p.manifest.images.len())
+        };
+        assert_eq!(with(r#"[{ "path": "preview.svg", "alt": "A" }, { "path": "shot.PNG", "alt": "B" }]"#), Ok(2));
+        assert!(with(r#"[{ "path": "preview.html", "alt": "A" }]"#).unwrap_err().contains("or SVG"));
+        assert!(with(r#"[{ "path": "preview.svg", "alt": "" }]"#).unwrap_err().contains("no `alt`"));
     }
     #[test]
     fn slots_are_the_window_s_and_their_actions_run_its_commands() {

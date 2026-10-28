@@ -5,6 +5,11 @@
   "type": "object",
   "required": ["pumi"],
   "properties": {
+    "displayName": {
+      "description": "Its name as people read it (`Chat UI`), which Settings and the store show instead of `pumi.name` (`chat-ui`). Beside `pumi`, so a pumi that does not know it still loads the plugin.",
+      "type": "string",
+      "minLength": 1
+    },
     "pumi": { "$ref": "#/$defs/Manifest" }
   },
   "$defs": {
@@ -55,14 +60,14 @@
           "pattern": "\\.(png|jpe?g|webp|gif)$"
         },
         "images": {
-          "description": "What its store listing shows: PNG, JPEG, WebP or GIF files in the plugin. The first is its card's picture.",
+          "description": "What its store listing shows: PNG, JPEG, WebP, GIF or SVG files in the plugin. The first is its card's picture, cropped to 16:10.",
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["path", "alt"],
             "properties": {
-              "path": { "type": "string", "pattern": "\\.(png|jpe?g|webp|gif)$" },
+              "path": { "type": "string", "pattern": "\\.(png|jpe?g|webp|gif|svg)$" },
               "alt": { "type": "string", "minLength": 1 }
             }
           }

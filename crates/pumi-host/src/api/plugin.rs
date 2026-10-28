@@ -610,10 +610,10 @@ fn contributes(dir: &Path, plugin: Option<&pumi_api::manifest::Plugin>) -> Value
         "icons": dir.join("icons").is_dir(),
     })
 }
-/// A plugin's `name`, `version` and `description`: its package.json's, else its `pumi.toml`'s, or `{}`.
+/// A plugin's `name`, `displayName`, `version` and `description`: its package.json's, else its `pumi.toml`'s, or `{}`.
 fn meta(dir: &Path, plugin: Option<&pumi_api::manifest::Plugin>) -> Value {
     if let Some(p) = plugin {
-        return json!({ "name": p.manifest.name, "version": p.version, "description": p.description });
+        return json!({ "name": p.manifest.name, "displayName": p.display_name, "version": p.version, "description": p.description });
     }
     std::fs::read_to_string(dir.join("pumi.toml"))
         .ok()
@@ -625,8 +625,8 @@ fn meta(dir: &Path, plugin: Option<&pumi_api::manifest::Plugin>) -> Value {
 /// disabled, installed, meta, manifest, error, contributes}` each. The plugins bundled with pumi
 /// (`pumi/terminal`) are listed too: they can be turned off, not removed. `id` is `owner/name`
 /// and `manifest` its package.json's `pumi`, read without running it; `error` is why that could
-/// not be read (a plugin without one is not run). `meta` is its name, version and description,
-/// and `contributes` what it brings.
+/// not be read (a plugin without one is not run). `meta` is its name, display name, version and
+/// description, and `contributes` what it brings.
 pub(crate) fn installed(names: Vec<String>) -> Result<Vec<Value>> {
     let lock = lock_read();
     let mut out = Vec::new();
@@ -661,9 +661,9 @@ pub(crate) fn installed(names: Vec<String>) -> Result<Vec<Value>> {
     Ok(out)
 }
 /// The store's listings (option `pluginindex`) matching every word of `query` in their id,
-/// description, tags or keywords: `{id, name, owner, description, version, tags, keywords,
-/// install, src, path, commit, downloads, downloads7d, updatedAt, createdAt, icon, images,
-/// repo: {fullName, url, stars, …}}` each, `tags` holding `plugin` and/or `theme`; `install` is
+/// name, display name, description, tags or keywords: `{id, name, displayName, owner, description,
+/// version, tags, keywords, install, src, path, commit, downloads, downloads7d, updatedAt,
+/// createdAt, icon, images, repo: {fullName, url, stars, …}}` each, `tags` holding `plugin` and/or `theme`; `install` is
 /// what `plugin.add` takes. An empty query lists them all, most downloaded first.
 pub(crate) fn available(k: &Kernel, query: &str) -> Result<Vec<Value>> {
     let words: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_string).collect();
@@ -674,9 +674,10 @@ pub(crate) fn available(k: &Kernel, query: &str) -> Result<Vec<Value>> {
                 e[key].as_array().into_iter().flatten().filter_map(Value::as_str).collect()
             };
             let hay = format!(
-                "{} {} {} {} {}",
+                "{} {} {} {} {} {}",
                 e["id"].as_str().unwrap_or_default(),
                 e["name"].as_str().unwrap_or_default(),
+                e["displayName"].as_str().unwrap_or_default(),
                 e["description"].as_str().unwrap_or_default(),
                 words_of("tags").join(" "),
                 words_of("keywords").join(" ")

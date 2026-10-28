@@ -91,6 +91,8 @@ Everything a plugin owns is prefixed with its id, `owner.name.`: options, functi
 
 Beside `contributes`, the `pumi` key takes `themes` (theme directories, see [Themes](themes.md)), `activation`, `uses`, `minPumi`, `isolate`, `icon` and `images`.
 
+Its name as people read it, `Chat UI` for `chat-ui`, is package.json's `displayName`, beside `pumi`: Settings and the store show it in place of `name`.
+
 `activation` says when the worker starts: `onStartup`, `onBlock:<id>`, `onCommand:<id>` or `onEvent:<name>`; with none, when one of its blocks opens or one of its commands runs. `uses` (`network`, `processes`, `files`, `addons`) is what it needs, for whoever installs it.
 
 ## Functions
