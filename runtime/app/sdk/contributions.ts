@@ -13,6 +13,8 @@ export interface ComponentItem {
   plugin: string
   title?: string
   icon?: string
+  /** The plugin's directory: where a `plugin:` icon of its is. */
+  dir?: string
   /** A renderer of the core's `file` block: the files it draws (`*.md`); every file without. */
   match?: string[]
   Component: ComponentType<any>
@@ -150,13 +152,24 @@ export function useRenderer(tab: string | undefined): ComponentItem | undefined 
   return renderer
 }
 
+/** A plugin's prefix is `owner.name.` with `-` as `_`, which a block of its own starts with. */
+const ownsBlock = (plugin: string, block: string) => block.startsWith(`${plugin.replace("/", ".").replace(/-/g, "_")}.`)
+
+/**
+ * The renderer of the plugin that defines `block` (`owner.name.id`), with the block's `icon` and
+ * the plugin's `dir`: `undefined` for a core block, or while that plugin is not on.
+ */
+export function useBlockOwner(block: string | undefined): ComponentItem | undefined {
+  useSyncExternalStore(subscribe, () => version)
+  return block ? (registry.renderers.get(block) ?? NONE).find((r) => ownsBlock(r.plugin, block)) : undefined
+}
+
 /** What draws `p`'s block, `chosen` being the `renderers` option (`useRenderer`, outside React). */
 export function rendererFor(p: { block: string; options?: Record<string, unknown> | null }, chosen: Record<string, string> | undefined): ComponentItem | undefined {
   const list = registry.renderers.get(p.block) ?? NONE
   if (list.length === 0) return undefined
   const by = (plugin: unknown) => (typeof plugin === "string" && plugin ? list.find((r) => r.plugin === plugin) : undefined)
-  // A plugin's prefix is `owner.name.` with `-` as `_`, which a block of its own starts with.
-  const own = list.find((r) => p.block.startsWith(`${r.plugin.replace("/", ".").replace(/-/g, "_")}.`))
+  const own = list.find((r) => ownsBlock(r.plugin, p.block))
   if (p.block === FILE) return by(p.options?.[TAB_RENDERER]) ?? by(p.options?.[VIEWER]) ?? fileRenderer(list, String(p.options?.path ?? ""), chosen?.[FILE])
   return by(p.options?.[TAB_RENDERER]) ?? own ?? by(chosen?.[p.block]) ?? by(BUNDLED[p.block]) ?? list[0]
 }

@@ -7,6 +7,9 @@
 // - the state: `useApp`, `useSessions`, `useViews`, `useTab`, `useFloats`, `useZoomed`, …
 // - the layout: `useLayout`, `leavesOf`, `panesOf`, `tabsOf`, `shownOf`, `paneOfTab`, `leafOf`,
 //   `usePaneTabs` (whether panes hold tabs)
+// - a tab's icon: `useTabIcon` (its `@icon`, its agent's mark, its block's), `useTabStatus`,
+//   `showsStatus` (the app's rule for which to show it), and the `TabIcon` part, which every
+//   place showing a tab's icon draws (`IconImage` and `TabIcon` in `pumi` draw them)
 // - slots and blocks: `useSlot` (components, and actions as data: the plugins' and the app's own),
 //   `useRenderer`, `useRenderers`, `renderComponent`, `Boundary`
 // - actions: `useMenu` (a slot's actions in the theme's `Menu`), `addActions`, `grouped`,
@@ -63,7 +66,9 @@ export {
   type IconButtonProps,
   type LayoutStyle,
   type MenuProps,
+  type TabIconProps,
 } from "./theme.ts"
+export { ICON, iconSource, showsStatus, tabIcon, useTabIcon, useTabStatus, type IconFrom, type IconSource, type TabIconInfo } from "./icons.ts"
 export { Boundary, renderComponent, usePlugin, useRenderer, useRenderers, useSlot, type ComponentItem } from "./contributions.ts"
 export { addActions, grouped, shortcut, type Action, type ActionContext, type ActionProvider } from "./actions.ts"
 export { useMenu } from "./menu.ts"

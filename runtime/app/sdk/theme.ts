@@ -399,6 +399,20 @@ export interface Components {
    * component draws with `IconButton` from `pumi`, so a component's buttons look like the theme's.
    */
   IconButton: ComponentType<IconButtonProps>
+  /**
+   * A tab's icon, wherever the window shows one (its pane's strip, the side bar, a view's tabs,
+   * a tab being dragged): its own (`useTabIcon`: its `@icon`, its agent's mark, its block's), or
+   * its status (`useTabStatus`) as the theme likes. `color` is what the icon is tinted with, when
+   * the place it is in has a colour of its own.
+   */
+  TabIcon: ComponentType<TabIconProps>
+}
+
+/** What a theme's `TabIcon` part is given. */
+export interface TabIconProps {
+  tab: string
+  size?: number
+  color?: string
 }
 
 export interface MenuProps {

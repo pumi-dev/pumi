@@ -141,7 +141,7 @@ function register(entry: plugins.Entry) {
   // Its own blocks, each drawn by the export named for it (`diagram` → `Diagram`), and the
   // blocks it draws but did not define.
   for (const block of c?.blocks ?? []) {
-    addRenderer(`${entry.prefix}${block.id}`, { id: block.id, plugin: entry.id, title: block.title, icon: block.icon, Component: lazyExport(entry, pascal(block.id)) })
+    addRenderer(`${entry.prefix}${block.id}`, { id: block.id, plugin: entry.id, title: block.title, icon: block.icon, dir: entry.dir, Component: lazyExport(entry, pascal(block.id)) })
   }
   for (const [block, given] of Object.entries(c?.renderers ?? {})) {
     const name = typeof given === "string" ? given : given.export

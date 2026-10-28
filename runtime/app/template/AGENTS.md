@@ -25,7 +25,9 @@ async functions.
   `owner.name.browser.back` with the tab's id and then the args. `contributes.renderers` draws a
   block it did not define (`{ "terminal": "MyTerminal" }`); the core's `file` block (a file in a
   tab, `tab.open("file", {path})`) is drawn by the renderer whose globs fit the file best
-  (`{ "file": { "export": "Viewer", "match": ["*.md"] } }`).
+  (`{ "file": { "export": "Viewer", "match": ["*.md"] } }`). A block's `icon` is what its tabs
+  show: an app icon's name, a `data:image/…` URI, or `plugin:icons/x.svg`, a file of the plugin's.
+  One tab shows its own while its `@icon` option is set (a page's favicon), to the same forms.
 - `contributes.traits`: what a tab is beside its block. A tab has trait `x` while its option
   `@owner.name.x` is set; its fields are `@owner.name.x.<field>`.
 - Everything of its own is prefixed `owner.name.`.

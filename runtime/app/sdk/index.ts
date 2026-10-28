@@ -25,7 +25,7 @@ export {
 export { cache, Model } from "../worker/sdk/model.ts"
 export { Pane, Plugin, Request, Session, Tab, View } from "../worker/sdk/models.gen.ts"
 export type { Data, Fields } from "../worker/sdk/model.ts"
-export { defineTheme, useAppearance, useMetrics, usePalette, useTheme, type Appearance, type DockSpec, type IconButtonProps, type Metrics, type TerminalPalette, type ThemeSpec, type Tokens } from "./theme.ts"
+export { defineTheme, useAppearance, useMetrics, usePalette, useTheme, type Appearance, type DockSpec, type IconButtonProps, type Metrics, type TabIconProps, type TerminalPalette, type ThemeSpec, type Tokens } from "./theme.ts"
 export { usePlugin } from "./contributions.ts"
 export { useFont, type Font } from "./font.ts"
 // A plugin's own channel from its `main.ts` (`ui.post`), and the server's events.
@@ -33,7 +33,9 @@ export { useChannel, useChannelListener } from "./channels.ts"
 export { useEvent, type UseEventOptions, type WindowEvent } from "./events.ts"
 export { conversationNames, type ConversationChanged, type ConversationProvider, type ConversationRead } from "../worker/sdk/conversation.ts"
 export { useWebview, webview, webviewRun, webviewSnapshot, WebView, type WebState, type WebViewProps } from "./webview.tsx"
-export { Icon, IconButton, type IconProps } from "./elements.tsx"
+export { Icon, IconButton, IconImage, TabIcon, type IconProps } from "./elements.tsx"
+// A tab's icon and status, for a theme's `TabIcon` part or a plugin's own list of tabs.
+export { ICON, iconSource, showsStatus, useTabIcon, useTabStatus, type IconFrom, type IconSource, type TabIconInfo } from "./icons.ts"
 // The renderer's own kit, for a theme or a component: native motion (keyframes, repeats, springs),
 // presence, portals, and the headless select to style.
 export {

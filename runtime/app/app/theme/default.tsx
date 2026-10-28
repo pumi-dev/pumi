@@ -40,7 +40,9 @@ import {
   type HeldModifiers,
   type Tree,
 } from "../state.ts"
-import { METRICS, useComponents, useMetrics, useTheme, withOpacity, type Components, type DialogProps, type IconButtonProps, type Metrics, type MenuProps } from "../../sdk/theme.ts"
+import { METRICS, useComponents, useMetrics, useTheme, withOpacity, type Components, type DialogProps, type IconButtonProps, type Metrics, type MenuProps, type TabIconProps } from "../../sdk/theme.ts"
+import { IconImage, TabIcon } from "../../sdk/elements.tsx"
+import { showsStatus, useTabIcon, useTabStatus } from "../../sdk/icons.ts"
 import { useHover } from "../../sdk/kit.tsx"
 import { useOption, useRegistry, useTab as useTabModel } from "../../sdk/state.ts"
 import { serverOf } from "../ids.ts"
@@ -516,7 +518,7 @@ function ViewIcons({ view, ring }: { view: string; ring: string }) {
       {shown.map((p, i) => (
         // Each later one over the one before it, as the tabs read left to right.
         <div key={p.tab_id} style={chip(i)}>
-          <TabIcon tab={p.tab_id} block={p.block} />
+          <TabIcon tab={p.tab_id} size={14} />
         </div>
       ))}
       {more > 0 ? (
@@ -531,20 +533,17 @@ function ViewIcons({ view, ring }: { view: string; ring: string }) {
 }
 
 /**
- * The status a tab's icon shows: an agent's (`unknown` while it says none), or what any other
- * tab's program reported (OSC 7501, or a fallback: OSC 9;4, a spinning title, a notification).
- * None: the tab's kind shows instead.
+ * The app's own `TabIcon` part: a tab's status while it says something happened (working, done,
+ * blocked, failed), else its own icon (`useTabIcon`): an agent's mark while it is idle, a page's
+ * favicon, a plugin block's. A tab with only the core's icon for its block shows any status it
+ * has instead, an agent's ring as much as a spinner.
  */
-function useTabStatus(tab: string | undefined): string | undefined {
-  const agent = useAgentOf(tab)
-  const own = useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.agent_status)
-  return agent ? agent.agent_status || "unknown" : own || undefined
-}
-
-function TabIcon({ tab, block }: { tab: string; block: string }) {
+function DefaultTabIcon({ tab, size = 14, color }: TabIconProps) {
   const t = useTheme()
   const status = useTabStatus(tab)
-  return status ? <StatusIcon status={status} size={14} /> : <Icon name={KIND_ICON[block] ?? "box"} size={13} color={t.muted} />
+  const icon = useTabIcon(tab)
+  if (showsStatus(status, icon)) return <StatusIcon status={status} size={size} />
+  return <IconImage icon={icon} size={size} color={color ?? t.muted} />
 }
 
 /** A slot's components, given `args`, and its actions as buttons. Memoized: give it the same `args` object to keep it from drawing again. */
@@ -1179,7 +1178,6 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
   const strip = usePaneTabs()
   const front = active ?? tabs[0]
   const tab = useTab(front)
-  const status = useTabStatus(front)
   const tree = useLayout(tab?.view_id)
   const draggable = useDraggable<moves.Carried>({ kind: "pumi.tab", tab: front ?? "" })
   const toolbar = useMemo(() => ({ tab: front }), [front])
@@ -1276,7 +1274,7 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
       title={tab.cwd ?? undefined}
       style={{ ...bar, gap: 6, paddingLeft: 10, opacity: draggable.dragging ? 0.55 : 1, cursor: draggable.dragging ? "grabbing" : "default" }}
     >
-      {status ? <StatusIcon status={status} size={12} /> : <Icon name={KIND_ICON[tab.block] ?? "box"} size={12} color={t.faint} />}
+      <TabIcon tab={tab.tab_id} size={12} color={t.faint} />
       <text style={{ fontSize: ts(12), color: focused ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabTitle(tab)}</text>
       <div style={{ flexGrow: 1 }} />
       {/* A plugin's buttons sit with the pane's own, spaced as they are. */}
@@ -1635,7 +1633,6 @@ function PaneTab({ tab: id, pane, index, active, focused }: { tab: string; pane:
   const m = useMetrics()
   const frontColor = t.editor
   const tab = useTab(id)
-  const status = useTabStatus(id)
   const tree = useLayout(tab?.view_id)
   const [hovered, hover] = useHover()
   // The front tab's background stops the mouse there: it tells the pane it is over it itself.
@@ -1715,7 +1712,7 @@ function PaneTab({ tab: id, pane, index, active, focused }: { tab: string; pane:
         hover: { backgroundColor: active ? frontColor : t.hover, color: t.text },
       }}
     >
-      {status ? <StatusIcon status={status} size={14} /> : <Icon name={KIND_ICON[tab.block] ?? "box"} size={14} color={active ? t.muted : t.faint} />}
+      <TabIcon tab={id} size={14} color={active ? t.muted : t.faint} />
       <text style={{ fontSize: ts(13), whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{title}</text>
       {detail ? <text style={{ fontSize: ts(12), color: t.faint, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 2, minWidth: 0 }}>{detail}</text> : null}
       <div
@@ -1997,7 +1994,6 @@ function FloatBar({ tab: id, held, onPress }: { tab: string; held: boolean; onPr
   const ts = useTextSize()
   const t = useTheme()
   const tab = useTab(id)
-  const status = useTabStatus(id)
   if (!tab) return null
   return (
     <div
@@ -2018,7 +2014,7 @@ function FloatBar({ tab: id, held, onPress }: { tab: string; held: boolean; onPr
         cursor: held ? "grabbing" : "grab",
       }}
     >
-      {status ? <StatusIcon status={status} size={12} /> : <Icon name={KIND_ICON[tab.block] ?? "box"} size={12} color={t.faint} />}
+      <TabIcon tab={id} size={12} color={t.faint} />
       <text style={{ fontSize: ts(12), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabTitle(tab)}</text>
       <div style={{ flexGrow: 1 }} />
       <IconButton icon="close" title="Close Tab" color={t.text} onClick={() => call(via(id, "tab.close"), id).catch(swallow)} />
@@ -2641,7 +2637,6 @@ function MoveGhost() {
   const m = useMetrics()
   const drag = useDragState()
   const it = moves.carried(drag?.data)
-  const agent = useAgentOf(it?.kind === "pumi.tab" ? it.tab : undefined)
   if (!drag || !it) return null
   const snapshot = store.get().snapshot
   if (it.kind === "pumi.tab") {
@@ -2668,7 +2663,7 @@ function MoveGhost() {
             boxShadow: { offsetX: 0, offsetY: 4, blurRadius: 12, spreadRadius: 0, color: "#00000055" },
           }}
         >
-          {agent ? <StatusIcon status={agent.agent_status || "unknown"} size={14} /> : <Icon name={KIND_ICON[tab.block] ?? "box"} size={14} color={t.muted} />}
+          <TabIcon tab={tab.tab_id} size={14} color={t.muted} />
           <text style={{ fontSize: ts(13), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabTitle(tab)}</text>
         </div>
       </anchored>
@@ -2868,7 +2863,6 @@ function goTo(window: ReturnType<typeof useWindow>, session: string, view?: stri
   shown.then(() => tab && call(via(tab, "tab.focus"), tab)).catch(swallow)
 }
 
-const KIND_ICON: Record<string, string> = { terminal: "terminal", browser: "tool_web", files: "folder", image: "image", [NEW_TAB]: "plus" }
 
 /** The most urgent first: what a folded level says of the agents in it. */
 const URGENCY = ["error", "blocked", "working", "done", "idle", "unknown"]
@@ -3436,7 +3430,7 @@ function TabRow({ tab }: { tab: string }) {
         >
           <Guides depth={depth} />
           <div style={{ display: "flex", width: 14, height: 14, flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
-            <Icon name={KIND_ICON[p.block] ?? "box"} size={12} color={t.muted} />
+            <TabIcon tab={tab} size={12} color={t.muted} />
           </div>
           <text style={{ fontSize: ts(12), color: selected || hovered ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabTitle(p)}</text>
           {hovered || shown ? <RowButtons menu={show} close={close} /> : null}
@@ -3514,7 +3508,7 @@ function Agent({ tab }: { tab: string }) {
           style={treeRow(depth, tab === focused && agent.view_id === front, t)}
         >
           <Guides depth={depth} />
-          <StatusIcon status={status} />
+          <TabIcon tab={tab} />
           <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0 }}>
             <text style={{ fontSize: ts(12), fontWeight: loud ? 600 : 400, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{label}</text>
             <Slot slot="agent.footer" args={footer} />
@@ -3590,4 +3584,5 @@ export const DEFAULT: Components = {
   Menu,
   Dialog,
   IconButton: DefaultIconButton,
+  TabIcon: DefaultTabIcon,
 }

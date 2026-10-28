@@ -21,7 +21,7 @@ export {
   type RendererProps,
   type WindowInfo,
 } from "../sdk/state.ts"
-export { defineTheme, useAppearance, useMetrics, usePalette, useTheme, type Appearance, type DockSpec, type IconButtonProps, type Metrics, type TerminalPalette, type ThemeSpec, type Tokens } from "../sdk/theme.ts"
+export { defineTheme, useAppearance, useMetrics, usePalette, useTheme, type Appearance, type DockSpec, type IconButtonProps, type Metrics, type TabIconProps, type TerminalPalette, type ThemeSpec, type Tokens } from "../sdk/theme.ts"
 export { usePlugin } from "../sdk/contributions.ts"
 export * from "../sdk/settings/index.ts"
 export { haptic, type HapticPattern } from "../sdk/haptic.ts"
@@ -31,7 +31,8 @@ export { useFont, type Font } from "../sdk/font.ts"
 export { useChannel, useChannelListener } from "../sdk/channels.ts"
 export { useEvent, type UseEventOptions, type WindowEvent } from "../sdk/events.ts"
 export { useWebview, webview, webviewRun, webviewSnapshot, WebView, type WebState, type WebViewProps } from "../sdk/webview.tsx"
-export { Icon, IconButton, type IconProps } from "../sdk/elements.tsx"
+export { Icon, IconButton, IconImage, TabIcon, type IconProps } from "../sdk/elements.tsx"
+export { ICON, iconSource, showsStatus, useTabIcon, useTabStatus, type IconFrom, type IconSource, type TabIconInfo } from "../sdk/icons.ts"
 // The renderer's own kit, for a theme or a component: native motion (keyframes, repeats, springs),
 // presence, portals, and the headless select to style.
 export {
