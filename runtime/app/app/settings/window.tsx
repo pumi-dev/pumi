@@ -9,7 +9,7 @@ import { createNativeRenderer } from "../../native/runtime.ts"
 import { ThemeContext } from "../../sdk/theme.ts"
 import { chordOf } from "../keymap.ts"
 import { AppLayers } from "../layers.tsx"
-import { useResolvedTheme } from "../root.tsx"
+import { OwnPaletteContext, useResolvedTheme } from "../root.tsx"
 import { WindowContext, type WindowInfo } from "../state.ts"
 import type { WindowManager } from "../windows.tsx"
 import { SettingsApp, type Route } from "./app.tsx"
@@ -120,7 +120,7 @@ function SettingsTree({ window }: { window: SettingsWindow }) {
     (l) => window.subscribe(l),
     () => window.route,
   )
-  const { state } = useResolvedTheme(window.safe)
+  const { state, own } = useResolvedTheme(window.safe)
   const tree: ReactNode = (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <SettingsApp route={route} safe={window.safe} />
@@ -129,7 +129,9 @@ function SettingsTree({ window }: { window: SettingsWindow }) {
   )
   return (
     <ThemeContext.Provider value={state}>
-      <WindowContext.Provider value={info}>{tree}</WindowContext.Provider>
+      <OwnPaletteContext.Provider value={own}>
+        <WindowContext.Provider value={info}>{tree}</WindowContext.Provider>
+      </OwnPaletteContext.Provider>
     </ThemeContext.Provider>
   )
 }

@@ -1,7 +1,7 @@
 // A window's tree: the theme in use, resolved for the appearance, drawing its `Window` (or the
 // app's). A theme that throws falls back to the app's own window, saying why.
 import { readFileSync } from "node:fs"
-import { useEffect, useMemo, useState, type ComponentType } from "react"
+import { createContext, useEffect, useMemo, useState, type ComponentType } from "react"
 import { Engine } from "../native/addon.js"
 import { onSlowLoop, slowLoopWarning } from "../react/components/index.ts"
 import { useGpuix } from "../react/hooks/use-gpuix.ts"
@@ -168,7 +168,7 @@ const NO_LINES: string[] = []
  * else pumi's own with its settings, for the look the theme says, with the terminals' palette.
  * Settings draws with it too (`settings/window.tsx`).
  */
-export function useResolvedTheme(safe: boolean, failed?: string): { state: ThemeState & { palette: TerminalPalette }; shown?: ThemeSpec; drawn: ThemeSpec; plugin?: string } {
+export function useResolvedTheme(safe: boolean, failed?: string): { state: ThemeState & { palette: TerminalPalette }; own: TerminalPalette; shown?: ThemeSpec; drawn: ThemeSpec; plugin?: string } {
   const name = useOption<string>("ui_theme")
   // A theme that froze the app's JS is left out until the app starts again (`app/mode.ts`).
   const { spec: loaded, error: themeError } = useThemeSpec(safe || themeOff || name === "default" ? undefined : name)
@@ -206,8 +206,19 @@ export function useResolvedTheme(safe: boolean, failed?: string): { state: Theme
     // renderer lets the desktop through every background by as much (`window.setGlass`).
     return { ...resolved, palette: given }
   }, [drawn, appearance, prefix, scheme, matched, accent, pumi, follows])
-  return { state, shown, drawn, plugin }
+  // The palette with no scheme picked: the theme's own, on its own look (pumi's is the default's
+  // dark one), for Settings to show beside the schemes.
+  const ownPalette = useMemo<TerminalPalette>(() => {
+    if (!scheme) return state.palette
+    const mode = pumi ? appearanceOf(DARK.editor) : look
+    const tokens = { ...(mode === "dark" ? DARK : LIGHT), ...(pumi ? {} : drawn.colors?.[mode]) }
+    return { ...TERMINAL[mode], background: tokens.window, ...drawn.terminal?.[mode] }
+  }, [state.palette, scheme, pumi, look, drawn])
+  return { state, own: ownPalette, shown, drawn, plugin }
 }
+
+/** The palette the theme gives with no scheme picked (`useResolvedTheme`'s `own`), in Settings. */
+export const OwnPaletteContext = createContext<TerminalPalette | undefined>(undefined)
 
 const HEX = /^#[0-9a-f]{6}$/i
 /** The terminals' colours set one by one (`terminal_background`, `terminal_color_1`, a Ghostty

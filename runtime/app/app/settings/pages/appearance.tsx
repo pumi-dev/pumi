@@ -3,12 +3,13 @@
 // and mouse.
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useContext, useEffect, useMemo, useState } from "react"
 import { guifont, parseFont, FONT_SIZE_RANGE } from "../../../sdk/font.ts"
 import { Button, ImageCards, Note, OptionRow, Page, Row, Section, SelectField, Stepper, TextField, useSettings, useTextSize, type ImageCard } from "../../../sdk/settings/index.ts"
 import { useTheme, type TerminalPalette } from "../../../sdk/theme.ts"
 import { assets } from "../../assets.ts"
 import { engine } from "../../engine.ts"
+import { OwnPaletteContext } from "../../root.tsx"
 import { schemeNames, terminalScheme } from "../../theme/terminal/index.ts"
 import { useThemes } from "../../themes.ts"
 import { GHOSTTY_FILE, ensureFile, importFromGhostty, inspect } from "../../ghostty.ts"
@@ -54,15 +55,16 @@ function useSchemePicker(): Picker {
   const settings = useSettings()!
   const value = String(settings.value("terminal_colorscheme") ?? "")
   const font = parseFont(settings.value("guifont"), settings.value("linespace")).family
+  const own = useContext(OwnPaletteContext)
   // Every card once per font and scheme, so a keystroke in the search only filters them: built
   // anew, each of the hundreds of previews was a fresh element, and the strip drew them all again.
   const cards = useMemo<ImageCard[]>(() => {
     const names = schemeNames()
-    const out: ImageCard[] = [{ value: "", title: MATCH_THEME, preview: <Blank caption="The theme's own colors" /> }]
+    const out: ImageCard[] = [{ value: "", title: MATCH_THEME, preview: own ? <SchemePreview s={own} font={font} /> : <Blank caption="The theme's own colors" /> }]
     if (value && !names.includes(value)) out.push({ value, title: value, preview: <Blank caption="Not a bundled scheme" /> })
     for (const name of names) out.push({ value: name, title: name, preview: <SchemePreview s={terminalScheme(name)!} font={font} /> })
     return out
-  }, [value, font])
+  }, [value, font, own])
   return { cards, value, onChange: (v) => settings.set("terminal_colorscheme", v || null) }
 }
 
