@@ -40,6 +40,7 @@ async functions.
 pumi plugin add .     # link it and load it
 pumi plugin dev .     # reload on save
 pumi plugin logs {{name}}
+bun install && bun run check   # types, from the SDK (@pumi-dev/sdk, installed as `pumi`)
 ```
 
 Reference: https://pumi.dev/docs/ and `pumi help`.

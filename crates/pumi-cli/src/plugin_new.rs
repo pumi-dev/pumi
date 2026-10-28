@@ -56,15 +56,21 @@ pub(crate) fn owner_guess() -> String {
 /// colours and metrics, to change from there.
 const THEME: &str = include_str!("../../../runtime/app/template/theme/theme.tsx");
 
-/// A theme plugin's manifest: its one theme is `themes/<name>`.
+/// A theme plugin's manifest: its one theme is `themes/<name>`. Its devDependencies are the plugin
+/// template's (the SDK among them), so `tsc` checks a theme as it does a plugin.
 fn theme_package(name: &str, owner: &str) -> String {
+    let template = TEMPLATE.iter().find(|(path, _)| *path == "package.json").map(|(_, text)| *text).unwrap_or("{}");
+    let dev = serde_json::from_str::<serde_json::Value>(template)
+        .ok()
+        .and_then(|p| p.get("devDependencies").cloned())
+        .unwrap_or_else(|| json!({}));
     let manifest = serde_json::json!({
         "name": format!("pumi-{name}"),
         "version": "0.1.0",
         "description": format!("{name}: a UI theme for pumi, from the default."),
         "type": "module",
         "scripts": { "check": "tsc --noEmit" },
-        "devDependencies": { "@types/bun": "1.3.14", "@types/react": "19.2.2", "typescript": "5.9.3" },
+        "devDependencies": dev,
         "pumi": { "name": name, "owner": owner, "api": pumi_api::API_LEVEL, "themes": [format!("themes/{name}")] },
     });
     serde_json::to_string_pretty(&manifest).unwrap_or_default() + "\n"
@@ -206,5 +212,21 @@ mod tests {
         assert!(plugin.manifest.contributes.options.contains_key("position"));
         assert!(files("queue", "me").iter().all(|(_, text)| !text.contains("{{name}}") && !text.contains("{{owner}}")));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The SDK a new plugin or theme installs is the one `bun run sdk` builds (SDK_VERSION in
+    /// runtime/app/build/sdk.ts), so bumping one without the other fails here.
+    #[test]
+    fn a_new_plugin_installs_the_sdk_that_is_built() {
+        let build = include_str!("../../../runtime/app/build/sdk.ts");
+        let version = build
+            .lines()
+            .find_map(|l| l.strip_prefix("const SDK_VERSION = \"")?.strip_suffix('"'))
+            .expect("SDK_VERSION in build/sdk.ts");
+        let want = format!("npm:@pumi-dev/sdk@{version}");
+        let plugin: serde_json::Value = serde_json::from_str(&files("queue", "me")[0].1).unwrap();
+        assert_eq!(plugin["devDependencies"]["pumi"], want.as_str());
+        let theme: serde_json::Value = serde_json::from_str(&theme_package("night", "me")).unwrap();
+        assert_eq!(theme["devDependencies"]["pumi"], want.as_str());
     }
 }
