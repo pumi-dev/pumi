@@ -444,11 +444,15 @@ impl Kernel {
     }
     /// A free name for a new session: the one asked for, else its folder's (`:` and `.`
     /// as `_`, as tmux does, and `-2`, `-3`, … while taken), else tmux's numbers from 0.
+    /// A session with no folder is named for the home folder its terminals start in.
     pub fn session_name(&self, wanted: Option<String>, cwd: Option<&str>) -> Result<String> {
         let taken = |name: &str| self.model.sessions.values().any(|s| s.name == name);
+        let home = pumi_proto::paths::home_dir();
         if wanted.is_none()
             && let Some(folder) = cwd
-                .and_then(|cwd| std::path::Path::new(cwd).file_name())
+                .map(std::path::Path::new)
+                .unwrap_or(&home)
+                .file_name()
                 .map(|name| name.to_string_lossy().replace([':', '.'], "_"))
                 .filter(|name| !name.trim().is_empty())
         {

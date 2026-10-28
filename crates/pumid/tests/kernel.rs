@@ -197,6 +197,12 @@ fn a_session_without_a_name_is_named_for_its_folder() {
     assert_eq!(name(json!({"kind": "session", "cwd": "/tmp/my.app"})), "my_app");
     assert_eq!(name(json!({"kind": "session", "cwd": "/tmp/my.app/"})), "my_app-2");
     assert_eq!(name(json!({"kind": "session", "cwd": "/"})), "0");
+    let home = pumi_proto::paths::home_dir();
+    if let Some(home) = home.file_name() {
+        let home = home.to_string_lossy().replace([':', '.'], "_");
+        assert_eq!(name(json!({"kind": "session"})), home, "no folder is the home folder's name");
+        assert_eq!(name(json!({"kind": "session"})), format!("{home}-2"));
+    }
     assert_eq!(name(json!({"kind": "session", "name": "work", "cwd": "/tmp"})), "work");
 }
 #[test]
