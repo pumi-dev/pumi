@@ -36,6 +36,9 @@ GPUI and Zed
   crates/pumi-gpuix/src/custom_elements/input.rs follows GPUI's input example
   (crates/gpui/examples/input.rs, Apache-2.0).
 
+  GPUI's Metal renderer (vendor/gpui_apple) comes from the same fork, under the same license.
+  Changed for pumi.
+
   The macOS editing shortcuts in src/term/keys.rs (MAC_EDITING) are those of Zed's terminal keymap
   (assets/keymaps/default-macos.json). Copyright Zed Industries, Inc. Licensed under the GNU
   General Public License, version 3 or later.

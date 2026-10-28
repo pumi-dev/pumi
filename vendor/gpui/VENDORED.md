@@ -61,3 +61,15 @@ transform of its own — a glyph `scale_factor` — and nothing composed with it
 and `src/` over this directory, write its `Cargo.toml` with the workspace's fields resolved, and
 apply the `pumi:` source changes again (`git diff` against the pristine crate shows them). The
 rev moves in the root `Cargo.toml`'s `[workspace.dependencies]` and `[patch]` at the same time.
+
+**gpui_apple** (`vendor/gpui_apple`, GPUI's Metal renderer) is vendored the same way, with an
+empty `[workspace]` of its own in place of an entry in the root's `exclude`, for one change:
+
+- `src/metal_renderer.rs`, `src/shaders.metal`: a see-through window's backgrounds are glass.
+  The app sets the window's opacity on its layer (`pumiGlass`, pumi-gpuix's `set_window_glass`)
+  and the renderer reads it each frame as the blend colour. Quads, shadows and paths draw
+  premultiplied and scaled by it, and every primitive's alpha is drawn over the one under it
+  (upstream adds them), so a background lets as much of the desktop through however many are
+  stacked, in its own colour, while text, icons, images and video stay opaque. Upstream, a
+  translucent part on another made the window opaque there and darker, so a theme had to draw
+  each part in a single translucent layer.
