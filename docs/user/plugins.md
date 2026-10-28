@@ -451,7 +451,7 @@ Both files import from `"pumi"`. The app provides it at run time; for type-check
 | models | `Session` `View` `Pane` `Tab` `Request` `Plugin` `Model` `cache` |
 | theme | `defineTheme` `useTheme` `usePalette` `useMetrics` `useAppearance` `useFont` |
 | hooks | `useChannel` `useChannelListener` `useEvent` `usePlugin` |
-| elements | `div` `text` `img` `svg` `scroll` `input` `terminal` `Icon` `IconButton` |
+| elements | `div` `text` `img` `svg` `scroll` `input` `terminal` `Icon` `IconButton`; an element's `ref` (`ElementRef`) has `focus()`, `scrollTo()`, `scrollIntoView()`, and a `virtual-list`'s `scrollToItem()` |
 | web | `WebView` `useWebview` `webview` `webviewRun` `webviewSnapshot` |
 | kit | `motion` `Select` `useDraggable` `useDroppable` `useDragState` `useHover` `useInterval` `useNow` |
 | settings | `Page` `Section` `Row` `OptionRow` `Switch` `Slider` `Stepper` `TextField` `Button` `KeyRecorder` `KeyChip` `ChoiceGrid` `ImageCards` `useSettings` `haptic` `openSettings` `keyGlyphs` |

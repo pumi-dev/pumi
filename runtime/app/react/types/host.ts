@@ -84,6 +84,9 @@ export interface Instance {
   type: ElementType
   props: Props
   scrollIntoView?(): void
+  /** Gives this element the keyboard focus, as the DOM's `focus()`: a field, or an element with a
+   *  `tabIndex`. One not drawn yet takes it once it is, unless the user moves the focus first. */
+  focus?(): void
   /** A scrolling box's: scroll its content to `x`, `y` px from its start, as the DOM's
    *  `scrollTo`. Before the box is first laid out it does nothing; `onLayout` says when it is. */
   scrollTo?(x: number, y: number): void

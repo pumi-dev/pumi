@@ -59,6 +59,9 @@ function attachHostMethods(instance: Instance): void {
   instance.scrollIntoView = () => {
     container.nativeRenderer.scrollIntoView?.(instance.id)
   }
+  instance.focus = () => {
+    container.nativeRenderer.focusElement?.(instance.id)
+  }
   // The native offset grows negative as the content moves up and left.
   instance.scrollTo = (x, y) => {
     container.nativeRenderer.scrollTo?.(instance.id, -x, -y)
