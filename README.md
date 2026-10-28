@@ -43,8 +43,7 @@ irm https://pumi.dev/install.ps1 | iex
 ```
 
 Or unpack an archive from [GitHub releases](https://github.com/pumi-dev/pumi/releases). Needs
-macOS 14+, Linux with glibc 2.35+, or Windows 10 1809+. Updates apply on restart; set `autoupdate`
-to `false` to turn them off.
+macOS 14+, Linux with glibc 2.35+, or Windows 10 1809+.
 
 ## Quickstart
 

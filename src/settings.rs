@@ -20,7 +20,7 @@ pub struct UpdateSettings {
 }
 impl Default for UpdateSettings {
     fn default() -> Self {
-        Self { auto: true, plugins: false }
+        Self { auto: false, plugins: false }
     }
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

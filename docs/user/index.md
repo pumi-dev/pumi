@@ -35,7 +35,7 @@ On Windows the same are `-Version`, `-Dir` (`%LOCALAPPDATA%\Programs\pumi` by de
 
 The environment variables `PUMI_INSTALL_VERSION`, `PUMI_DIR`, `PUMI_NO_BIN` and `PUMI_NO_OPEN` do what the flags do. The installer checks the archive's SHA-256 against the release manifest, and the manifest's signature when `minisign` is installed. On Linux it also tells you which desktop libraries (GTK, WebKitGTK, xkbcommon, Vulkan) are missing.
 
-Updates download in the background and apply on restart; set `autoupdate` to `false` to turn them off.
+Automatic updates are off by default. Set `autoupdate` to `true` to download new versions in the background and apply them on restart.
 
 ## From source
 

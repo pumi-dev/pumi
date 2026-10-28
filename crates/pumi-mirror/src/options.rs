@@ -614,7 +614,7 @@ pub fn builtin() -> Vec<Decl> {
         Decl::new(
             "autoupdate",
             Boolean,
-            json!(true),
+            json!(false),
             Global,
             "Check every few hours and download new versions in the background.",
         )
