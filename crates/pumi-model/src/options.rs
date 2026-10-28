@@ -239,6 +239,9 @@ pub fn check_type(decl: &Decl, value: &Value) -> Result<()> {
 fn is_user(name: &str) -> bool {
     name.starts_with('@')
 }
+/// A tab's own icon (`terminal`, `data:image/svg+xml,…`, `plugin:icons/x.svg`): what the window
+/// shows for it before its block's (`pumi_api::icon`).
+pub const ICON: &str = "@icon";
 /// Every declaration, and every value set on an object.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Options {
@@ -374,7 +377,12 @@ impl Options {
                 }
                 check_type(decl, &value)?;
             }
-            None if is_user(name) => {}
+            None if is_user(name) => {
+                if name == ICON {
+                    pumi_api::icon::check_icon(&value)
+                        .map_err(|err| Error::invalid_params(format!("`{ICON}`: {err}")))?;
+                }
+            }
             None => return Err(Error::not_found(format!("no option `{name}`"))),
         }
         let old = self.get(name, &[key]).map(|(v, _)| v).unwrap_or(Value::Null);
@@ -448,6 +456,18 @@ mod tests {
             pumi_api::ErrorKind::NotFound
         );
         assert!(options.get("remain-on-exit", &[Key::Global]).is_none(), "names are stored as written");
+    }
+    #[test]
+    fn a_tabs_icon_is_checked() {
+        let mut options = options();
+        options.set(ICON, Key::Tab(1), json!("terminal"), "cli", false).unwrap();
+        options
+            .set(ICON, Key::Tab(1), json!({ "src": "data:image/png;base64,AAAA", "tint": false }), "cli", false)
+            .unwrap();
+        options.set(ICON, Key::Tab(1), Value::Null, "cli", false).unwrap();
+        let err = options.set(ICON, Key::Tab(1), json!("https://example.com/favicon.ico"), "cli", false).unwrap_err();
+        assert!(err.message.contains("@icon"), "{}", err.message);
+        assert_eq!(options.get(ICON, &[Key::Tab(1)]).unwrap().0, Value::Null, "a bad icon is not kept");
     }
     #[test]
     fn types_choices_scopes_and_read_only_are_enforced() {

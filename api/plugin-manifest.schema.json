@@ -154,7 +154,12 @@
             "properties": {
               "id": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$" },
               "title": { "type": "string" },
-              "icon": { "type": "string" },
+              "icon": {
+                "description": "What its tabs show for it until one sets its own `@icon`: one of the app's icons by name, a `data:image/…` URI, or `plugin:<path>`, an SVG, PNG, JPEG, WebP or GIF file in the plugin. An SVG is tinted by the theme.",
+                "type": "string",
+                "maxLength": 16384,
+                "pattern": "^([a-z0-9_]{1,64}|data:image/(svg\\+xml|png|jpeg|webp|gif)[;,].*|plugin:[^/:\\\\][^:\\\\]*\\.(svg|png|jpe?g|webp|gif))$"
+              },
               "version": {
                 "description": "The version of its tabs' saved `data`; a state of another version is refused. 1 by default.",
                 "type": "integer",

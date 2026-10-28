@@ -673,6 +673,9 @@ pub fn validate(m: &Manifest) -> Result<(), String> {
         if block.version == Some(0) {
             return Err(format!("block {:?}: `version` is 1 or more", block.id));
         }
+        if let Some(icon) = &block.icon {
+            crate::icon::check_icon_src(icon).map_err(|err| format!("block {:?}: `icon`: {err}", block.id))?;
+        }
         if let Some(s) = block.strategy.as_deref().filter(|s| !["exact", "relaunch", "reference"].contains(s)) {
             return Err(format!("block {:?}: `strategy` {s:?} is `exact`, `relaunch` or `reference`", block.id));
         }
@@ -914,6 +917,8 @@ mod tests {
             parse(&text, Path::new("/p"), None)
         };
         assert!(component(r#""version": 0"#).unwrap_err().contains("version"));
+        assert!(component(r#""icon": "plugin:icons/v.svg""#).is_ok());
+        assert!(component(r#""icon": "plugin:../v.svg""#).unwrap_err().contains("icon"));
         assert!(component(r#""strategy": "again""#).unwrap_err().contains("strategy"));
         assert!(component(r#""methods": ["read"]"#).unwrap_err().contains("protocol"));
         assert!(component(r#""methods": ["go", "go"]"#).unwrap_err().contains("once"));

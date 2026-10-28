@@ -5,6 +5,7 @@ mod builtins;
 pub mod channel;
 pub mod error;
 pub mod events;
+pub mod icon;
 pub mod ids;
 pub mod level;
 pub mod manifest;
