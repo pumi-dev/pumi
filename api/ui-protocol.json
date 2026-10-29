@@ -1,0 +1,2168 @@
+{
+  "level": 1,
+  "builtInTypes": [
+    "div",
+    "text"
+  ],
+  "elementEvents": [
+    "click",
+    "doubleClick",
+    "auxClick",
+    "contextMenu",
+    "mouseDown",
+    "mouseUp",
+    "mouseMove",
+    "mouseEnter",
+    "mouseLeave",
+    "mouseDownOutside",
+    "scroll",
+    "fileDrop",
+    "keyDown",
+    "keyUp",
+    "focus",
+    "blur",
+    "change",
+    "select",
+    "submit",
+    "layout",
+    "scrollChange",
+    "visibleRange",
+    "highlight",
+    "motionComplete",
+    "motionThrottled"
+  ],
+  "universalProps": [
+    "autoFocus",
+    "tabIndex",
+    "motion",
+    "cache",
+    "compartment",
+    "testId",
+    "title",
+    "highlight",
+    "textFlow",
+    "role",
+    "aria-label",
+    "aria-description",
+    "aria-id",
+    "aria-expanded",
+    "aria-selected",
+    "aria-valuetext",
+    "aria-level"
+  ],
+  "op": {
+    "$ref": "#/$defs/Op"
+  },
+  "event": {
+    "$ref": "#/$defs/Event"
+  },
+  "$defs": {
+    "Op": {
+      "description": "One change to the window's tree, as a tuple with its name first.",
+      "oneOf": [
+        {
+          "description": "`[\"createElement\", id, type]`: a new element, not yet in the tree.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "createElement"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "minItems": 3
+        },
+        {
+          "description": "`[\"destroyElement\", id]`: removes the element and everything under it.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "destroyElement"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            }
+          ],
+          "minItems": 2
+        },
+        {
+          "description": "`[\"appendChild\", parentId, childId]`: moves the child to be the parent's last.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "appendChild"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            }
+          ],
+          "minItems": 3
+        },
+        {
+          "description": "`[\"insertBefore\", parentId, childId, beforeId]`: moves the child to be just before `beforeId`.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "insertBefore"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            }
+          ],
+          "minItems": 4
+        },
+        {
+          "description": "`[\"setStyle\", id, style]`: the element's whole style.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "setStyle"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "$ref": "#/$defs/StyleDesc"
+            }
+          ],
+          "minItems": 3
+        },
+        {
+          "description": "`[\"setText\", id, content]`: a text element's text.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "setText"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "minItems": 3
+        },
+        {
+          "description": "`[\"setEventListener\", id, eventType, hasHandler]`: whether the UI listens for an event on the element.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "setEventListener"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "minItems": 4
+        },
+        {
+          "description": "`[\"setRoot\", id]`: the element the window draws.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "setRoot"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            }
+          ],
+          "minItems": 2
+        },
+        {
+          "description": "`[\"setKeyboardFocusDim\", enabled]`: whether controls dim while another has keyboard focus.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "setKeyboardFocusDim"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "minItems": 2
+        },
+        {
+          "description": "`[\"setCustomProp\", id, key, value]`: any other prop, as JSON; `null` unsets it.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "setCustomProp"
+            },
+            {
+              "$ref": "#/$defs/ElementId"
+            },
+            {
+              "type": "string"
+            },
+            true
+          ],
+          "minItems": 4
+        }
+      ]
+    },
+    "ElementId": {
+      "description": "An element's id: unique within its window, picked by the UI. 0 is the window.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "StyleDesc": {
+      "type": "object",
+      "properties": {
+        "display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flexDirection": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flexWrap": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flexGrow": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "flexShrink": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "flexBasis": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "alignItems": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "alignSelf": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "alignContent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "justifyContent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "rowGap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "columnGap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "gridTemplateColumns": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "gridTemplateRows": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "gridColumnMin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gridRowMin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minWidth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minHeight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxWidth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxHeight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "padding": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "paddingTop": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "paddingRight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "paddingBottom": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "paddingLeft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "margin": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "marginTop": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "marginRight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "marginBottom": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "marginLeft": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "position": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "top": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DimensionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "zIndex": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "description": "Paint order among siblings: higher paints (and hit-tests) later. Ties keep tree order."
+        },
+        "background": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "backgroundColor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backgroundImage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundImageValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "backgroundSize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundSizeValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "backgroundRepeat": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`\"repeat\"` (default), `\"repeat-x\"`, `\"repeat-y\"` or `\"no-repeat\"`."
+        },
+        "backgroundPosition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundPositionValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "imageRendering": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`\"pixelated\"` samples this element's images (background, frame, `<img>`) by nearest\nneighbour, for pixel art. `\"auto\"` smooths them."
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "opacity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "rotate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "description": "An `<svg>`'s turn about its centre, in degrees, clockwise: it moves neither its layout nor\nwhere it is hit."
+        },
+        "borderWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderTopWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderRightWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderBottomWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderLeftWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderColor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "borderTopColor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "One side's colour, over `borderColor`: bevels, inset and outset frames."
+        },
+        "borderRightColor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "borderBottomColor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "borderLeftColor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "borderImage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BorderImageValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "borderRadius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderTopLeftRadius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderTopRightRadius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderBottomLeftRadius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "borderBottomRightRadius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "boxShadow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoxShadowValues"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "borderStyle": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`\"solid\"` or `\"dashed\"`, for every side."
+        },
+        "aspectRatio": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "description": "Width divided by height, applied to whichever axis is not definite."
+        },
+        "outlineWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "description": "CSS `outline`: a line outside the border box that takes no layout\nspace, so it can appear on focus without moving anything."
+        },
+        "outlineColor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outlineOffset": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "fontSize": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "fontFamily": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fontWeight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FontWeightValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fontStyle": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`\"italic\"` or `\"normal\"`."
+        },
+        "textAlign": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lineHeight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "whiteSpace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textOverflow": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lineClamp": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "textDecoration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overflow": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overflowX": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overflowY": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scrollbarColor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Thumb colour for a container that scrolls (`overflow: \"scroll\"`). Setting\nit is what turns the native scrollbar on."
+        },
+        "scrollbarWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "description": "Thickness of that thumb in px. Defaults to 6."
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "appRegion": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`\"drag\"`: the window moves by this element (a title bar of the app's own); `\"no-drag\"`:\nnot by this part of one."
+        },
+        "pointerEvents": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`\"auto\"` blocks mouse hits behind this element. `\"none\"` never does.\nUnset: block when this element paints a fill or is absolutely positioned."
+        },
+        "userSelect": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selectionColor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Selection wash colour for this subtree. Defaults to the theme accent at\n35% opacity, the same tone Comet uses."
+        },
+        "hover": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StyleDesc"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StyleDesc"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focusVisible": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StyleDesc"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "While focused after keyboard input, like CSS `:focus-visible`."
+        },
+        "keyboardFocusDim": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "`false` keeps this element at full opacity while another control has\nkeyboard focus. Not inherited."
+        }
+      },
+      "description": "An element's style: what `setStyle` sets. Every field is optional; one left out is unset."
+    },
+    "DimensionValue": {
+      "description": "Pixels as a number, or a string: `\"auto\"`, a percentage (`\"50%\"`) or pixels (`\"12px\"`, `\"12\"`).",
+      "type": [
+        "number",
+        "string"
+      ]
+    },
+    "BackgroundValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/GradientValue"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BackgroundLayerValue"
+          },
+          "description": "Painted like CSS: the first layer on top."
+        }
+      ]
+    },
+    "GradientValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "linear-gradient"
+            },
+            "angle": {
+              "type": "number",
+              "format": "double",
+              "default": 180.0
+            },
+            "stops": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/LinearGradientStopValue"
+              }
+            },
+            "colorSpace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "stops"
+          ],
+          "description": "Two stops paint natively; more are rasterised."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "radial-gradient"
+            },
+            "shape": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "center": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "default": null
+            },
+            "radius": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RadiusValue"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "stops": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/LinearGradientStopValue"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "stops"
+          ],
+          "description": "`center` is a fraction of the box (`[0.5, 0.5]` by default)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "conic-gradient"
+            },
+            "angle": {
+              "type": "number",
+              "format": "double",
+              "default": 0.0
+            },
+            "center": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "default": null
+            },
+            "stops": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/LinearGradientStopValue"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "stops"
+          ],
+          "description": "`angle` is where the sweep starts, in degrees clockwise from the top."
+        }
+      ]
+    },
+    "LinearGradientStopValue": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "position": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        }
+      },
+      "required": [
+        "color"
+      ],
+      "description": "One colour stop. A stop without a position sits evenly between its neighbours, like CSS."
+    },
+    "RadiusValue": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ],
+      "description": "A radial gradient's size: one radius (a circle), `[x, y]` radii, or omitted for the\nfarthest corner."
+    },
+    "BackgroundLayerValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/GradientValue"
+        }
+      ],
+      "description": "One layer of a layered `background`: a colour or a gradient."
+    },
+    "BackgroundImageValue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BackgroundImageItem"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BackgroundImageItem"
+          }
+        }
+      ],
+      "description": "`backgroundImage`: a src, a layer, or layers (the first on top)."
+    },
+    "BackgroundImageItem": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/BackgroundImageLayer"
+        }
+      ]
+    },
+    "BackgroundImageLayer": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundSizeValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "repeat": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackgroundPositionValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "opacity": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "description": "One image layer of `backgroundImage`. What a layer leaves out comes from the element's\n`backgroundSize`, `backgroundRepeat` and `backgroundPosition`."
+    },
+    "BackgroundSizeValue": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LengthValue"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ],
+      "description": "`backgroundSize`: `\"auto\"`, `\"cover\"`, `\"contain\"`, a width, or `[width, height]`."
+    },
+    "LengthValue": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A length that is pixels (a number), a percentage (`\"50%\"`) or a keyword."
+    },
+    "BackgroundPositionValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LengthValue"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ],
+      "description": "`backgroundPosition`: a keyword (`\"center\"`, `\"top left\"`) or `[x, y]`."
+    },
+    "BorderImageValue": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string"
+        },
+        "slice": {
+          "$ref": "#/$defs/SidesValue"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SidesValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "repeat": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "`\"stretch\"` (default), `\"repeat\"` or `\"round\"`, for the edges and the middle.",
+          "default": null
+        },
+        "fill": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "outset": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "description": "Draws the frame this far outside the border box.",
+          "default": null
+        }
+      },
+      "required": [
+        "src",
+        "slice"
+      ],
+      "description": "A nine-slice image drawn as the element's frame (CSS `border-image`). `slice` is in the\nimage's pixels, `width` in the window's (the slice by default). The middle is drawn too\nunless `fill` is false."
+    },
+    "SidesValue": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      ],
+      "description": "Four sides in CSS order: one value, `[vertical, horizontal]`, or `[top, right, bottom, left]`."
+    },
+    "BoxShadowValues": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BoxShadowValue"
+          }
+        },
+        {
+          "$ref": "#/$defs/BoxShadowValue"
+        }
+      ],
+      "description": "`boxShadow` is one shadow or a list of them, painted in the order given."
+    },
+    "BoxShadowValue": {
+      "type": "object",
+      "properties": {
+        "offsetX": {
+          "type": "number",
+          "format": "double"
+        },
+        "offsetY": {
+          "type": "number",
+          "format": "double"
+        },
+        "blurRadius": {
+          "type": "number",
+          "format": "double"
+        },
+        "spreadRadius": {
+          "type": "number",
+          "format": "double"
+        },
+        "color": {
+          "type": "string"
+        },
+        "inset": {
+          "type": "boolean",
+          "description": "Draws inside the border box instead of around it, like CSS `inset`.",
+          "default": false
+        }
+      },
+      "required": [
+        "offsetX",
+        "offsetY",
+        "blurRadius",
+        "spreadRadius",
+        "color"
+      ]
+    },
+    "FontWeightValue": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "Font weight value: a CSS keyword or numeric string (`\"bold\"`, `\"700\"`) or a number (`700`)."
+    },
+    "Event": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/ElementId"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Press",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "click"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "A primary-button click, or an assistive technology's press (with no position)."
+        },
+        {
+          "$ref": "#/$defs/Press",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "doubleClick"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Press",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "auxClick"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "A click of another button."
+        },
+        {
+          "$ref": "#/$defs/Press",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "contextMenu"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Press",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mouseDown"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Press",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mouseUp"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mouseMove"
+            },
+            "position": {
+              "$ref": "#/$defs/Point"
+            },
+            "modifiers": {
+              "$ref": "#/$defs/Modifiers"
+            },
+            "pressedButton": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0,
+              "description": "The button held down, if one is: 0 left, 1 middle, 2 right, 3 back/forward."
+            }
+          },
+          "required": [
+            "type",
+            "position",
+            "modifiers"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mouseEnter"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mouseLeave"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mouseDownOutside"
+            },
+            "position": {
+              "$ref": "#/$defs/Point"
+            },
+            "button": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "modifiers": {
+              "$ref": "#/$defs/Modifiers"
+            }
+          },
+          "required": [
+            "type",
+            "position",
+            "button",
+            "modifiers"
+          ],
+          "description": "A press anywhere but on the element: what closes a menu."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "scroll"
+            },
+            "position": {
+              "$ref": "#/$defs/Point"
+            },
+            "modifiers": {
+              "$ref": "#/$defs/Modifiers"
+            },
+            "delta": {
+              "$ref": "#/$defs/Point"
+            },
+            "precise": {
+              "type": "boolean",
+              "description": "Pixel-precise (a trackpad), or by lines (a mouse wheel)."
+            },
+            "touchPhase": {
+              "$ref": "#/$defs/TouchPhase"
+            }
+          },
+          "required": [
+            "type",
+            "position",
+            "modifiers",
+            "delta",
+            "precise",
+            "touchPhase"
+          ],
+          "description": "The wheel or a trackpad. `delta` is in pixels (a line is 20)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "fileDrop"
+            },
+            "position": {
+              "$ref": "#/$defs/Point"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "position",
+            "paths"
+          ],
+          "description": "Files dropped from the OS on the element: absolute paths."
+        },
+        {
+          "$ref": "#/$defs/Key",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "keyDown"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Key",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "keyUp"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "focus"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "blur"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "change"
+            },
+            "value": {
+              "type": "string"
+            },
+            "selection": {
+              "$ref": "#/$defs/Selection"
+            }
+          },
+          "required": [
+            "type",
+            "value",
+            "selection"
+          ],
+          "description": "The field's value changed (typing, a paste, an undo)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "select"
+            },
+            "selection": {
+              "$ref": "#/$defs/Selection"
+            }
+          },
+          "required": [
+            "type",
+            "selection"
+          ],
+          "description": "Its selection or caret moved, and the value did not."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "submit"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "description": "Enter, in a field that submits."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "layout"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "width": {
+              "type": "number",
+              "format": "double"
+            },
+            "height": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "description": "The element's border box, in window coordinates: after the first paint with the\nlistener, then each time its size changes."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "scrollChange"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y"
+          ],
+          "description": "The element's scroll offset each time it moved: 0 at the start, negative as the content\nmoves."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "visibleRange"
+            },
+            "start": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "end": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "start",
+            "end"
+          ],
+          "description": "A virtual list's visible rows: `start..end`."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "highlight"
+            },
+            "matchCount": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "matchCount"
+          ],
+          "description": "The matches the element's `highlight` prop found, on screen or not."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "motionComplete"
+            },
+            "generation": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "generation"
+          ],
+          "description": "A `motion` target was reached."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "motionThrottled"
+            },
+            "compartment": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "A looping animation is slowed, over its share of the frame; `compartment` is the\nplugin's view it is drawn in."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "selectionChange"
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "The selected text changed: `None` when nothing is selected."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "windowActivated"
+            },
+            "active": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "active"
+          ],
+          "description": "The window became the key window, or stopped being it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "windowClosed"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "windowHidden"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "Closing the window hid the app instead (it was the last window)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "windowFullscreen"
+            },
+            "fullscreen": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "fullscreen"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Key",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "windowKeyDown"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "$ref": "#/$defs/Key",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "windowKeyUp"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "windowModifiersChanged"
+            },
+            "modifiers": {
+              "$ref": "#/$defs/Modifiers"
+            }
+          },
+          "required": [
+            "type",
+            "modifiers"
+          ],
+          "description": "A modifier went down or up on its own."
+        }
+      ],
+      "description": "One event, on `target`: an element that has a listener for it (`setEventListener`), or the\nwindow. Window events have target 0, except the window's key and selection events, which have\nthe id the UI gave when it asked for them."
+    },
+    "Point": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "description": "A point in window coordinates, in pixels; or a distance, for a scroll's `delta`."
+    },
+    "Modifiers": {
+      "type": "object",
+      "properties": {
+        "shift": {
+          "type": "boolean"
+        },
+        "ctrl": {
+          "type": "boolean"
+        },
+        "alt": {
+          "type": "boolean"
+        },
+        "cmd": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "shift",
+        "ctrl",
+        "alt",
+        "cmd"
+      ],
+      "description": "The modifier keys held. `cmd` is ⌘ on macOS and the Windows key elsewhere."
+    },
+    "Press": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "button": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "description": "0 left, 1 middle, 2 right, 3 back/forward."
+        },
+        "clickCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "description": "1, 2 or 3 for a single, double or triple click."
+        },
+        "isRightClick": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "modifiers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Modifiers"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pressId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "description": "Shared by every element's event of one press, innermost first, so a UI can stop it\npropagating across them."
+        }
+      },
+      "description": "A mouse press or release. What a press does not know is `None`: an assistive technology's\nclick has no position."
+    },
+    "TouchPhase": {
+      "type": "string",
+      "enum": [
+        "started",
+        "moved",
+        "ended",
+        "cancelled"
+      ],
+      "description": "Where a trackpad scroll is."
+    },
+    "Key": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Its name: `\"a\"`, `\"enter\"`, `\"escape\"`, `\"down\"`, `\"f1\"`."
+        },
+        "keyChar": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The character it types, if one: `\"ß\"` for ⌥s."
+        },
+        "isHeld": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Held down and repeating (key down only)."
+        },
+        "modifiers": {
+          "$ref": "#/$defs/Modifiers"
+        },
+        "keystrokeId": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "description": "Shared by every element's event of one keystroke and the window's, so a UI can apply\n`preventDefault` and `stopPropagation` across them."
+        }
+      },
+      "required": [
+        "key",
+        "modifiers",
+        "keystrokeId"
+      ],
+      "description": "A key going down or up."
+    },
+    "Selection": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "description": "A text field's selection as UTF-16 offsets into its value (the units JS strings use):\nequal when it is only the caret. `end` is the caret unless it was selected backwards."
+    }
+  }
+}

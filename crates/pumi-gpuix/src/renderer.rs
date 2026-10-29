@@ -1,20 +1,18 @@
-//! GPUIX retained renderer for napi desktop hosts and GPUI's browser platform.
+//! The retained renderer: a window's tree, kept from the UI's ops and rebuilt into GPUI elements
+//! each frame.
 //!
-//! Mutation-based API: React's reconciler sends individual mutations
-//! (createElement, appendChild, setStyle, etc.) instead of a full JSON tree.
-//! Rust maintains a RetainedTree and rebuilds GPUI elements from it each frame.
+//! A UI sends batches of mutations (`pumi_ui_proto::Op`: createElement, appendChild, setStyle,
+//! …) instead of a full tree, and hears back typed events. Nothing here knows the UI's language:
+//! [`Renderer`] is the plain-Rust API, and `crate::addon` puts the addon's JS class over it.
 //!
-//! Desktop lifecycle:
+//! Lifecycle, from JS:
 //!   const renderer = new GpuixRenderer(eventCallback)
 //!   renderer.init({ title: 'My App', width: 800, height: 600 })
 //!   renderer.applyBatch(json)             // one atomic React commit
 //!   startFrameLoop(renderer)             // macOS wakes on vsync; Win/Linux polls UI thread
+use crate::error::{Error, Result};
 use futures::channel::oneshot;
 use gpui::AppContext as _;
-use napi::bindgen_prelude::*;
-use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
-use napi::JsDeferred;
-use napi_derive::napi;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
@@ -23,11 +21,12 @@ use std::time::Duration;
 
 use crate::accessibility::{apply_a11y_click, apply_accessibility};
 use crate::custom_elements::{CustomElementRegistry, CustomRenderContext};
-use crate::element_tree::EventPayload;
+use crate::element_tree::modifiers;
 use crate::retained_tree::{RetainedTree, StyleTable};
-use crate::style::StyleDesc;
+use crate::style::{StyleDesc, StyleExt};
 use crate::text::{selectable_text, selection_frame_reset, SharedSelection};
 use crate::theme::Theme;
+use pumi_ui_proto::{Event, EventKind, Key, Op, Point, Press, TouchPhase};
 
 /// The Window menu items act on the focused window, and the root element is the
 /// only place in GPUIX that has one. `crate::app_menu` owns everything else.
@@ -67,30 +66,9 @@ pub(crate) fn parse_font_weight(value: &crate::style::FontWeightValue) -> gpui::
     }
 }
 
-/// Abstracted event callback shared by desktop, browser, and test renderers.
-pub(crate) type EventCallback = Arc<dyn Fn(EventPayload) + Send + Sync>;
-
-fn raw_dimension_u32(value: f64, label: &str) -> std::result::Result<u32, String> {
-    if !value.is_finite() || value <= 0.0 || value.fract() != 0.0 || value > u32::MAX as f64 {
-        return Err(format!("Image {label} must be a positive integer, got {value}"));
-    }
-    Ok(value as u32)
-}
-
-pub(crate) fn dimension_u32(value: f64, label: &str) -> Result<u32> {
-    raw_dimension_u32(value, label).map_err(Error::from_reason)
-}
-
-fn raw_element_id(id: f64) -> std::result::Result<u64, String> {
-    if !id.is_finite() || id < 0.0 || id.fract() != 0.0 || id > 9_007_199_254_740_991.0 {
-        return Err(format!("Invalid element id: {id}"));
-    }
-    Ok(id as u64)
-}
-
-pub(crate) fn to_element_id(id: f64) -> Result<u64> {
-    raw_element_id(id).map_err(Error::from_reason)
-}
+/// Where a window's events go ([`pumi_ui_proto::Event`]): to JS through `crate::addon`, or to
+/// whatever else drives the renderer.
+pub type EventCallback = Arc<dyn Fn(Event) + Send + Sync>;
 
 thread_local! {
     /// Shared scroll handles — GpuixView writes here during render(),
@@ -204,21 +182,22 @@ pub(crate) fn debug_frame_overlay_stats_js(stats: gpui::DebugFrameOverlayStats) 
     }
 }
 
-/// One window and its retained tree. Every renderer opens its window in the process's one app
-/// (`crate::app`).
-#[napi]
-pub struct GpuixRenderer {
-    event_callback: Mutex<Option<Arc<ThreadsafeFunction<EventPayload>>>>,
+/// One window and its retained tree, in plain Rust: what any host drives the renderer through.
+/// A UI sends it batches of ops ([`pumi_ui_proto::Op`]) and gets the window's events
+/// ([`pumi_ui_proto::Event`]) on the callback it was made with. `crate::addon` is the addon's
+/// host; every renderer opens its window in the process's one app (`crate::app`).
+pub struct Renderer {
+    event_callback: Mutex<Option<EventCallback>>,
     tree: Arc<Mutex<RetainedTree>>,
     window: Mutex<Option<gpui::WindowHandle<GpuixView>>>,
-    /// Shared with GpuixView so napi methods can read the live selection
-    /// without an App context. Paint and napi calls can use different threads.
+    /// Shared with GpuixView so the host can read the live selection
+    /// without an App context. Paint and host calls can use different threads.
     selection: SharedSelection,
     /// Closing the window hides the app instead (`setHideOnClose`): the app's last window.
     hide_on_close: Arc<std::sync::atomic::AtomicBool>,
 }
 
-impl GpuixRenderer {
+impl Renderer {
     /// The window's handle, once `init` opened it.
     pub fn handle(&self) -> Option<gpui::WindowHandle<GpuixView>> {
         *self.window.lock().unwrap()
@@ -250,50 +229,12 @@ impl GpuixRenderer {
     }
 }
 
-#[napi]
-impl GpuixRenderer {
-    fn event_callback_for_view(&self) -> Option<EventCallback> {
-        self.event_callback.lock().unwrap().clone().map(|tsf| {
-            Arc::new(move |payload: EventPayload| {
-                tsf.call(Ok(payload), ThreadsafeFunctionCallMode::NonBlocking);
-            }) as EventCallback
-        })
-    }
-
-    fn begin_path_prompt(&self, options: gpui::PathPromptOptions, deferred: PathPromptDeferred) {
-        {
-            let prompt = crate::app::update(|cx| (cx.background_executor().clone(), cx.prompt_for_paths(options)));
-            match prompt {
-                Ok((background_executor, receiver)) => settle_path_prompt(background_executor, receiver, deferred),
-                Err(error) => deferred.reject(error),
-            }
-        }
-    }
-
-    fn automation_bounds(&self) -> Result<HashMap<u64, crate::automation::ElementBounds>> {
-        Ok(crate::automation::all_bounds())
-    }
-
-    fn elements_at(&self, x: f64, y: f64) -> Result<Vec<u64>> {
-        {
-            let tree = self.tree.lock().unwrap();
-            Ok(tree.elements_at(x, y, &crate::automation::get_bounds))
-        }
-    }
-
-    fn element_bounds(&self, id: u64) -> Result<Option<crate::automation::ElementBounds>> {
-        Ok(crate::automation::get_bounds(id))
-    }
-
-    fn request_invalidate(&self) -> Result<()> {
-        self.invalidate_window()
-    }
-
-    #[napi(constructor)]
-    pub fn new(event_callback: Option<ThreadsafeFunction<EventPayload>>) -> Self {
+impl Renderer {
+    /// A renderer whose window's events go to `on_event`. Its window opens on `init`.
+    pub fn new(on_event: Option<EventCallback>) -> Self {
         let _ = env_logger::try_init();
         Self {
-            event_callback: Mutex::new(event_callback.map(Arc::new)),
+            event_callback: Mutex::new(on_event),
             tree: Arc::new(Mutex::new(RetainedTree::new())),
             window: Mutex::new(None),
             selection: SharedSelection::default(),
@@ -301,8 +242,25 @@ impl GpuixRenderer {
         }
     }
 
+    fn event_callback_for_view(&self) -> Option<EventCallback> {
+        self.event_callback.lock().unwrap().clone()
+    }
+
+    /// Opens the platform path picker. `done` gets the paths, or `None` when the user cancels;
+    /// it runs on a background thread.
+    pub fn prompt_for_paths(
+        &self,
+        options: gpui::PathPromptOptions,
+        done: impl FnOnce(Result<Option<Vec<String>>>) + Send + 'static,
+    ) {
+        let prompt = crate::app::update(|cx| (cx.background_executor().clone(), cx.prompt_for_paths(options)));
+        match prompt {
+            Ok((background_executor, receiver)) => settle_path_prompt(background_executor, receiver, done),
+            Err(error) => done(Err(error)),
+        }
+    }
+
     /// Opens this renderer's window, starting the app first if no window has.
-    #[napi]
     pub fn init(&self, options: Option<WindowOptions>) -> Result<()> {
         let options = options.unwrap_or_default();
         if self.handle().is_some() {
@@ -332,10 +290,10 @@ impl GpuixRenderer {
                 window.on_window_should_close(cx, move |_, cx| {
                     if hide_on_close.load(std::sync::atomic::Ordering::Relaxed) {
                         cx.hide();
-                        emit_event_full(&closing, 0, "windowHidden", |_| {});
+                        emit(&closing, 0, || EventKind::WindowHidden);
                         return false;
                     }
-                    emit_event_full(&closing, 0, "windowClosed", |_| {});
+                    emit(&closing, 0, || EventKind::WindowClosed);
                     true
                 });
                 cx.new(|cx| {
@@ -352,7 +310,7 @@ impl GpuixRenderer {
                     cx.observe_window_activation(window, move |_, window, _| {
                         let active = window.is_window_active();
                         say(&key_now, active);
-                        emit_event_full(&activated, 0, "windowActivated", |p| p.hovered = Some(active));
+                        emit(&activated, 0, || EventKind::WindowActivated { active });
                     })
                     .detach();
                     // A key window that closes is no longer key.
@@ -362,7 +320,7 @@ impl GpuixRenderer {
                     cx.observe_window_bounds(window, move |_, window, _| {
                         let fullscreen = window.is_fullscreen();
                         if was_fullscreen.replace(fullscreen) != fullscreen {
-                            emit_event_full(&resized, 0, "windowFullscreen", |p| p.hovered = Some(fullscreen));
+                            emit(&resized, 0, || EventKind::WindowFullscreen { fullscreen });
                         }
                     })
                     .detach();
@@ -380,40 +338,17 @@ impl GpuixRenderer {
         Ok(())
     }
 
-    /// Closes the window. The app keeps running.
-    #[napi]
-    pub fn close(&self) -> Result<()> {
-        let Some(window) = self.window.lock().unwrap().take() else {
-            return Ok(());
-        };
-        crate::app::update(|cx| {
-            let _ = window.update(cx, |_view, window, _cx| window.remove_window());
-        })
+    /// Applies one batch of ops, as JSON ([`pumi_ui_proto::decode_json`]): all of it, or none
+    /// of it and an error. Answers every id its destroyElement ops removed.
+    pub fn apply_batch(&self, json: &[u8]) -> Result<Vec<u64>> {
+        self.apply(pumi_ui_proto::decode_json(json)?)
     }
 
-    /// Apply a batch of mutations in a single FFI call.
-    ///
-    /// Accepts a JSON array of mutation tuples. Each tuple is an array where
-    /// the first element is the operation name (string) and remaining elements
-    /// are the arguments:
-    ///
-    ///   ["createElement",    id, "type"]
-    ///   ["destroyElement",   id]
-    ///   ["appendChild",      parentId, childId]
-    ///   ["insertBefore",     parentId, childId, beforeId]
-    ///   ["setStyle",         id, { ...style }]
-    ///   ["setText",          id, "content"]
-    ///   ["setEventListener", id, "eventType", true|false]
-    ///   ["setRoot",          id]
-    ///   ["setKeyboardFocusDim", true|false]
-    ///   ["setCustomProp",    id, "key", value]
-    ///
-    /// Returns accumulated destroyed IDs from all destroyElement ops.
-    /// Acquires the tree mutex ONCE for the entire batch.
-    #[napi]
-    pub fn apply_batch(&self, json: String) -> Result<Vec<f64>> {
+    /// Applies one batch of ops, whatever they were decoded from: all of it, or none of it and
+    /// an error. Answers every id its destroyElement ops removed. Takes the tree's lock once.
+    pub fn apply(&self, ops: Vec<Op<'_>>) -> Result<Vec<u64>> {
         let mut tree = self.tree.lock().unwrap();
-        let destroyed = apply_batch_to_tree(&mut tree, json.as_bytes()).map_err(Error::from_reason)?;
+        let destroyed = apply_ops(&mut tree, ops)?;
         let dirty = tree.take_dirty();
         drop(tree);
         // A re-render that changed nothing sends a batch of identical resends.
@@ -430,61 +365,58 @@ impl GpuixRenderer {
     // ── Frame loop ───────────────────────────────────────────────────
 
     /// Pump the native event loop. Returns false once the app has quit.
-    #[napi]
     pub fn tick(&self) -> bool {
         crate::app::tick()
     }
 
-    #[napi]
-    pub fn is_initialized(&self) -> bool {
-        self.handle().is_some()
-    }
-
-    /// Wake JavaScript after the display link queues a frame. Call tick() in the callback; it
-    /// never blocks. Wakes coalesce while JavaScript is busy and do not keep the process alive.
-    /// Pass null to clear the callback. Already queued callbacks may still arrive. The hook is
-    /// the app's: setting it through any window replaces it for all. False where nothing wakes
-    /// JavaScript (Windows, Linux): it calls tick() on its own timer then.
-    #[napi]
-    pub fn set_frame_wake_callback(&self, callback: Option<Function<(), ()>>) -> Result<bool> {
-        if !crate::app::FRAME_WAKE {
-            return Ok(false);
-        }
-        let Some(callback) = callback else {
-            crate::app::set_wake_hook(None);
-            return Ok(true);
-        };
-        // Coalescing, sending a lost wake again and counting it all are `frame_loop`'s.
-        let wake = callback.build_threadsafe_function::<()>().callee_handled::<false>().weak::<true>().build_callback(
-            move |_| {
-                crate::frame_loop::arrived();
-                Ok(())
-            },
-        )?;
-        crate::app::set_wake_hook(Some(Arc::new(move || {
-            wake.call((), ThreadsafeFunctionCallMode::NonBlocking) == napi::Status::Ok
-        })));
-        Ok(true)
-    }
-
-    /// How long to wait for a frame wake before calling tick() anyway, in milliseconds: about a
-    /// frame while one of the app's windows is key, so a wake lost on its way costs a frame and not
-    /// the window's frame rate; longer otherwise.
-    #[napi]
+    /// How long to wait for a frame wake before calling tick() anyway: about a frame while one
+    /// of the app's windows is key, so a wake lost on its way costs a frame and not the
+    /// window's frame rate; longer otherwise.
     pub fn frame_wake_fallback_ms(&self) -> u32 {
         crate::app::wake_fallback().as_millis() as u32
     }
 
+    fn automation_bounds(&self) -> Result<HashMap<u64, crate::automation::ElementBounds>> {
+        Ok(crate::automation::all_bounds())
+    }
+
+    fn elements_at(&self, x: f64, y: f64) -> Result<Vec<u64>> {
+        {
+            let tree = self.tree.lock().unwrap();
+            Ok(tree.elements_at(x, y, &crate::automation::get_bounds))
+        }
+    }
+
+    fn element_bounds(&self, id: u64) -> Result<Option<crate::automation::ElementBounds>> {
+        Ok(crate::automation::get_bounds(id))
+    }
+
+    fn request_invalidate(&self) -> Result<()> {
+        self.invalidate_window()
+    }
+
+    /// Closes the window. The app keeps running.
+    pub fn close(&self) -> Result<()> {
+        let Some(window) = self.window.lock().unwrap().take() else {
+            return Ok(());
+        };
+        crate::app::update(|cx| {
+            let _ = window.update(cx, |_view, window, _cx| window.remove_window());
+        })
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        self.handle().is_some()
+    }
+
     /// Whether JavaScript must call tick(): always, the platform's loop (AppKit, Win32's
     /// messages, calloop) is pumped from the JS thread.
-    #[napi]
     pub fn requires_tick(&self) -> bool {
         true
     }
 
     /// The paintable size of the window in logical pixels, excluding any
     /// platform title bar.
-    #[napi]
     pub fn get_window_size(&self) -> Result<WindowSize> {
         self.update_window(|_view, window, _cx| {
             let size = window.viewport_size();
@@ -492,14 +424,12 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn get_window_insets(&self) -> Result<WindowInsets> {
         self.update_window(|_view, window, _cx| WindowInsets::from_gpui(window.insets()))
     }
 
     /// `"opaque"` | `"transparent"` | `"blurred"`: what shows where the tree paints nothing.
     /// `"blurred"` is the system's vibrancy behind the window.
-    #[napi]
     pub fn set_window_background(&self, mode: String) -> Result<()> {
         let appearance = match mode.as_str() {
             "transparent" => gpui::WindowBackgroundAppearance::Transparent,
@@ -513,7 +443,6 @@ impl GpuixRenderer {
     /// How much what shows through the window is blurred, in points (0 is not at all): the
     /// window server's blur, seen where the tree paints nothing or paints with an alpha while the
     /// background is not `"opaque"`. macOS only; elsewhere it does nothing.
-    #[napi]
     pub fn set_window_blur(&self, radius: f64) -> Result<()> {
         self.update_window(move |_view, window, _cx| crate::backdrop::set_blur(window, radius))?
             .map_err(Error::from_reason)
@@ -523,7 +452,6 @@ impl GpuixRenderer {
     /// of it): every background the tree paints lets the rest through, however many are stacked,
     /// and keeps its own colour, while text, icons and images stay opaque. Seen while the
     /// background is not `"opaque"`. macOS only; elsewhere it does nothing.
-    #[napi]
     pub fn set_window_glass(&self, opacity: f64) -> Result<()> {
         self.update_window(move |_view, window, _cx| {
             let done = crate::backdrop::set_glass(window, opacity);
@@ -535,14 +463,12 @@ impl GpuixRenderer {
 
     /// Whether the window is full screen now (the traffic lights are hidden then). Changes
     /// reach the window's handler as `windowFullscreen`, `hovered` saying which.
-    #[napi]
     pub fn is_fullscreen(&self) -> Result<bool> {
         self.update_window(|_view, window, _cx| window.is_fullscreen())
     }
 
     /// The style every `title` tooltip is drawn in (a style object as JSON), or null for the
     /// renderer's own. It applies to every window.
-    #[napi]
     pub fn set_tooltip_style(&self, style: Option<String>) -> Result<()> {
         let style = match style {
             Some(json) => Some(
@@ -558,7 +484,6 @@ impl GpuixRenderer {
     }
 
     /// `"hidden"` | `"minimal"` | `"full"`. Paints into the scene after layout.
-    #[napi]
     pub fn set_debug_frame_overlay(&self, mode: String) -> Result<String> {
         let mode = parse_debug_frame_overlay_mode(&mode)?;
         self.update_window(move |_view, window, _cx| {
@@ -568,7 +493,6 @@ impl GpuixRenderer {
     }
 
     /// Hidden → minimal → full → hidden.
-    #[napi]
     pub fn cycle_debug_frame_overlay(&self) -> Result<String> {
         self.update_window(move |_view, window, _cx| {
             window.cycle_debug_frame_overlay_mode();
@@ -576,7 +500,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn get_debug_frame_overlay(&self) -> Result<String> {
         self.debug_frame_overlay_mode()
     }
@@ -588,7 +511,6 @@ impl GpuixRenderer {
     }
 
     /// Clears the last 1000 draw samples. Frame count stays.
-    #[napi]
     pub fn reset_debug_frame_overlay_stats(&self) -> Result<()> {
         self.update_window(|_view, window, _cx| {
             window.reset_debug_frame_overlay_stats();
@@ -596,7 +518,6 @@ impl GpuixRenderer {
     }
 
     /// Same numbers as the on-screen overlay: current, p90, p99, max, frames.
-    #[napi]
     pub fn get_debug_frame_overlay_stats(&self) -> Result<DebugFrameOverlayStats> {
         self.update_window(|_view, window, _cx| debug_frame_overlay_stats_js(window.debug_frame_overlay_stats()))
     }
@@ -604,14 +525,12 @@ impl GpuixRenderer {
     /// What each compartment's renders cost since the last call (a plugin's component, a theme's part:
     /// `compartment="owner/name"`), the compartments with the same name together, and whether
     /// any of them is drawn on a budget now. Reading it starts the counts again.
-    #[napi]
     pub fn get_compartment_stats(&self) -> Result<Vec<CompartmentStats>> {
         self.update_window(|view, _window, _cx| view.compartment_stats())
     }
 
     /// Bring the window forward and give it focus. This is how a window opened
     /// with `show: false` or `focus: false` is revealed later.
-    #[napi]
     pub fn activate_window(&self) -> Result<()> {
         self.update_window(|_view, window, cx| {
             cx.activate(true);
@@ -620,30 +539,25 @@ impl GpuixRenderer {
     }
 
     /// Whether closing the window hides the app instead of closing it (the app's last window).
-    #[napi]
     pub fn set_hide_on_close(&self, hide: bool) {
         self.hide_on_close.store(hide, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Minimize the native window.
-    #[napi]
     pub fn minimize_window(&self) -> Result<()> {
         self.update_window(|_view, window, _cx| window.minimize_window())
     }
 
     /// Run the native zoom or maximize operation.
-    #[napi]
     pub fn zoom_window(&self) -> Result<()> {
         self.update_window(|_view, window, _cx| window.zoom_window())
     }
 
     /// Enter or exit native fullscreen.
-    #[napi]
     pub fn toggle_fullscreen(&self) -> Result<()> {
         self.update_window(|_view, window, _cx| window.toggle_fullscreen())
     }
 
-    #[napi]
     pub fn set_window_title(&self, title: String) -> Result<()> {
         self.update_window(move |view, window, cx| {
             view.window_title = title;
@@ -652,20 +566,8 @@ impl GpuixRenderer {
         })
     }
 
-    /// Open the platform path picker. Returns null when the user cancels.
-    #[napi(ts_return_type = "Promise<Array<string> | null>")]
-    pub fn prompt_for_paths<'env>(&self, env: &'env Env, options: Option<PathPromptOptions>) -> Result<Object<'env>> {
-        let (deferred, promise): (PathPromptDeferred, Object<'env>) = env.create_deferred()?;
-        match PathPromptOptions::to_gpui(options) {
-            Ok(options) => self.begin_path_prompt(options, deferred),
-            Err(error) => deferred.reject(error),
-        }
-        Ok(promise)
-    }
-
-    #[napi]
-    pub fn focus_element(&self, element_id: f64) -> Result<()> {
-        let id = to_element_id(element_id)?;
+    pub fn focus_element(&self, element_id: u64) -> Result<()> {
+        let id = element_id;
         self.update_window(move |view, window, cx| {
             view.request_focus(id, window, cx);
             window.refresh();
@@ -673,27 +575,23 @@ impl GpuixRenderer {
     }
 
     /// Move focus to the next GPUI tab stop.
-    #[napi]
     pub fn focus_next(&self) -> Result<()> {
         self.update_window(|_view, window, cx| window.focus_next(cx))
     }
 
     /// Move focus to the previous GPUI tab stop.
-    #[napi]
     pub fn focus_previous(&self) -> Result<()> {
         self.update_window(|_view, window, cx| window.focus_prev(cx))
     }
 
     /// Host id of the focused element, or null when nothing is focused.
-    #[napi]
-    pub fn get_focused_element_id(&self) -> Result<Option<f64>> {
-        self.update_window(|view, window, _cx| view.focused_element_id(window).map(|id| id as f64))
+    pub fn get_focused_element_id(&self) -> Result<Option<u64>> {
+        self.update_window(|view, window, _cx| view.focused_element_id(window))
     }
 
     /// Move focus to the next tab stop inside `element_id`, wrapping in that subtree.
-    #[napi]
-    pub fn focus_next_within(&self, element_id: f64) -> Result<()> {
-        let id = to_element_id(element_id)?;
+    pub fn focus_next_within(&self, element_id: u64) -> Result<()> {
+        let id = element_id;
         self.update_window(move |view, window, cx| {
             view.focus_next_within(id, window, cx);
             cx.notify();
@@ -702,9 +600,8 @@ impl GpuixRenderer {
     }
 
     /// Move focus to the previous tab stop inside `element_id`, wrapping in that subtree.
-    #[napi]
-    pub fn focus_previous_within(&self, element_id: f64) -> Result<()> {
-        let id = to_element_id(element_id)?;
+    pub fn focus_previous_within(&self, element_id: u64) -> Result<()> {
+        let id = element_id;
         self.update_window(move |view, window, cx| {
             view.focus_previous_within(id, window, cx);
             cx.notify();
@@ -713,9 +610,7 @@ impl GpuixRenderer {
     }
 
     /// Enable the window key events requested by the React renderer.
-    #[napi]
-    pub fn set_window_key_events(&self, key_down: bool, key_up: bool, event_id: f64) -> Result<()> {
-        let event_id = to_element_id(event_id)?;
+    pub fn set_window_key_events(&self, key_down: bool, key_up: bool, event_id: u64) -> Result<()> {
         self.update_window(move |view, window, cx| {
             view.window_key_down = key_down;
             view.window_key_up = key_up;
@@ -725,15 +620,12 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn blur(&self) -> Result<()> {
         self.update_window(move |_view, window, _cx| window.blur())
     }
 
     /// Enable the window selectionChange event requested by the React renderer.
-    #[napi]
-    pub fn set_window_selection_change(&self, enabled: bool, event_id: f64) -> Result<()> {
-        let event_id = to_element_id(event_id)?;
+    pub fn set_window_selection_change(&self, enabled: bool, event_id: u64) -> Result<()> {
         self.update_window(move |view, window, cx| {
             view.set_selection_change_listener(enabled, event_id);
             cx.notify();
@@ -741,29 +633,21 @@ impl GpuixRenderer {
         })
     }
 
-    // ── Selection API ────────────────────────────────────────────────
-
     /// The current text selection joined in document order, or null.
-    #[napi]
     pub fn get_selected_text(&self) -> Option<String> {
         self.selection.lock().selected_text()
     }
 
     /// Drop the current selection and request a repaint.
-    #[napi]
     pub fn clear_selection(&self) -> Result<()> {
         self.selection.lock().clear();
         self.request_invalidate()
     }
 
-    // ── Scroll API ───────────────────────────────────────────────────
-    // GpuixView syncs scroll handles and virtual list states to thread-local maps.
-
     /// Set the scroll offset of a scrollable element.
     /// x and y are negative pixel values (scroll down = more negative y).
-    #[napi]
-    pub fn scroll_to(&self, element_id: f64, x: f64, y: f64) -> Result<()> {
-        let id = to_element_id(element_id)?;
+    pub fn scroll_to(&self, element_id: u64, x: f64, y: f64) -> Result<()> {
+        let id = element_id;
         if !VIRTUAL_LIST_STATES.with(|cell| {
             let states = cell.borrow();
             let Some(state) = states.get(&id) else {
@@ -789,10 +673,8 @@ impl GpuixRenderer {
     /// just-committed child list are never shifted twice. `offsetInItem` is in
     /// pixels and may be negative, which anchors the viewport top above the
     /// item and resolves against measured heights at layout time.
-    #[napi]
-    pub fn scroll_to_item(&self, element_id: f64, index: f64, offset_in_item: Option<f64>) -> Result<()> {
-        let id = to_element_id(element_id)?;
-        let index = index as usize;
+    pub fn scroll_to_item(&self, element_id: u64, index: usize, offset_in_item: Option<f64>) -> Result<()> {
+        let id = element_id;
         let offset = offset_in_item.unwrap_or(0.0) as f32;
         if !VIRTUAL_LIST_STATES.with(|cell| {
             if !cell.borrow().contains_key(&id) {
@@ -817,9 +699,8 @@ impl GpuixRenderer {
     ///
     /// Unlike `getScrollOffset` this is exact even while row heights are still
     /// estimates, because it is the anchor gpui itself scrolls by.
-    #[napi]
-    pub fn get_list_scroll_top(&self, element_id: f64) -> Result<Option<Vec<f64>>> {
-        let id = to_element_id(element_id)?;
+    pub fn get_list_scroll_top(&self, element_id: u64) -> Result<Option<Vec<f64>>> {
+        let id = element_id;
         Ok(VIRTUAL_LIST_STATES.with(|cell| {
             cell.borrow().get(&id).map(|state| {
                 let top = state.logical_scroll_top();
@@ -834,9 +715,8 @@ impl GpuixRenderer {
 
     /// Get the current scroll offset of a scrollable element.
     /// Returns [x, y] or null if the element has no scroll handle.
-    #[napi]
-    pub fn get_scroll_offset(&self, element_id: f64) -> Result<Option<Vec<f64>>> {
-        let id = to_element_id(element_id)?;
+    pub fn get_scroll_offset(&self, element_id: u64) -> Result<Option<Vec<f64>>> {
+        let id = element_id;
         Ok(VIRTUAL_LIST_STATES
             .with(|cell| {
                 cell.borrow().get(&id).map(|state| {
@@ -856,9 +736,8 @@ impl GpuixRenderer {
     }
 
     /// Scroll this element's nearest scroll parent until the element is visible.
-    #[napi]
-    pub fn scroll_into_view(&self, element_id: f64) -> Result<()> {
-        let id = to_element_id(element_id)?;
+    pub fn scroll_into_view(&self, element_id: u64) -> Result<()> {
+        let id = element_id;
         {
             self.update_window(move |view, window, cx| {
                 if view.scroll_element_into_view(id) {
@@ -872,20 +751,17 @@ impl GpuixRenderer {
 
     /// Paint packed pixels onto an `<img>` host node. `format` is `"rgba"`
     /// (default) or `"bgra"`; BGRA skips the per-pixel swizzle.
-    #[napi]
     pub fn set_image_pixels(
         &self,
-        element_id: f64,
-        width: f64,
-        height: f64,
-        pixels: Buffer,
+        element_id: u64,
+        width: u32,
+        height: u32,
+        pixels: Vec<u8>,
         format: Option<String>,
     ) -> Result<()> {
-        let id = to_element_id(element_id)?;
-        let width = dimension_u32(width, "width")?;
-        let height = dimension_u32(height, "height")?;
+        let id = element_id;
         let format = crate::custom_elements::img::PixelFormat::parse(format.as_deref()).map_err(Error::from_reason)?;
-        let bytes = pixels.to_vec();
+        let bytes = pixels;
         {
             self.update_window(move |view, window, cx| {
                 view.set_image_pixels(id, width, height, bytes, format, window, cx)
@@ -896,10 +772,8 @@ impl GpuixRenderer {
 
     /// Decode PNG, JPEG, WebP, GIF, SVG, BMP, TIFF, ICO, or Netpbm bytes onto
     /// an `<img>` host node. Prefer `setImagePixels` for live waveforms.
-    #[napi]
-    pub fn set_image(&self, element_id: f64, bytes: Buffer) -> Result<()> {
-        let id = to_element_id(element_id)?;
-        let bytes = bytes.to_vec();
+    pub fn set_image(&self, element_id: u64, bytes: Vec<u8>) -> Result<()> {
+        let id = element_id;
         {
             self.update_window(move |view, window, cx| view.set_encoded_image(id, bytes, window, cx))?
                 .map_err(Error::from_reason)
@@ -910,16 +784,14 @@ impl GpuixRenderer {
     /// `fontFamily`, under the family names the file declares. Call it before
     /// the text that names the family is first laid out: a family that did not
     /// exist then has already fallen back to another font.
-    #[napi]
-    pub fn register_font(&self, data: Buffer) -> Result<()> {
-        let bytes = data.to_vec();
+    pub fn register_font(&self, data: Vec<u8>) -> Result<()> {
+        let bytes = data;
         {
             self.update_window(move |view, window, cx| view.register_font(bytes, window, cx))?
                 .map_err(Error::from_reason)
         }
     }
 
-    #[napi]
     pub fn get_automation_tree(&self) -> Result<String> {
         self.request_invalidate()?;
         let bounds = self.automation_bounds()?;
@@ -928,9 +800,7 @@ impl GpuixRenderer {
         serde_json::to_string(&json).map_err(|e| Error::from_reason(format!("JSON serialization failed: {}", e)))
     }
 
-    #[napi]
-    pub fn get_element_bounds(&self, id: f64) -> Result<Option<ElementBounds>> {
-        let id = to_element_id(id)?;
+    pub fn get_element_bounds(&self, id: u64) -> Result<Option<ElementBounds>> {
         Ok(self.element_bounds(id)?.map(ElementBounds::from_painted))
     }
 
@@ -938,12 +808,10 @@ impl GpuixRenderer {
     /// topmost first, like the DOM's `elementsFromPoint`. An element that did
     /// not paint is never listed, `overflow: hidden | scroll` clips what lies
     /// outside it, and `pointer-events: none` is skipped.
-    #[napi]
-    pub fn get_elements_at(&self, x: f64, y: f64) -> Result<Vec<f64>> {
-        Ok(self.elements_at(x, y)?.into_iter().map(|id| id as f64).collect())
+    pub fn get_elements_at(&self, x: f64, y: f64) -> Result<Vec<u64>> {
+        self.elements_at(x, y)
     }
 
-    #[napi]
     pub fn get_all_text(&self) -> Vec<String> {
         let tree = self.tree.lock().unwrap();
         let mut texts = Vec::new();
@@ -953,7 +821,6 @@ impl GpuixRenderer {
         texts
     }
 
-    #[napi]
     pub fn get_painted_text(&self) -> Vec<String> {
         crate::text::painted_text()
     }
@@ -962,13 +829,11 @@ impl GpuixRenderer {
     ///
     /// A quad is invisible to `getPaintedText()`, so this is the only way to
     /// assert on `highlight` without a screenshot.
-    #[napi]
     pub fn get_painted_highlights(&self) -> Vec<crate::element_tree::HighlightMatch> {
         crate::text::painted_highlights().into_iter().map(Into::into).collect()
     }
 
     /// Simulate space-separated keystrokes through the focused element's input pipeline.
-    #[napi]
     pub fn simulate_keystrokes(&self, keystrokes: String) -> Result<()> {
         self.update_window_without_view(move |window, cx| {
             crate::automation::dispatch_keystrokes(window, cx, &keystrokes)
@@ -976,7 +841,6 @@ impl GpuixRenderer {
         .map_err(Error::from_reason)
     }
 
-    #[napi]
     pub fn simulate_key_down(&self, keystroke: String, is_held: Option<bool>) -> Result<()> {
         let is_held = is_held.unwrap_or(false);
 
@@ -986,14 +850,12 @@ impl GpuixRenderer {
         .map_err(Error::from_reason)
     }
 
-    #[napi]
     pub fn simulate_key_up(&self, keystroke: String) -> Result<()> {
         self.update_window_without_view(move |window, cx| crate::automation::dispatch_key_up(window, cx, &keystroke))?
             .map_err(Error::from_reason)
     }
 
     /// `modifiers` uses the `press()` syntax: "cmd", "cmd-shift", "alt".
-    #[napi]
     pub fn simulate_click(&self, x: f64, y: f64, button: Option<u32>, modifiers: Option<String>) -> Result<()> {
         let button = button.unwrap_or(0);
         let modifiers = crate::automation::parse_modifiers(modifiers.as_deref());
@@ -1003,7 +865,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn simulate_mouse_down(&self, x: f64, y: f64, button: Option<u32>, modifiers: Option<String>) -> Result<()> {
         let button = button.unwrap_or(0);
         let modifiers = crate::automation::parse_modifiers(modifiers.as_deref());
@@ -1013,7 +874,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn simulate_mouse_up(&self, x: f64, y: f64, button: Option<u32>, modifiers: Option<String>) -> Result<()> {
         let button = button.unwrap_or(0);
         let modifiers = crate::automation::parse_modifiers(modifiers.as_deref());
@@ -1023,7 +883,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn simulate_mouse_move(
         &self,
         x: f64,
@@ -1041,7 +900,6 @@ impl GpuixRenderer {
     /// Dispatch a wheel event through the same GPUI hit test the trackpad uses.
     /// Deltas are pixels: negative `delta_y` scrolls down, negative `delta_x`
     /// pans right, matching `TestGpuixRenderer::simulate_scroll_wheel`.
-    #[napi]
     pub fn simulate_scroll_wheel(
         &self,
         x: f64,
@@ -1057,7 +915,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn clock_pause(&self) -> Result<f64> {
         self.update_window(move |view, _window, cx| {
             let now_ms = view.clock.pause();
@@ -1066,7 +923,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn clock_set(&self, now_ms: f64) -> Result<f64> {
         self.update_window(move |view, _window, cx| {
             let now_ms = view.clock.set_ms(now_ms);
@@ -1075,7 +931,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn clock_fast_forward(&self, delta_ms: f64) -> Result<f64> {
         self.update_window(move |view, _window, cx| {
             let now_ms = view.clock.fast_forward_ms(delta_ms);
@@ -1084,7 +939,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn clock_resume(&self) -> Result<f64> {
         self.update_window(move |view, _window, cx| {
             let now_ms = view.clock.resume();
@@ -1093,7 +947,6 @@ impl GpuixRenderer {
         })
     }
 
-    #[napi]
     pub fn capture_screenshot(&self, path: String) -> Result<()> {
         #[cfg(not(feature = "test-support"))]
         return Err(Error::from_reason(format!("{path}: screenshots need an addon built with test-support")));
@@ -1160,7 +1013,7 @@ pub struct GpuixView {
     /// When this window's first motion track started: every capped track samples on its grid
     /// (`MotionState::set_grid`).
     pub(crate) motion_grid: Option<web_time::Instant>,
-    /// Live text selection, shared with the paint closures and the napi methods.
+    /// Live text selection, shared with the paint closures and the host (`Renderer`).
     pub(crate) selection: SharedSelection,
     /// Persistent measurement and scroll state for React-backed virtual lists.
     virtual_lists: HashMap<u64, VirtualListEntry>,
@@ -1243,9 +1096,7 @@ fn emit_motion_settled(
         if !element.events().contains("motionComplete") {
             continue;
         }
-        emit_event_full(callback, id, "motionComplete", |payload| {
-            payload.motion_generation = Some(generation as f64);
-        });
+        emit(callback, id, || EventKind::MotionComplete { generation });
     }
 }
 
@@ -1373,9 +1224,7 @@ fn enclosing_compartment(tree: &crate::retained_tree::RetainedTree, id: u64) -> 
 
 fn emit_highlight_events(callback: &Option<EventCallback>, events: &[(u64, usize)]) {
     for &(id, total) in events {
-        emit_event_full(callback, id, "highlight", |payload| {
-            payload.match_count = Some(total as f64);
-        });
+        emit(callback, id, || EventKind::Highlight { match_count: total as u64 });
     }
 }
 
@@ -1393,17 +1242,19 @@ thread_local! {
 pub(crate) fn emit_key_event(
     callback: &Option<EventCallback>,
     element_id: u64,
-    event_type: &str,
+    kind: fn(Key) -> EventKind,
     keystroke: &gpui::Keystroke,
     is_held: Option<bool>,
 ) {
     let keystroke_id = KEYSTROKE_ID.with(|id| id.get());
-    emit_event_full(callback, element_id, event_type, |payload| {
-        payload.key = Some(keystroke.key.clone());
-        payload.key_char = keystroke.key_char.clone();
-        payload.is_held = is_held;
-        payload.modifiers = Some(keystroke.modifiers.into());
-        payload.keystroke_id = Some(keystroke_id as f64);
+    emit(callback, element_id, || {
+        kind(Key {
+            key: keystroke.key.clone(),
+            key_char: keystroke.key_char.clone(),
+            is_held,
+            modifiers: modifiers(keystroke.modifiers),
+            keystroke_id,
+        })
     });
 }
 
@@ -1426,14 +1277,11 @@ thread_local! {
 pub(crate) fn emit_press_event(
     callback: &Option<EventCallback>,
     element_id: u64,
-    event_type: &str,
-    build: impl FnOnce(&mut EventPayload),
+    kind: fn(Press) -> EventKind,
+    press: Press,
 ) {
     let press_id = PRESS_ID.with(|id| id.get());
-    emit_event_full(callback, element_id, event_type, |payload| {
-        build(payload);
-        payload.press_id = Some(press_id as f64);
-    });
+    emit(callback, element_id, || kind(Press { press_id: Some(press_id), ..press }));
 }
 
 /// The root's listener that numbers each mouse press and release. Capture runs before every
@@ -1469,7 +1317,6 @@ static CAPTURED: std::sync::RwLock<(bool, Vec<String>)> = std::sync::RwLock::new
 /// Sets the chords (`shift+cmd+p`) the window takes for the app's bindings: such a key reaches
 /// `windowKeyDown` (with `captured`) and no element. `all` takes every key, for the rest of a
 /// sequence.
-#[napi]
 pub fn set_captured_keys(chords: Vec<String>, all: bool) {
     *CAPTURED.write().unwrap() = (all, chords);
     CAPTURED_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1563,7 +1410,7 @@ fn window_key_events(
                         emit_key_event(
                             &callback_down,
                             event_id,
-                            "windowKeyDown",
+                            EventKind::WindowKeyDown,
                             &event.keystroke,
                             Some(event.is_held),
                         );
@@ -1572,7 +1419,13 @@ fn window_key_events(
                     return;
                 }
                 if key_down {
-                    emit_key_event(&callback_down, event_id, "windowKeyDown", &event.keystroke, Some(event.is_held));
+                    emit_key_event(
+                        &callback_down,
+                        event_id,
+                        EventKind::WindowKeyDown,
+                        &event.keystroke,
+                        Some(event.is_held),
+                    );
                 }
                 // Tab is a navigation key, never text, like in a browser field.
                 // Every element listener already ran; stopping here only keeps
@@ -1590,7 +1443,7 @@ fn window_key_events(
                     return;
                 }
                 if key_up {
-                    emit_key_event(&callback_up, event_id, "windowKeyUp", &event.keystroke, None);
+                    emit_key_event(&callback_up, event_id, EventKind::WindowKeyUp, &event.keystroke, None);
                 }
             });
             // A modifier pressed or let go alone (holding ⌘ shows the keys): no keystroke has it,
@@ -1599,8 +1452,8 @@ fn window_key_events(
             let callback_mods = callback.clone();
             window.on_root_key_event(move |event: &gpui::ModifiersChangedEvent, phase, _window, _cx| {
                 if phase == gpui::DispatchPhase::Capture && (key_down || key_up) {
-                    emit_event_full(&callback_mods, event_id, "windowModifiersChanged", |payload| {
-                        payload.modifiers = Some(event.modifiers.into());
+                    emit(&callback_mods, event_id, || EventKind::WindowModifiersChanged {
+                        modifiers: modifiers(event.modifiers),
                     });
                 }
             });
@@ -1852,9 +1705,7 @@ impl GpuixView {
         let value = selection.selected_text();
         drop(selection);
         self.reported_selection = Some(identity);
-        emit_event_full(callback, self.window_selection_event_id, "selectionChange", |payload| {
-            payload.value = value;
-        });
+        emit(callback, self.window_selection_event_id, || EventKind::SelectionChange { text: value });
     }
 
     /// A cached subtree's build (`crate::boundary`), from its view's render: after the root's,
@@ -1922,7 +1773,7 @@ impl GpuixView {
                 continue;
             }
             let name = enclosing_compartment(tree, id);
-            emit_event_full(callback, id, "motionThrottled", |payload| payload.value = name);
+            emit(callback, id, || EventKind::MotionThrottled { compartment: name });
         }
         after.max(budget)
     }
@@ -2080,10 +1931,7 @@ impl GpuixView {
             return false;
         }
         queue_virtual_list_scroll(id, index, offset_in_item);
-        emit_event_full(&self.event_callback, id, "visibleRange", |payload| {
-            payload.start_index = Some(index as f64);
-            payload.end_index = Some((index + 1) as f64);
-        });
+        emit(&self.event_callback, id, || EventKind::VisibleRange { start: index as u64, end: index as u64 + 1 });
         true
     }
 
@@ -2756,7 +2604,7 @@ impl GpuixView {
             if element.events().contains("focus") && !self.focus_subscriptions.contains_key(&focus_key) {
                 let callback = callback.clone();
                 let subscription = cx.on_focus(&handle, window, move |_this, _window, _cx| {
-                    emit_event_full(&callback, id, "focus", |_| {});
+                    emit(&callback, id, || EventKind::Focus);
                 });
                 self.focus_subscriptions.insert(focus_key, subscription);
             }
@@ -2764,7 +2612,7 @@ impl GpuixView {
             if element.events().contains("blur") && !self.focus_subscriptions.contains_key(&blur_key) {
                 let callback = callback.clone();
                 let subscription = cx.on_blur(&handle, window, move |_this, _window, _cx| {
-                    emit_event_full(&callback, id, "blur", |_| {});
+                    emit(&callback, id, || EventKind::Blur);
                 });
                 self.focus_subscriptions.insert(blur_key, subscription);
             }
@@ -2964,7 +2812,7 @@ impl gpui::Render for GpuixView {
                 .into_any_element()
         };
 
-        // Sync scroll handles to thread_local so napi methods (scrollTo,
+        // Sync scroll handles to thread_local so the host's calls (scrollTo,
         // getScrollOffset) can access them without an App context.
         SCROLL_HANDLES.with(|cell| {
             let mut handles = cell.borrow_mut();
@@ -3327,9 +3175,9 @@ fn build_virtual_list(
         let callback = ctx.event_callback.clone();
         let list_id = element.id;
         list_state.set_scroll_handler(move |event, _window, _cx| {
-            emit_event_full(&callback, list_id, "visibleRange", |payload| {
-                payload.start_index = Some(event.visible_range.start as f64);
-                payload.end_index = Some(event.visible_range.end as f64);
+            emit(&callback, list_id, || EventKind::VisibleRange {
+                start: event.visible_range.start as u64,
+                end: event.visible_range.end as u64,
             });
         });
     }
@@ -3592,15 +3440,19 @@ pub(crate) fn build_host_container(
         // embedded macOS pump. Bubble listeners run in reverse registration
         // order, so attach click first to keep onMouseUp ahead of onClick.
         el = el.on_mouse_up(gpui::MouseButton::Left, move |mouse_event, _window, _cx| {
-            emit_press_event(&callback, id, "click", |p| {
-                let (x, y) = point_to_xy(mouse_event.position);
-                p.x = Some(x);
-                p.y = Some(y);
-                p.button = Some(0);
-                p.modifiers = Some(mouse_event.modifiers.into());
-                p.click_count = Some(mouse_event.click_count as u32);
-                p.is_right_click = Some(false);
-            });
+            emit_press_event(
+                &callback,
+                id,
+                EventKind::Click,
+                Press {
+                    position: Some(point(mouse_event.position)),
+                    button: Some(0),
+                    modifiers: Some(modifiers(mouse_event.modifiers)),
+                    click_count: Some(mouse_event.click_count as u32),
+                    is_right_click: Some(false),
+                    press_id: None,
+                },
+            );
         });
         el = apply_a11y_click(el, element.events(), id, ctx.event_callback);
     }
@@ -3612,14 +3464,18 @@ pub(crate) fn build_host_container(
             // ── Aux click (non-primary), like the DOM `auxclick` ──
             "auxClick" => {
                 el = el.on_aux_click(move |click_event, _window, _cx| {
-                    emit_press_event(&callback, id, "auxClick", |p| {
-                        let (x, y) = point_to_xy(click_event.position());
-                        p.x = Some(x);
-                        p.y = Some(y);
-                        p.modifiers = Some(click_event.modifiers().into());
-                        p.click_count = Some(click_event.click_count() as u32);
-                        p.is_right_click = Some(click_event.is_right_click());
-                    });
+                    emit_press_event(
+                        &callback,
+                        id,
+                        EventKind::AuxClick,
+                        Press {
+                            position: Some(point(click_event.position())),
+                            modifiers: Some(modifiers(click_event.modifiers())),
+                            click_count: Some(click_event.click_count() as u32),
+                            is_right_click: Some(click_event.is_right_click()),
+                            ..Press::default()
+                        },
+                    );
                 });
             }
 
@@ -3631,14 +3487,18 @@ pub(crate) fn build_host_container(
                         if button == gpui::MouseButton::Left && !mouse_event.modifiers.control {
                             return;
                         }
-                        emit_press_event(&callback, id, "contextMenu", |p| {
-                            let (x, y) = point_to_xy(mouse_event.position);
-                            p.x = Some(x);
-                            p.y = Some(y);
-                            p.button = Some(mouse_button_to_u32(mouse_event.button));
-                            p.modifiers = Some(mouse_event.modifiers.into());
-                            p.is_right_click = Some(true);
-                        });
+                        emit_press_event(
+                            &callback,
+                            id,
+                            EventKind::ContextMenu,
+                            Press {
+                                position: Some(point(mouse_event.position)),
+                                button: Some(mouse_button_to_u32(mouse_event.button)),
+                                modifiers: Some(modifiers(mouse_event.modifiers)),
+                                is_right_click: Some(true),
+                                ..Press::default()
+                            },
+                        );
                     });
                 }
             }
@@ -3649,14 +3509,18 @@ pub(crate) fn build_host_container(
                     if mouse_event.click_count != 2 {
                         return;
                     }
-                    emit_press_event(&callback, id, "doubleClick", |p| {
-                        let (x, y) = point_to_xy(mouse_event.position);
-                        p.x = Some(x);
-                        p.y = Some(y);
-                        p.button = Some(0);
-                        p.click_count = Some(2);
-                        p.modifiers = Some(mouse_event.modifiers.into());
-                    });
+                    emit_press_event(
+                        &callback,
+                        id,
+                        EventKind::DoubleClick,
+                        Press {
+                            position: Some(point(mouse_event.position)),
+                            button: Some(0),
+                            click_count: Some(2),
+                            modifiers: Some(modifiers(mouse_event.modifiers)),
+                            ..Press::default()
+                        },
+                    );
                 });
             }
 
@@ -3666,14 +3530,18 @@ pub(crate) fn build_host_container(
                 for &button in &[gpui::MouseButton::Left, gpui::MouseButton::Middle, gpui::MouseButton::Right] {
                     let callback = callback.clone();
                     el = el.on_mouse_down(button, move |mouse_event, _window, _cx| {
-                        emit_press_event(&callback, id, "mouseDown", |p| {
-                            let (x, y) = point_to_xy(mouse_event.position);
-                            p.x = Some(x);
-                            p.y = Some(y);
-                            p.button = Some(mouse_button_to_u32(mouse_event.button));
-                            p.click_count = Some(mouse_event.click_count as u32);
-                            p.modifiers = Some(mouse_event.modifiers.into());
-                        });
+                        emit_press_event(
+                            &callback,
+                            id,
+                            EventKind::MouseDown,
+                            Press {
+                                position: Some(point(mouse_event.position)),
+                                button: Some(mouse_button_to_u32(mouse_event.button)),
+                                click_count: Some(mouse_event.click_count as u32),
+                                modifiers: Some(modifiers(mouse_event.modifiers)),
+                                ..Press::default()
+                            },
+                        );
                     });
                 }
             }
@@ -3683,14 +3551,18 @@ pub(crate) fn build_host_container(
                 for &button in &[gpui::MouseButton::Left, gpui::MouseButton::Middle, gpui::MouseButton::Right] {
                     let callback = callback.clone();
                     el = el.on_mouse_up(button, move |mouse_event, _window, _cx| {
-                        emit_press_event(&callback, id, "mouseUp", |p| {
-                            let (x, y) = point_to_xy(mouse_event.position);
-                            p.x = Some(x);
-                            p.y = Some(y);
-                            p.button = Some(mouse_button_to_u32(mouse_event.button));
-                            p.click_count = Some(mouse_event.click_count as u32);
-                            p.modifiers = Some(mouse_event.modifiers.into());
-                        });
+                        emit_press_event(
+                            &callback,
+                            id,
+                            EventKind::MouseUp,
+                            Press {
+                                position: Some(point(mouse_event.position)),
+                                button: Some(mouse_button_to_u32(mouse_event.button)),
+                                click_count: Some(mouse_event.click_count as u32),
+                                modifiers: Some(modifiers(mouse_event.modifiers)),
+                                ..Press::default()
+                            },
+                        );
                     });
                 }
             }
@@ -3698,12 +3570,10 @@ pub(crate) fn build_host_container(
             // ── Mouse move ───────────────────────────────────────
             "mouseMove" => {
                 el = el.on_mouse_move(move |mouse_event, _window, _cx| {
-                    emit_event_full(&callback, id, "mouseMove", |p| {
-                        let (x, y) = point_to_xy(mouse_event.position);
-                        p.x = Some(x);
-                        p.y = Some(y);
-                        p.modifiers = Some(mouse_event.modifiers.into());
-                        p.pressed_button = mouse_event.pressed_button.map(mouse_button_to_u32);
+                    emit(&callback, id, || EventKind::MouseMove {
+                        position: point(mouse_event.position),
+                        modifiers: modifiers(mouse_event.modifiers),
+                        pressed_button: mouse_event.pressed_button.map(mouse_button_to_u32),
                     });
                 });
             }
@@ -3722,13 +3592,9 @@ pub(crate) fn build_host_container(
                     let callback_leave = if has_leave { ctx.event_callback.clone() } else { None };
                     el = el.on_hover(move |&is_hovered, _window, _cx| {
                         if is_hovered {
-                            emit_event_full(&callback_enter, id, "mouseEnter", |p| {
-                                p.hovered = Some(true);
-                            });
+                            emit(&callback_enter, id, || EventKind::MouseEnter);
                         } else {
-                            emit_event_full(&callback_leave, id, "mouseLeave", |p| {
-                                p.hovered = Some(false);
-                            });
+                            emit(&callback_leave, id, || EventKind::MouseLeave);
                         }
                     });
                 }
@@ -3739,12 +3605,10 @@ pub(crate) fn build_host_container(
             // Critical for "click outside to close" pattern (dropdowns, modals).
             "mouseDownOutside" => {
                 el = el.on_mouse_down_out(move |mouse_event, _window, _cx| {
-                    emit_event_full(&callback, id, "mouseDownOutside", |p| {
-                        let (x, y) = point_to_xy(mouse_event.position);
-                        p.x = Some(x);
-                        p.y = Some(y);
-                        p.button = Some(mouse_button_to_u32(mouse_event.button));
-                        p.modifiers = Some(mouse_event.modifiers.into());
+                    emit(&callback, id, || EventKind::MouseDownOutside {
+                        position: point(mouse_event.position),
+                        button: mouse_button_to_u32(mouse_event.button),
+                        modifiers: modifiers(mouse_event.modifiers),
                     });
                 });
             }
@@ -3759,26 +3623,22 @@ pub(crate) fn build_host_container(
             // ── Scroll wheel ─────────────────────────────────────
             "scroll" => {
                 el = el.on_scroll_wheel(move |scroll_event, _window, _cx| {
-                    emit_event_full(&callback, id, "scroll", |p| {
-                        let (x, y) = point_to_xy(scroll_event.position);
-                        p.x = Some(x);
-                        p.y = Some(y);
-                        p.modifiers = Some(scroll_event.modifiers.into());
-                        p.precise = Some(scroll_event.delta.precise());
-
+                    emit(&callback, id, || {
                         // Convert ScrollDelta to pixel values.
                         // For Lines delta, we use a default line height of 20px.
                         let line_height = gpui::px(20.0);
-                        let pixel_delta = scroll_event.delta.pixel_delta(line_height);
-                        p.delta_x = Some(f64::from(f32::from(pixel_delta.x)));
-                        p.delta_y = Some(f64::from(f32::from(pixel_delta.y)));
-
-                        p.touch_phase = Some(match scroll_event.touch_phase {
-                            gpui::TouchPhase::Started => "started".to_string(),
-                            gpui::TouchPhase::Moved => "moved".to_string(),
-                            gpui::TouchPhase::Ended => "ended".to_string(),
-                            gpui::TouchPhase::Cancelled => "cancelled".to_string(),
-                        });
+                        EventKind::Scroll {
+                            position: point(scroll_event.position),
+                            modifiers: modifiers(scroll_event.modifiers),
+                            delta: point(scroll_event.delta.pixel_delta(line_height)),
+                            precise: scroll_event.delta.precise(),
+                            touch_phase: match scroll_event.touch_phase {
+                                gpui::TouchPhase::Started => TouchPhase::Started,
+                                gpui::TouchPhase::Moved => TouchPhase::Moved,
+                                gpui::TouchPhase::Ended => TouchPhase::Ended,
+                                gpui::TouchPhase::Cancelled => TouchPhase::Cancelled,
+                            },
+                        }
                     });
                 });
             }
@@ -3788,14 +3648,14 @@ pub(crate) fn build_host_container(
             // (clicked or tabbed to) for these to fire.
             "keyDown" => {
                 el = el.on_key_down(move |key_event, _window, _cx| {
-                    emit_key_event(&callback, id, "keyDown", &key_event.keystroke, Some(key_event.is_held));
+                    emit_key_event(&callback, id, EventKind::KeyDown, &key_event.keystroke, Some(key_event.is_held));
                 });
             }
 
             // ── Key up ───────────────────────────────────────────
             "keyUp" => {
                 el = el.on_key_up(move |key_event, _window, _cx| {
-                    emit_key_event(&callback, id, "keyUp", &key_event.keystroke, None);
+                    emit_key_event(&callback, id, EventKind::KeyUp, &key_event.keystroke, None);
                 });
             }
 
@@ -4570,8 +4430,9 @@ pub(crate) fn apply_styles<E: gpui::Styled>(mut el: E, style: &StyleDesc) -> E {
 // ── Event emission ───────────────────────────────────────────────────
 
 /// Helper to convert a GPUI Point<Pixels> to (f64, f64).
-pub(crate) fn point_to_xy(p: gpui::Point<gpui::Pixels>) -> (f64, f64) {
-    (f64::from(f32::from(p.x)), f64::from(f32::from(p.y)))
+/// A GPUI point as the protocol's: window pixels.
+pub(crate) fn point(p: gpui::Point<gpui::Pixels>) -> Point {
+    Point { x: f64::from(f32::from(p.x)), y: f64::from(f32::from(p.y)) }
 }
 
 /// Paths that are valid UTF-8, or None when the drop is empty or not Unicode.
@@ -4597,12 +4458,7 @@ pub(crate) fn emit_file_drop(
     let Some(paths) = file_drop_paths(dropped) else {
         return;
     };
-    emit_event_full(callback, element_id, "fileDrop", |payload| {
-        let (x, y) = point_to_xy(position);
-        payload.x = Some(x);
-        payload.y = Some(y);
-        payload.paths = Some(paths);
-    });
+    emit(callback, element_id, || EventKind::FileDrop { position: point(position), paths });
 }
 
 /// Convert GPUI MouseButton to our u32 encoding: 0=left, 1=middle, 2=right.
@@ -4666,11 +4522,11 @@ fn report_layout(
     }
     let callback = Some(callback.clone());
     cx.defer(move |_| {
-        emit_event_full(&callback, id, "layout", |payload| {
-            payload.x = Some(f64::from(f32::from(bounds.origin.x)));
-            payload.y = Some(f64::from(f32::from(bounds.origin.y)));
-            payload.width = Some(f64::from(size.0));
-            payload.height = Some(f64::from(size.1));
+        emit(&callback, id, || EventKind::Layout {
+            x: f64::from(f32::from(bounds.origin.x)),
+            y: f64::from(f32::from(bounds.origin.y)),
+            width: f64::from(size.0),
+            height: f64::from(size.1),
         });
     });
 }
@@ -4704,10 +4560,7 @@ fn report_scroll(
     }
     let callback = Some(callback.clone());
     cx.defer(move |_| {
-        emit_event_full(&callback, id, "scrollChange", |payload| {
-            payload.scroll_x = Some(f64::from(offset.0));
-            payload.scroll_y = Some(f64::from(offset.1));
-        });
+        emit(&callback, id, || EventKind::ScrollChange { x: f64::from(offset.0), y: f64::from(offset.1) });
     });
 }
 
@@ -4715,246 +4568,18 @@ fn report_scroll(
 /// only absorbs float noise from fractional scale factors.
 const PAINT_REPORT_EPSILON: f32 = 0.01;
 
-/// General-purpose event emitter. Builds a default EventPayload, lets the
-/// caller customize it via a closure, then sends it through the callback.
-/// Production: queues on Node.js event loop via ThreadsafeFunction.
-/// Tests: pushes to a synchronous Vec for drainEvents().
-pub(crate) fn emit_event_full(
-    callback: &Option<EventCallback>,
-    element_id: u64,
-    event_type: &str,
-    build: impl FnOnce(&mut EventPayload),
-) {
+/// Sends `target` the event `kind` makes, when anything listens: `kind` only runs then.
+pub(crate) fn emit(callback: &Option<EventCallback>, target: u64, kind: impl FnOnce() -> EventKind) {
     if let Some(cb) = callback {
-        let mut payload =
-            EventPayload { element_id: element_id as f64, event_type: event_type.to_string(), ..Default::default() };
-        build(&mut payload);
-        cb(payload);
+        cb(Event::new(target, kind()));
     }
 }
 
 // ── Batch processing ─────────────────────────────────────────────
 
-/// Parsed batch operation — typed enum for atomic validation.
-/// All ops are parsed and validated BEFORE any tree mutation occurs.
-/// This prevents partial application on malformed batches.
-enum BatchOp<'a> {
-    CreateElement {
-        id: u64,
-        element_type: String,
-    },
-    DestroyElement {
-        id: u64,
-    },
-    AppendChild {
-        parent_id: u64,
-        child_id: u64,
-    },
-    InsertBefore {
-        parent_id: u64,
-        child_id: u64,
-        before_id: u64,
-    },
-    /// The payload stays as raw JSON until apply time.
-    ///
-    /// Two reasons. A parsed `StyleDesc` is ~1.4 KB, and a `Vec<BatchOp>` is as
-    /// wide as its widest variant, so inlining one made a 220k-op mount reserve
-    /// over 300 MB before it parsed a single op. And the tree hash-conses
-    /// styles by content, so it needs the bytes: hashing ~110 bytes is far
-    /// cheaper than building 80 `Option` fields and throwing 99.8% of them away.
-    SetStyle {
-        id: u64,
-        style: &'a serde_json::value::RawValue,
-    },
-    SetText {
-        id: u64,
-        content: String,
-    },
-    SetEventListener {
-        id: u64,
-        event_type: String,
-        has_handler: bool,
-    },
-    SetRoot {
-        id: u64,
-    },
-    SetKeyboardFocusDim {
-        enabled: bool,
-    },
-    SetCustomProp {
-        id: u64,
-        key: String,
-        value: serde_json::Value,
-    },
-}
-
-/// A batch failure. The message names the op index, so it survives the trip
-/// back to JS as a plain `Error`.
+/// A batch failure. The message names the op index, so it survives the trip back to the UI as
+/// a plain error.
 pub type BatchResult<T> = std::result::Result<T, String>;
-
-/// Decode the batch straight from its JSON bytes into `Vec<BatchOp>`.
-///
-/// There is deliberately no `Vec<serde_json::Value>` in between. That tree would
-/// cost a `String` per key and per value, every payload would be deep-cloned out
-/// of it, and `from_value` would parse the clone a second time, so one style
-/// would be allocated three times: 1.5M allocations for a 220k-op mount.
-///
-/// What the decode guarantees is load-bearing:
-///
-/// * an unknown opcode is a hard error, not a skipped op. Silently ignoring one
-///   would let a JS/Rust version skew desync the tree instead of throwing
-/// * ids go through `raw_element_id`, so non-finite, negative, fractional and
-///   out-of-safe-range values are still rejected
-/// * `hasHandler` is accepted as a bool or a number
-/// * errors still name the op index. `serde_json` reports a byte offset, which
-///   is useless when you are chasing a desync
-fn parse_batch_ops(bytes: &[u8]) -> BatchResult<Vec<BatchOp<'_>>> {
-    serde_json::from_slice::<BatchOps>(bytes)
-        .map(|batch| batch.0)
-        .map_err(|error| format!("Failed to parse batch: {error}"))
-}
-
-struct BatchOps<'a>(Vec<BatchOp<'a>>);
-
-impl<'de> serde::Deserialize<'de> for BatchOps<'de> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
-        struct OpsVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for OpsVisitor {
-            type Value = BatchOps<'de>;
-
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("an array of mutation tuples")
-            }
-
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(
-                self,
-                mut seq: A,
-            ) -> std::result::Result<BatchOps<'de>, A::Error> {
-                let mut ops = Vec::with_capacity(seq.size_hint().unwrap_or(64));
-                loop {
-                    // The index is attached here because this is the only place
-                    // that knows it.
-                    let index = ops.len();
-                    match seq.next_element::<BatchOp<'de>>() {
-                        Ok(Some(op)) => ops.push(op),
-                        Ok(None) => break,
-                        Err(error) => return Err(serde::de::Error::custom(format!("Batch op {index}: {error}"))),
-                    }
-                }
-                Ok(BatchOps(ops))
-            }
-        }
-
-        deserializer.deserialize_seq(OpsVisitor)
-    }
-}
-
-/// A string argument, borrowed from the input when the JSON has no escapes.
-///
-/// The owned copy happens exactly once, on the way into the `BatchOp`. Going
-/// through a `Value` would allocate twice: into `Value::String`, then into the op.
-struct StrArg<'a>(std::borrow::Cow<'a, str>);
-
-impl<'de> serde::Deserialize<'de> for StrArg<'de> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
-        use std::borrow::Cow;
-        struct V;
-        impl<'de> serde::de::Visitor<'de> for V {
-            type Value = StrArg<'de>;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("a string")
-            }
-            fn visit_borrowed_str<E: serde::de::Error>(self, v: &'de str) -> std::result::Result<StrArg<'de>, E> {
-                Ok(StrArg(Cow::Borrowed(v)))
-            }
-            fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<StrArg<'de>, E> {
-                Ok(StrArg(Cow::Owned(v.to_owned())))
-            }
-            fn visit_string<E: serde::de::Error>(self, v: String) -> std::result::Result<StrArg<'de>, E> {
-                Ok(StrArg(Cow::Owned(v)))
-            }
-        }
-        deserializer.deserialize_str(V)
-    }
-}
-
-fn next_arg<'de, A, T>(seq: &mut A, what: &str) -> std::result::Result<T, A::Error>
-where
-    A: serde::de::SeqAccess<'de>,
-    T: serde::Deserialize<'de>,
-{
-    seq.next_element()?.ok_or_else(|| serde::de::Error::custom(format!("missing {what}")))
-}
-
-/// Read an element id. Ids cross napi as JS numbers, so they are read as `f64`
-/// and validated.
-fn next_id<'de, A: serde::de::SeqAccess<'de>>(seq: &mut A, what: &str) -> std::result::Result<u64, A::Error> {
-    let raw: f64 = next_arg(seq, what)?;
-    raw_element_id(raw).map_err(serde::de::Error::custom)
-}
-
-impl<'de> serde::Deserialize<'de> for BatchOp<'de> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
-        struct V;
-
-        impl<'de> serde::de::Visitor<'de> for V {
-            type Value = BatchOp<'de>;
-
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("a [opcode, ...args] mutation tuple")
-            }
-
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(
-                self,
-                mut seq: A,
-            ) -> std::result::Result<BatchOp<'de>, A::Error> {
-                let name: StrArg<'de> = next_arg(&mut seq, "op name")?;
-                let op = match name.0.as_ref() {
-                    "createElement" => BatchOp::CreateElement {
-                        id: next_id(&mut seq, "id")?,
-                        element_type: next_arg::<A, StrArg>(&mut seq, "element type")?.0.into_owned(),
-                    },
-                    "destroyElement" => BatchOp::DestroyElement { id: next_id(&mut seq, "id")? },
-                    "appendChild" => BatchOp::AppendChild {
-                        parent_id: next_id(&mut seq, "parent id")?,
-                        child_id: next_id(&mut seq, "child id")?,
-                    },
-                    "insertBefore" => BatchOp::InsertBefore {
-                        parent_id: next_id(&mut seq, "parent id")?,
-                        child_id: next_id(&mut seq, "child id")?,
-                        before_id: next_id(&mut seq, "before id")?,
-                    },
-                    "setStyle" => {
-                        BatchOp::SetStyle { id: next_id(&mut seq, "id")?, style: next_arg(&mut seq, "style")? }
-                    }
-                    "setText" => BatchOp::SetText {
-                        id: next_id(&mut seq, "id")?,
-                        content: next_arg::<A, StrArg>(&mut seq, "text")?.0.into_owned(),
-                    },
-                    "setEventListener" => BatchOp::SetEventListener {
-                        id: next_id(&mut seq, "id")?,
-                        event_type: next_arg::<A, StrArg>(&mut seq, "event type")?.0.into_owned(),
-                        has_handler: next_arg(&mut seq, "hasHandler")?,
-                    },
-                    "setRoot" => BatchOp::SetRoot { id: next_id(&mut seq, "id")? },
-                    "setKeyboardFocusDim" => BatchOp::SetKeyboardFocusDim { enabled: next_arg(&mut seq, "enabled")? },
-                    "setCustomProp" => BatchOp::SetCustomProp {
-                        id: next_id(&mut seq, "id")?,
-                        key: next_arg::<A, StrArg>(&mut seq, "prop key")?.0.into_owned(),
-                        value: next_arg(&mut seq, "custom prop value")?,
-                    },
-                    other => return Err(serde::de::Error::custom(format!("unknown operation: {other:?}"))),
-                };
-                // Trailing arguments are tolerated and ignored.
-                while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
-                Ok(op)
-            }
-        }
-
-        deserializer.deserialize_seq(V)
-    }
-}
 
 /// Turn one raw `setStyle` payload into a shared style.
 ///
@@ -4968,10 +4593,10 @@ fn intern_style_payload(styles: &mut StyleTable, payload: &serde_json::value::Ra
 /// This is the last fallible step, so it runs before the apply loop and borrows
 /// only the style table. The borrow checker then proves no element was touched
 /// when it returns `Err`, which is what makes a batch atomic.
-fn resolve_styles(styles: &mut StyleTable, ops: &[BatchOp<'_>]) -> BatchResult<Vec<Arc<StyleDesc>>> {
+fn resolve_styles(styles: &mut StyleTable, ops: &[Op<'_>]) -> BatchResult<Vec<Arc<StyleDesc>>> {
     let mut resolved = Vec::new();
     for (index, op) in ops.iter().enumerate() {
-        if let BatchOp::SetStyle { style, .. } = op {
+        if let Op::SetStyle { style, .. } = op {
             let shared = intern_style_payload(styles, style)
                 .map_err(|error| format!("Batch op {index} setStyle parse error: {error}"))?;
             resolved.push(shared);
@@ -4980,63 +4605,60 @@ fn resolve_styles(styles: &mut StyleTable, ops: &[BatchOp<'_>]) -> BatchResult<V
     Ok(resolved)
 }
 
-/// Apply a batch of mutation tuples to a RetainedTree.
-/// Shared between GpuixRenderer::apply_batch and TestGpuixRenderer::apply_batch.
-/// Returns accumulated destroyed IDs (as f64) from all destroyElement ops.
-///
-/// ATOMIC: the batch is decoded and every style is resolved before a single
-/// element is touched. If any op is malformed the tree is left unchanged and an
-/// error is returned. Nothing after that point can fail, so JS and Rust cannot
-/// desync when a batch is retried.
-///
-/// Batch format: JSON array of tuples [opcode, ...args].
-/// See GpuixRenderer::apply_batch for opcode documentation.
+/// Apply a batch of mutation tuples, as JSON, to a RetainedTree.
+/// Returns every id the batch's destroyElement ops removed.
 ///
 /// Public so a benchmark times this exact function. A replica in the bench would
 /// drift, and the numbers would then describe code nobody runs.
-pub fn apply_batch_to_tree(tree: &mut RetainedTree, bytes: &[u8]) -> BatchResult<Vec<f64>> {
-    // Phase 1: decode. No mutation.
-    let parsed = parse_batch_ops(bytes)?;
+pub fn apply_batch_to_tree(tree: &mut RetainedTree, bytes: &[u8]) -> BatchResult<Vec<u64>> {
+    apply_ops(tree, pumi_ui_proto::decode_json(bytes)?)
+}
 
-    // Phase 2: resolve styles. Touches the style table only; a failure here
-    // sweeps back out whatever this call interned.
-    let styles = resolve_styles(&mut tree.styles, &parsed).inspect_err(|_| tree.styles.sweep())?;
+/// Apply a batch of ops ([`pumi_ui_proto::Op`]) to a RetainedTree, whatever they were decoded
+/// from. Returns every id the batch's destroyElement ops removed.
+///
+/// ATOMIC: every style is resolved before a single element is touched. If any is malformed the
+/// tree is left unchanged and an error is returned. Nothing after that point can fail, so the UI
+/// and the renderer cannot desync when a batch is retried.
+pub fn apply_ops(tree: &mut RetainedTree, ops: Vec<Op<'_>>) -> BatchResult<Vec<u64>> {
+    // Resolve styles. Touches the style table only; a failure here sweeps back out whatever
+    // this call interned.
+    let styles = resolve_styles(&mut tree.styles, &ops).inspect_err(|_| tree.styles.sweep())?;
     let mut styles = styles.into_iter();
 
-    // Phase 3: apply. Cannot fail.
-    let mut destroyed_ids: Vec<f64> = Vec::new();
-    for batch_op in parsed {
-        match batch_op {
-            BatchOp::CreateElement { id, element_type } => {
+    // Apply. Cannot fail.
+    let mut destroyed_ids: Vec<u64> = Vec::new();
+    for op in ops {
+        match op {
+            Op::CreateElement { id, element_type } => {
                 tree.create_element(id, element_type);
             }
-            BatchOp::DestroyElement { id } => {
-                let destroyed = tree.destroy_element(id);
-                destroyed_ids.extend(destroyed.iter().map(|&id| id as f64));
+            Op::DestroyElement { id } => {
+                destroyed_ids.extend(tree.destroy_element(id));
             }
-            BatchOp::AppendChild { parent_id, child_id } => {
+            Op::AppendChild { parent_id, child_id } => {
                 tree.append_child(parent_id, child_id);
             }
-            BatchOp::InsertBefore { parent_id, child_id, before_id } => {
+            Op::InsertBefore { parent_id, child_id, before_id } => {
                 tree.insert_before(parent_id, child_id, before_id);
             }
-            BatchOp::SetStyle { id, .. } => {
+            Op::SetStyle { id, .. } => {
                 let shared = styles.next().expect("one resolved style per setStyle op");
                 tree.set_style(id, shared);
             }
-            BatchOp::SetText { id, content } => {
+            Op::SetText { id, content } => {
                 tree.set_text(id, content);
             }
-            BatchOp::SetEventListener { id, event_type, has_handler } => {
+            Op::SetEventListener { id, event_type, has_handler } => {
                 tree.set_event_listener(id, event_type, has_handler);
             }
-            BatchOp::SetRoot { id } => {
+            Op::SetRoot { id } => {
                 tree.set_root(id);
             }
-            BatchOp::SetKeyboardFocusDim { enabled } => {
+            Op::SetKeyboardFocusDim { enabled } => {
                 tree.set_keyboard_focus_dim(enabled);
             }
-            BatchOp::SetCustomProp { id, key, value } => {
+            Op::SetCustomProp { id, key, value } => {
                 tree.set_custom_prop(id, key, value);
             }
         }
@@ -5054,13 +4676,11 @@ pub fn apply_batch_to_tree(tree: &mut RetainedTree, bytes: &[u8]) -> BatchResult
 
 // ── Types ────────────────────────────────────────────────────────────
 
-type PathPromptReceiver = oneshot::Receiver<anyhow::Result<Option<Vec<std::path::PathBuf>>>>;
+pub(crate) type PathPromptReceiver = oneshot::Receiver<anyhow::Result<Option<Vec<std::path::PathBuf>>>>;
 
-type PathPromptResolver = Box<dyn FnOnce(Env) -> Result<Option<Vec<String>>> + Send>;
-
-type PathPromptDeferred = JsDeferred<Option<Vec<String>>, PathPromptResolver>;
-
-fn path_prompt_result(result: anyhow::Result<Option<Vec<std::path::PathBuf>>>) -> Result<Option<Vec<String>>> {
+pub(crate) fn path_prompt_result(
+    result: anyhow::Result<Option<Vec<std::path::PathBuf>>>,
+) -> Result<Option<Vec<String>>> {
     result
         .map_err(|error| Error::from_reason(error.to_string()))?
         .filter(|paths| !paths.is_empty())
@@ -5077,23 +4697,24 @@ fn path_prompt_result(result: anyhow::Result<Option<Vec<std::path::PathBuf>>>) -
         .transpose()
 }
 
-fn settle_path_prompt(executor: gpui::BackgroundExecutor, receiver: PathPromptReceiver, deferred: PathPromptDeferred) {
+fn settle_path_prompt(
+    executor: gpui::BackgroundExecutor,
+    receiver: PathPromptReceiver,
+    done: impl FnOnce(Result<Option<Vec<String>>>) + Send + 'static,
+) {
     executor
         .spawn(async move {
             let result = receiver
                 .await
                 .map_err(|_| Error::from_reason("The path prompt closed without a result"))
                 .and_then(path_prompt_result);
-            match result {
-                Ok(paths) => deferred.resolve(Box::new(move |_env| Ok(paths))),
-                Err(error) => deferred.reject(error),
-            }
+            done(result);
         })
         .detach();
 }
 
 #[derive(Debug, Clone, Default)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct PathPromptOptions {
     /// Select files. Defaults to true unless `directories` is true.
     pub files: Option<bool>,
@@ -5106,7 +4727,8 @@ pub struct PathPromptOptions {
 }
 
 impl PathPromptOptions {
-    pub(crate) fn to_gpui(options: Option<Self>) -> Result<gpui::PathPromptOptions> {
+    /// The options as GPUI takes them, the defaults filled in; an error for none to pick.
+    pub fn to_gpui(options: Option<Self>) -> Result<gpui::PathPromptOptions> {
         let options = options.unwrap_or_default();
         let directories = options.directories.unwrap_or(false);
         let files = options.files.unwrap_or(!directories);
@@ -5125,43 +4747,15 @@ impl PathPromptOptions {
     }
 }
 
-pub struct PromptForPathsTask {
-    receiver: Option<Result<PathPromptReceiver>>,
-}
-
-impl PromptForPathsTask {
-    #[cfg(feature = "test-support")]
-    pub(crate) fn new(receiver: Result<PathPromptReceiver>) -> Self {
-        Self { receiver: Some(receiver) }
-    }
-}
-
-#[napi]
-impl Task for PromptForPathsTask {
-    type Output = Option<Vec<String>>;
-    type JsValue = Option<Vec<String>>;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        let receiver = self.receiver.take().ok_or_else(|| Error::from_reason("Path prompt was already awaited"))??;
-        let result = futures::executor::block_on(receiver)
-            .map_err(|_| Error::from_reason("The path prompt closed without a result"))?;
-        path_prompt_result(result)
-    }
-
-    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(output)
-    }
-}
-
 #[derive(Debug, Clone)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct WindowSize {
     pub width: f64,
     pub height: f64,
 }
 
 #[derive(Debug, Clone, Default)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct EdgeInsets {
     pub top: f64,
     pub right: f64,
@@ -5170,7 +4764,7 @@ pub struct EdgeInsets {
 }
 
 #[derive(Debug, Clone, Default)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct WindowInsets {
     pub safe_area: EdgeInsets,
     pub ime: EdgeInsets,
@@ -5201,7 +4795,7 @@ impl EdgeInsets {
 
 /// Last painted box for a host element.
 #[derive(Debug, Clone)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct ElementBounds {
     pub x: f64,
     pub y: f64,
@@ -5217,7 +4811,7 @@ impl ElementBounds {
 
 /// What one compartment (or the ones of one name) cost since it was last read.
 #[derive(Debug, Clone)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct CompartmentStats {
     /// Whose it is: `owner/name`, a theme's part (`theme.TabBar`), or none.
     pub name: Option<String>,
@@ -5236,7 +4830,7 @@ pub struct CompartmentStats {
 
 /// Recorded draw times from the debug frame overlay.
 #[derive(Debug, Clone)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct DebugFrameOverlayStats {
     pub current_ms: Option<f64>,
     pub p90_ms: Option<f64>,
@@ -5253,7 +4847,7 @@ pub struct DebugFrameOverlayStats {
 /// `width` / `height` then only constrain the axis the surface is not
 /// stretched along by its `anchor`.
 #[derive(Debug, Clone, Default)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct LayerShellOptions {
     /// Compositor surface namespace, used for window rules. Cannot be changed
     /// after the surface is created. Defaults to the empty string.
@@ -5281,7 +4875,7 @@ pub struct LayerShellOptions {
 }
 
 #[derive(Debug, Clone)]
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
 pub struct WindowOptions {
     pub title: Option<String>,
     /// The name used inside the macOS "Hide" and "Quit" menu items. Defaults to
@@ -5500,12 +5094,12 @@ mod highlight_cache_tests {
 
 /// The `applyBatch` protocol. This is the surface JS talks to, so every rule it
 /// relies on is asserted here against real JSON bytes rather than through a
-/// hand-built `Vec<BatchOp>`.
+/// hand-built `Vec<Op>`.
 #[cfg(test)]
 mod batch_tests {
     use super::*;
 
-    fn apply(tree: &mut RetainedTree, json: &str) -> BatchResult<Vec<f64>> {
+    fn apply(tree: &mut RetainedTree, json: &str) -> BatchResult<Vec<u64>> {
         apply_batch_to_tree(tree, json.as_bytes())
     }
 

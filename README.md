@@ -89,5 +89,5 @@ API. [Contributing](CONTRIBUTING.md) has the dev build, the tests and the checks
 
 The server and the crates to build on it (`pumid`, the `pumi` command line, `pumi-proto`,
 `pumi-api`, `pumi-api-macros`, `pumi-sys`, `pumi-layout`, `pumi-model`) and the renderer,
-`pumi-gpuix`, are [Apache-2.0](LICENSE-APACHE). The app, its plugins and the rest are
+`pumi-gpuix`, with its protocol, `pumi-ui-proto`, are [Apache-2.0](LICENSE-APACHE). The app, its plugins and the rest are
 [GPL-3.0-or-later](LICENSE). Third-party notices are in [NOTICE](NOTICE).

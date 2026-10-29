@@ -1,6 +1,9 @@
 #![deny(clippy::all)]
-//! pumi's renderer: a retained tree fed by React's commits, rebuilt into GPUI elements each frame.
-//! Forked from gpuix (Apache-2.0).
+//! pumi's renderer: a retained tree fed by a UI's commits (`pumi_ui_proto`'s ops), rebuilt into
+//! GPUI elements each frame. Forked from gpuix (Apache-2.0).
+//!
+//! The renderer is plain Rust ([`Renderer`]); the `napi` feature adds the addon's JS classes
+//! over it (`addon`), and is the only part that knows about JS.
 
 mod accessibility;
 pub mod app;
@@ -12,6 +15,7 @@ mod color;
 pub mod custom_elements;
 mod decor;
 mod element_tree;
+pub mod error;
 pub mod frame_loop;
 mod images;
 mod motion;
@@ -24,18 +28,11 @@ mod text;
 mod theme;
 mod tooltip;
 
-// gpui's VisualTestAppContext, what the test renderer draws with, is macOS's and Windows' only.
-#[cfg(all(feature = "test-support", any(target_os = "macos", target_os = "windows")))]
-#[path = "test_renderer.rs"]
-mod test_renderer;
+#[cfg(feature = "napi")]
+mod addon;
 
 pub use element_tree::*;
+pub use error::Error;
+pub use pumi_ui_proto as proto;
 pub use renderer::*;
 pub use style::*;
-
-/// True when this binary has the GPU test renderer: built with the `test-support` feature, on
-/// macOS or Windows.
-#[napi_derive::napi]
-pub fn has_test_gpuix_renderer() -> bool {
-    cfg!(all(feature = "test-support", any(target_os = "macos", target_os = "windows")))
-}

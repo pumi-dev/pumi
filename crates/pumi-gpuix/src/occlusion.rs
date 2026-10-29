@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 use gpui::{canvas, px, App, Bounds, Corners, EntityId, IntoElement, Pixels, Styled, Window, WindowId};
 
-use crate::style::StyleDesc;
+use crate::style::{StyleDesc, StyleExt};
 
 /// A box the app painted over a page, in the window.
 #[derive(Clone, Copy, Debug, PartialEq)]

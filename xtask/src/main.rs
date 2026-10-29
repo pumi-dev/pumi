@@ -50,6 +50,7 @@ fn api(check: bool) -> Result<(), String> {
     let files = [
         ("api/pumi-api.json", generate::json(&info)),
         ("api/app-functions.json", generate::app_functions(&info, &internal)),
+        ("api/ui-protocol.json", generate::ui_protocol()),
     ];
     let root = root();
     let mut stale = Vec::new();

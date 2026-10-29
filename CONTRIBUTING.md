@@ -33,6 +33,7 @@ cargo build --locked -p pumid -p pumi-host -p pumi-cli
 (cd runtime/app && bun run addon)
 cargo xtask api --check                           # the generated API is current
 cargo xtask platform                              # OS code is where it belongs
+cargo check --locked -p pumi-gpuix                # the renderer builds without JS (no `napi`)
 (cd runtime/app && bunx tsc --noEmit -p .)
 CARGO_INCREMENTAL=0 cargo test --workspace --exclude xtask
 (cd runtime/app && bun test)
@@ -47,8 +48,10 @@ Linux, and the server crates' tests (`-p pumid -p pumi-host -p pumi-cli -p pumi-
 A function of the API is a Rust function with `#[api]` (`crates/pumi-api-macros`), in `pumid`,
 `pumi-host`, `pumi-os` or `pumi-api`'s builtins. After adding or changing one, run `cargo xtask api`: it checks each
 function's examples, writes `api/pumi-api.json` and `api/app-functions.json`, and regenerates the
-SDK's `runtime/app/worker/sdk/*.gen.ts` from them. Commit what it writes; CI fails when it is
-stale. `api/plugin-manifest.schema.json` is not generated: keep it in step with
+SDK's `runtime/app/worker/sdk/*.gen.ts` from them. It also writes the UI protocol
+(`crates/pumi-ui-proto`: the ops a UI sends the renderer, the events it gets back, the style) to
+`api/ui-protocol.json`, and `runtime/app/native/protocol.gen.ts` from it. Commit what it writes; CI
+fails when it is stale. `api/plugin-manifest.schema.json` is not generated: keep it in step with
 `crates/pumi-api/src/manifest.rs`.
 
 ## Style
@@ -76,7 +79,8 @@ stale. `api/plugin-manifest.schema.json` is not generated: keep it in step with
 | `crates/pumi-mirror` | The core's model as the host sees it, and the declarations of the options outside the core (`src/options.rs`). |
 | `crates/pumi-keys`, `crates/pumi-lang` | Key names and their bytes for terminals; key chords and command-line quoting for the host and the app. |
 | `crates/pumi-os` | The functions only the OS answers: secrets, the clipboard, `fs.*`, `process.*`, notifications. |
-| `crates/pumi-gpuix` | The renderer: a tree React builds, drawn by GPUI. Forked from gpuix. |
+| `crates/pumi-ui-proto` | The UI protocol: the ops a UI sends the renderer, the styles they set and the events it sends back, as plain data with a JSON Schema. No JS, no GPUI. |
+| `crates/pumi-gpuix` | The renderer: a tree a UI builds with the protocol's ops, drawn by GPUI. Plain Rust (`Renderer`); its `napi` feature adds the addon's JS classes (`src/addon`). Forked from gpuix. |
 | `crates/pumi-ui` | GPUI components for the app's native windows (Settings). |
 | `src/` | The root crate: the app's native half, a napi addon (the renderer, the connection to `pumid`, the terminals, the updater). |
 | `runtime/app/app` | The app's TypeScript: the engine, commands and keymap, the default theme (`theme/`), Settings (`settings/`). |
@@ -94,7 +98,7 @@ stale. `api/plugin-manifest.schema.json` is not generated: keep it in step with
 
 A contribution is accepted under the license of the part it touches. The crates NOTICE lists as
 Apache-2.0 (`pumid`, `pumi-proto`, `pumi-api`, `pumi-api-macros`, `pumi-sys`, `pumi-layout`,
-`pumi-model`, `pumi-cli`, and `pumi-gpuix`) take contributions under the Apache License 2.0
+`pumi-model`, `pumi-cli`, `pumi-gpuix` and `pumi-ui-proto`) take contributions under the Apache License 2.0
 ([LICENSE-APACHE](LICENSE-APACHE)); everything else under the GPL, version 3 or later
 ([LICENSE](LICENSE)). Each crate's `Cargo.toml` names its license. An Apache-2.0 crate includes no
 GPL code; keep it that way. See [NOTICE](NOTICE) for the third-party code in the tree.

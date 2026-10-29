@@ -2,7 +2,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use napi::bindgen_prelude::*;
+use crate::error::{Error, Result};
 
 pub(super) struct Platform(Rc<gpui_windows::WindowsPlatform>);
 

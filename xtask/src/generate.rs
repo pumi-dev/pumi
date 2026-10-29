@@ -14,3 +14,10 @@ pub fn app_functions(info: &ApiInfo, internal: &[FunctionInfo]) -> String {
     text.push('\n');
     text
 }
+
+/// The UI protocol (`pumi-ui-proto`): what the window's UI sends the renderer and hears back.
+pub fn ui_protocol() -> String {
+    let mut text = serde_json::to_string_pretty(&pumi_ui_proto::schema()).expect("the protocol is JSON");
+    text.push('\n');
+    text
+}

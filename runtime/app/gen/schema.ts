@@ -149,7 +149,11 @@ export class Types {
       );
       return unique(parts).join(" | ");
     }
-    if (Array.isArray(s.allOf)) return s.allOf.map((p: Schema) => this.ts(p, local, indent)).join(" & ");
+    if (Array.isArray(s.allOf)) {
+      // `&` binds tighter than `|`: a part that is a union keeps its parentheses.
+      const union = (p: Schema) => typeof p === "object" && Array.isArray(p.anyOf ?? p.oneOf) && !p.type;
+      return s.allOf.map((p: Schema) => (union(p) ? `(${this.ts(p, local, indent)})` : this.ts(p, local, indent))).join(" & ");
+    }
     const types: string[] = Array.isArray(s.type) ? s.type : s.type ? [s.type] : [];
     if (ANY_JSON.every((t) => types.includes(t))) return "unknown";
     if (types.length === 0) return s.properties ? this.object(s, local, indent) : "unknown";

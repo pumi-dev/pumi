@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use napi::bindgen_prelude::*;
+use crate::error::{Error, Result};
 
 type Start = Box<dyn Fn(&mut gpui::App) + Send + Sync>;
 
@@ -139,13 +139,13 @@ pub(crate) fn tick() -> bool {
     crate::frame_loop::pump(|| APP.with(|app| app.borrow().as_ref().map(|app| app.platform.pump()).unwrap_or(false)))
 }
 
-/// Whether a wake reaches JS when a frame is due (macOS's display link). Elsewhere
-/// `setFrameWakeCallback` says no and JS pumps on its own timer.
-pub(crate) const FRAME_WAKE: bool = os::FRAME_WAKE;
+/// Whether a wake reaches the host when a frame is due (macOS's display link). Elsewhere the
+/// host pumps `tick` on its own timer (the addon's `setFrameWakeCallback` says no).
+pub const FRAME_WAKE: bool = os::FRAME_WAKE;
 
-/// Sets (or clears) how a wake reaches JS: the display link's each frame, input's, and
+/// Sets (or clears) how a wake reaches the host: the display link's each frame, input's, and
 /// [`wake`]'s all go through it, coalesced and counted ([`crate::frame_loop`]).
-pub(crate) fn set_wake_hook(sender: Option<crate::frame_loop::Sender>) {
+pub fn set_wake_hook(sender: Option<crate::frame_loop::Sender>) {
     let display = sender.is_some().then(|| {
         Arc::new(|| crate::frame_loop::request(crate::frame_loop::Source::Display)) as Arc<dyn Fn() + Send + Sync>
     });

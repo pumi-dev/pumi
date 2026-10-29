@@ -19,12 +19,41 @@ use napi_derive::napi;
 
 use gpui::AppContext as _;
 
-use crate::element_tree::EventPayload;
+use super::events::EventPayload;
+use super::to_element_id;
 use crate::renderer::{
     apply_batch_to_tree, debug_frame_overlay_mode_name, debug_frame_overlay_stats_js, parse_debug_frame_overlay_mode,
-    to_element_id, DebugFrameOverlayStats, EventCallback, GpuixView, PathPromptOptions, PromptForPathsTask,
+    path_prompt_result, DebugFrameOverlayStats, EventCallback, GpuixView, PathPromptOptions, PathPromptReceiver,
 };
 use crate::retained_tree::RetainedTree;
+
+/// `promptForPaths`' answer, awaited on a worker thread.
+pub struct PromptForPathsTask {
+    receiver: Option<Result<PathPromptReceiver>>,
+}
+
+impl PromptForPathsTask {
+    pub(crate) fn new(receiver: Result<PathPromptReceiver>) -> Self {
+        Self { receiver: Some(receiver) }
+    }
+}
+
+#[napi]
+impl Task for PromptForPathsTask {
+    type Output = Option<Vec<String>>;
+    type JsValue = Option<Vec<String>>;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let receiver = self.receiver.take().ok_or_else(|| Error::from_reason("Path prompt was already awaited"))??;
+        let result = futures::executor::block_on(receiver)
+            .map_err(|_| Error::from_reason("The path prompt closed without a result"))?;
+        Ok(path_prompt_result(result)?)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
 
 // ── Thread-local storage for !Send GPUI types ────────────────────────
 
@@ -209,8 +238,8 @@ impl TestGpuixRenderer {
 
         // Event callback: push to Vec instead of ThreadsafeFunction.
         let events_clone = events.clone();
-        let event_callback: Option<EventCallback> = Some(Arc::new(move |payload: EventPayload| {
-            events_clone.lock().unwrap().push(payload);
+        let event_callback: Option<EventCallback> = Some(Arc::new(move |event: pumi_ui_proto::Event| {
+            events_clone.lock().unwrap().push(event.into());
         }));
 
         let tree_clone = tree.clone();
@@ -277,7 +306,8 @@ impl TestGpuixRenderer {
     #[napi]
     pub fn apply_batch(&self, json: String) -> Result<Vec<f64>> {
         let mut tree = self.tree.lock().unwrap();
-        apply_batch_to_tree(&mut tree, json.as_bytes()).map_err(Error::from_reason)
+        let destroyed = apply_batch_to_tree(&mut tree, json.as_bytes()).map_err(Error::from_reason)?;
+        Ok(destroyed.into_iter().map(|id| id as f64).collect())
     }
 
     // ── Test-specific methods ────────────────────────────────────────
@@ -476,6 +506,7 @@ impl TestGpuixRenderer {
     #[napi]
     pub fn prompt_for_paths(&self, options: Option<PathPromptOptions>) -> AsyncTask<PromptForPathsTask> {
         let receiver = PathPromptOptions::to_gpui(options)
+            .map_err(super::js)
             .and_then(|options| with_test_state(|cx, _window, _view| Ok(cx.update(|cx| cx.prompt_for_paths(options)))));
         AsyncTask::new(PromptForPathsTask::new(receiver))
     }
@@ -779,8 +810,8 @@ impl TestGpuixRenderer {
         format: Option<String>,
     ) -> Result<()> {
         let id = to_element_id(element_id)?;
-        let width = crate::renderer::dimension_u32(width, "width")?;
-        let height = crate::renderer::dimension_u32(height, "height")?;
+        let width = super::dimension_u32(width, "width")?;
+        let height = super::dimension_u32(height, "height")?;
         let format = crate::custom_elements::img::PixelFormat::parse(format.as_deref()).map_err(Error::from_reason)?;
         let bytes = pixels.to_vec();
         with_test_state(|cx, window, view| {
