@@ -31,11 +31,6 @@ pub fn main(address: &Address, args: &[String]) -> Result<i32, Error> {
             let commands = nouns::table(&mut client)?;
             // A command as it is written, a tab method's included: `tab.read` is `tab.call`'s.
             let parts: Vec<&str> = name.split('.').collect();
-            // The CLI's own (`agent ask`): its usage is the command's `--help`.
-            if parts.len() == 2 && crate::agents::VERBS.iter().any(|(words, _)| *words == parts.join(" ")) {
-                let words: Vec<String> = vec![parts[0].into(), parts[1].into(), "--help".into()];
-                return crate::agents::run(address, &words, false).unwrap_or(Ok(0));
-            }
             if parts.len() == 2
                 && let Some(command) = commands.iter().find(|command| command.words == parts)
                 && command.method.is_some()
@@ -84,7 +79,6 @@ pub fn listing(commands: &[Command]) -> String {
     let mut rows: Vec<(String, String)> = commands
         .iter()
         .map(|command| (command.words.join(" "), command.desc.trim().lines().next().unwrap_or("").to_string()))
-        .chain(crate::agents::VERBS.iter().map(|(words, desc)| (words.to_string(), desc.to_string())))
         .collect();
     rows.sort();
     rows.dedup();
@@ -134,10 +128,6 @@ fn noun_help(commands: &[Command], noun: &str) -> Result<i32, Error> {
         let verbs = command.words[1..].join(" ");
         let verb = verbs.split(' ').next().unwrap_or("");
         println!("    {verb:<12}  {}", command.desc.trim().lines().next().unwrap_or(""));
-    }
-    for (words, desc) in crate::agents::VERBS.iter().filter(|(words, _)| words.split(' ').next() == Some(noun)) {
-        let verb = words.split(' ').nth(1).unwrap_or("");
-        println!("    {verb:<12}  {desc}");
     }
     println!("\nflags and arguments: {}", format!("pumi help {noun} VERB"));
     Ok(0)

@@ -443,7 +443,7 @@ pub struct TabInfo {
     pub view: Option<ViewRef>,
     /// The block it holds (`terminal`, `owner.name.page`).
     pub block: String,
-    /// Each trait it has, with its fields: `{agent: {status, session, …}}`.
+    /// Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`.
     pub traits: BTreeMap<String, Value>,
     pub place: TabPlace,
     pub title: Option<String>,

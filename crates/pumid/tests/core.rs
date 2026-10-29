@@ -306,54 +306,6 @@ fn the_first_app_attached_is_the_primary_app_until_it_goes() {
     let clients = second.ok("channel.list", json!([{ "ui": true }]));
     assert_eq!(clients.as_array().unwrap().iter().filter(|c| c["primary"] == true).count(), 1);
 }
-#[test]
-fn an_agent_is_told_what_listeners_answer_and_takes_what_waits_for_it() {
-    let core = Core::start_in(tempfile::tempdir().unwrap(), true);
-    let mut plugin = Conn::open(&core.socket);
-    plugin.ok("channel.setInfo", json!(["pumi_dev/agents", {}, "plugin", {}, {}]));
-    plugin.ok("event.on", json!(["agent.sending", {}]));
-    let mut hook = Conn::open(&core.socket);
-    let tab = hook
-        .ok("core.openTab", json!(["terminal", { "command": ["/bin/cat"] }, { "kind": "session" }]))
-        .as_u64()
-        .unwrap();
-    let turn = json!({ "agent": "claude", "event": "prompt", "session": "s-1", "accepts": ["queue"] });
-    hook.send(json!({ "jsonrpc": "2.0", "id": 900, "method": "agent.turn", "params": [tab_ref(tab), turn] }));
-    let sending = plugin.read();
-    assert_eq!(sending["params"][1]["event"], "agent.sending");
-    let id = sending["params"][1]["data"]["id"].clone();
-    plugin.ok("agent.contribute", json!([id, "the map"]));
-    let told = hook.read();
-    assert_eq!(told["id"], 900);
-    assert_eq!(told["result"]["context"], "<pumi-context from=\"pumi_dev/agents\">\nthe map\n</pumi-context>\n");
-    // A source that does not answer is late, after the deadline, and the call still answers.
-    let started = Instant::now();
-    let turn = json!({ "agent": "claude", "event": "prompt", "session": "s-1" });
-    let late = hook.ok("agent.turn", json!([tab_ref(tab), turn, { "timeout": 0.15 }]));
-    assert!(started.elapsed() >= Duration::from_millis(150) && started.elapsed() < Duration::from_secs(2));
-    assert_eq!(late, json!({ "context": null, "from": [], "late": ["pumi_dev/agents"] }));
-    let _ = plugin.read();
-    // A take waits for an item, and the item is saved until it is taken.
-    hook.send(json!({ "jsonrpc": "2.0", "id": 901, "method": "agent.take", "params": [tab_ref(tab), { "session": "s-1", "wait": true }] }));
-    let mut cli = Conn::open(&core.socket);
-    cli.ok("channel.setInfo", json!(["cli", {}, "cli", {}, {}]));
-    let item = cli.ok("agent.queue", json!([tab_ref(tab), "run the tests again"]));
-    assert!(item.is_u64(), "its handle: {item}");
-    let taken = hook.read();
-    assert_eq!((taken["id"].clone(), taken["result"]["text"].clone()), (json!(901), json!("run the tests again")));
-    cli.ok("agent.queue", json!([tab_ref(tab), "kept across a restart"]));
-    let saved = core.dir.path().join("state.json");
-    until("the queue saved", || std::fs::read_to_string(&saved).is_ok_and(|s| s.contains("kept across a restart")));
-    let mut core = core;
-    let _ = core.child.kill();
-    let _ = core.child.wait();
-    let dir = std::mem::replace(&mut core.dir, tempfile::tempdir().unwrap());
-    drop(core);
-    let core = Core::start_in(dir, true);
-    let mut c = Conn::open(&core.socket);
-    let taken = c.ok("agent.take", json!([tab_ref(tab), { "session": "s-1" }]));
-    assert_eq!(taken["text"], "kept across a restart");
-}
 /// The next request `c` is asked, past the redraws it hears as a client.
 fn asked(c: &mut Conn) -> Value {
     loop {

@@ -7,7 +7,7 @@
 // - the state: `useApp`, `useSessions`, `useViews`, `useTab`, `useFloats`, `useZoomed`, …
 // - the layout: `useLayout`, `leavesOf`, `panesOf`, `tabsOf`, `shownOf`, `paneOfTab`, `leafOf`,
 //   `usePaneTabs` (whether panes hold tabs)
-// - a tab's icon: `useTabIcon` (its `@icon`, its agent's mark, its block's), `useTabStatus`,
+// - a tab's icon: `useTabIcon` (its `@icon`, its block's), `useTabStatus`,
 //   `showsStatus` (the app's rule for which to show it), and the `TabIcon` part, which every
 //   place showing a tab's icon draws (`IconImage` and `TabIcon` in `pumi` draw them)
 // - slots and blocks: `useSlot` (components, and actions as data: the plugins' and the app's own),
@@ -28,9 +28,6 @@
 // - what the theme keeps: `useLocal` (by key, kept across restarts)
 // - the theme: `useAppearance`, `useThemeOption`
 export {
-  agentsOf,
-  useAgentOf,
-  useAgents,
   useApp,
   useConnection,
   useFloats,
@@ -44,7 +41,6 @@ export {
   useViews,
   useWindow,
   useZoomed,
-  type Agent,
   type PaneLeaf,
   type Session,
   type Snapshot,

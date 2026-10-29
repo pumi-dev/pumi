@@ -70,7 +70,7 @@ fn value(text: &str) -> Value {
 const NOUNS: &[&str] = &["tab", "pane", "view", "session", "app", "update"];
 const TAB_METHODS: &[&str] = &["read", "input", "run", "wait", "selection", "report", "attach"];
 
-/// `pumi do -e EXPRESSION` as a script: the SDK's names in scope (`workspace`, `call`, `agent`,
+/// `pumi do -e EXPRESSION` as a script: the SDK's names in scope (`workspace`, `call`, `tab`,
 /// …), `pumi` itself, every noun as `noun.verb(…)`, and a name that is none of them says what is.
 fn expression_script(expression: &str) -> String {
     let nouns = serde_json::to_string(NOUNS).unwrap_or_default();

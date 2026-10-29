@@ -31,7 +31,6 @@ export { useFont, type Font } from "./font.ts"
 // A plugin's own channel from its `main.ts` (`ui.post`), and the server's events.
 export { useChannel, useChannelListener } from "./channels.ts"
 export { useEvent, type UseEventOptions, type WindowEvent } from "./events.ts"
-export { conversationNames, type ConversationChanged, type ConversationProvider, type ConversationRead } from "../worker/sdk/conversation.ts"
 export { useWebview, webview, webviewRun, webviewSnapshot, WebView, type WebState, type WebViewProps } from "./webview.tsx"
 export { features, Icon, IconButton, IconImage, TabIcon, type IconProps } from "./elements.tsx"
 // A tab's icon and status, for a theme's `TabIcon` part or a plugin's own list of tabs.

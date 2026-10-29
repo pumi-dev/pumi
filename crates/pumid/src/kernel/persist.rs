@@ -38,9 +38,6 @@ struct Saved {
     /// is dropped, not the state.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     requests: Vec<serde_json::Value>,
-    /// The messages waiting for their agents (`agent.queue`), likewise.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    queue: Vec<super::queue::QueuedItem>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -123,7 +120,6 @@ pub fn save(cx: &mut Cx, full: bool) -> Result<()> {
         plugin_traits: kernel.plugin_traits.clone(),
         closed: kernel.closed.iter().cloned().collect(),
         requests: kernel.requests.saved(),
-        queue: kernel.queue.items.values().cloned().collect(),
     };
     let bytes = serde_json::to_vec_pretty(&saved).map_err(|err| Error::exception(err.to_string()))?;
     write_atomic(&dir.join("state.json"), &bytes)
@@ -186,7 +182,6 @@ pub fn restore(cx: &mut Cx) -> Result<usize> {
         }
         kernel.closed = saved.closed.into_iter().collect();
         kernel.requests.restore(saved.requests);
-        kernel.queue.restore(saved.queue);
         for tab in &saved.tabs {
             kernel.model.tabs.insert(
                 tab.id,

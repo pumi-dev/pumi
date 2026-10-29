@@ -1,4 +1,4 @@
-// The window's state, as hooks: what the server says (sessions, views, tabs, layouts, agents,
+// The window's state, as hooks: what the server says (sessions, views, tabs, layouts,
 // options), the window this tree draws, and the theme's tokens. Every hook reads one store and
 // re-renders its component only when what it selects changed.
 import { createContext, useContext, useRef, useSyncExternalStore } from "react"
@@ -8,82 +8,6 @@ export type { PaneLeaf, Snapshot, State, Tree }
 export type Session = Snapshot["workspaces"][number]
 export type View = Snapshot["views"][number]
 export type Tab = Snapshot["tabs"][number]
-
-/**
- * An agent: a tab that says it is one (`@agent`), a terminal's program or a plugin's own tab.
- * Each field is a tab option's copy: `status` `@status`, `session` `@agent.session`,
- * `model` `@agent.model`, `transcript` `@agent.transcript` (the session file's absolute path),
- * `conversation` `@agent.conversation` (the plugin, `owner/name`, that serves its conversation).
- */
-export interface Agent {
-  tab_id: string
-  view_id: string
-  workspace_id: string
-  status: string
-  agent: string
-  /** The block its tab holds: `terminal`, or a plugin's (`owner.name.id`). */
-  block: string
-  name?: string
-  title?: string
-  cwd?: string | null
-  session?: string
-  model?: string
-  transcript?: string
-  conversation?: string
-  /** What it takes besides hidden context (`@agent.accepts`): `queue`, `wake`. */
-  accepts: string[]
-}
-
-/** A list of words, as `@agent.accepts` holds it; anything else is none. */
-const wordsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filter((w): w is string => typeof w === "string") : [])
-
-const agentCache = new WeakMap<Snapshot, Agent[]>()
-/** The last snapshot's agents, by tab: an agent equal to its last self is that object again. */
-let lastAgents = new Map<string, Agent>()
-let lastList: Agent[] = []
-
-/**
- * The snapshot's agents, the same array for the same snapshot. An agent that did not change keeps
- * its object across snapshots (and the list its identity when none did), so `useAgents` re-renders
- * on a change to an agent, not on every change to the server's state.
- */
-export function agentsOf(snapshot: Snapshot | undefined): Agent[] {
-  if (!snapshot) return []
-  let agents = agentCache.get(snapshot)
-  if (!agents) {
-    const kept = new Map<string, Agent>()
-    const next = snapshot.tabs
-      .filter((p) => p.agent)
-      .map((p) => {
-        const agent: Agent = {
-          tab_id: p.tab_id,
-          view_id: p.view_id,
-          workspace_id: p.workspace_id,
-          status: p.status,
-          agent: p.agent!,
-          block: p.block,
-          name: p.label,
-          title: p.terminal_title ?? undefined,
-          cwd: p.cwd,
-          session: p.agent_session,
-          model: p.agent_model,
-          transcript: p.agent_transcript,
-          conversation: p.agent_conversation,
-          accepts: wordsOf(p.options?.["@agent.accepts"]),
-        }
-        const last = lastAgents.get(p.tab_id)
-        const same = last && (Object.keys(agent) as (keyof Agent)[]).every((k) => k === "accepts" ? last.accepts.join() === agent.accepts.join() : last[k] === agent[k])
-        kept.set(p.tab_id, same ? last : agent)
-        return same ? last : agent
-      })
-    const unchanged = next.length === lastList.length && next.every((agent, i) => agent === lastList[i])
-    agents = unchanged ? lastList : next
-    lastAgents = kept
-    lastList = agents
-    agentCache.set(snapshot, agents)
-  }
-  return agents
-}
 
 /** Selects from the app's state; re-renders when the selection changes (shallowly). */
 export function useApp<T>(select: (state: State) => T): T {
@@ -236,15 +160,6 @@ export function useFloats(view?: string): Tab[] {
 export function useZoomed(view?: string): boolean {
   const shown = useView(view)?.view_id
   return useApp((s) => s.snapshot?.layouts.find((l) => l.view_id === shown)?.zoomed ?? false)
-}
-
-/** The agents running in tabs, as they say they are. */
-export function useAgents(): Agent[] {
-  return useApp((s) => agentsOf(s.snapshot))
-}
-
-export function useAgentOf(tab: string | undefined): Agent | undefined {
-  return useApp((s) => agentsOf(s.snapshot).find((a) => a.tab_id === tab))
 }
 
 /** A global option's value. */

@@ -56,9 +56,8 @@ pub struct RequestOpenOpts {
 /// permission for what runs in `tab` (the `tool` and the `options` to allow or reject it), or a
 /// question. Whoever listens to `request.opened` shows it, and anyone may answer it with
 /// `request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.
-/// While a permission or a question is open its tab takes no queued message. pumi-host
-/// posts notifications to the OS's notification centre and takes them back when they close.
-/// Answers the request's id.
+/// pumi-host posts notifications to the OS's notification centre and takes them back when they
+/// close. Answers the request's id.
 #[api(
     name = "request.open",
     example(args = r#"[{"kind": "notification", "title": "Build finished"}]"#, result = r#""+7""#),

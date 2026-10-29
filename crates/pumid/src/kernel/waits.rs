@@ -44,7 +44,7 @@ pub struct Waits {
     pending: BTreeMap<u64, Wait>,
     next: u64,
     /// Set by `event.wait`: the server takes it after the call and keeps the caller's message id
-    /// in `waiters` instead of replying, as `agent.take` does.
+    /// in `waiters` instead of replying.
     pub held: Option<u64>,
     pub waiters: BTreeMap<u64, (ChanId, Value)>,
 }

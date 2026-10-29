@@ -6,7 +6,6 @@ import { SettingsContext } from "../../sdk/settings/context.ts"
 import { Icon } from "../../sdk/elements.tsx"
 import { useMetrics, useTheme, withOpacity } from "../../sdk/theme.ts"
 import { BUILT_IN, HIDDEN, otherGroups, pageOfLink, PAGES, pluginPages, SCHEMES, search, searchIndex, STORE, THEMES, type Entry, type PageInfo } from "./pages.ts"
-import { AgentsPage } from "./pages/agents.tsx"
 import { AppearancePage, SchemesPage, ThemesPage } from "./pages/appearance.tsx"
 import { GeneralPage } from "./pages/general.tsx"
 import { KeysPage, useKeyRows } from "./pages/keys.tsx"
@@ -180,8 +179,6 @@ export function SettingsApp({ route, safe }: { route: Route; safe: boolean }) {
     <AppearancePage />
   ) : shown.id === "keys" ? (
     <KeysPage />
-  ) : shown.id === "agents" ? (
-    <AgentsPage />
   ) : shown.id === "plugins" ? (
     <PluginsPage pages={own} />
   ) : shown.id === STORE.id ? (

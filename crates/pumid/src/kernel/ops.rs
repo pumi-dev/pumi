@@ -440,7 +440,6 @@ pub fn close_tab_with(cx: &mut Cx, tab: TabId, keep: bool) -> Result<()> {
     kernel.model.tabs.remove(&tab);
     kernel.model.options.drop_object(Key::Tab(tab));
     kernel.emit("tab.closed", &ty, About::tab(tab), json!({ "tab": TabRef(tab), "block": ty }));
-    super::queue::tab_closed(kernel, tab);
     if let Some(view) = view
         && kernel.model.views.contains_key(&view)
     {

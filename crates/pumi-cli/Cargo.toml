@@ -4,7 +4,7 @@ version = "0.43.0"
 edition = "2024"
 publish = false
 license = "Apache-2.0"
-description = "`pumi` in every pane: the command line against pumid, `call`, `do`, `open`, `wait`, `registry` and `skill`."
+description = "`pumi` in every pane: the command line against pumid, `call`, `do`, `open`, `wait` and `registry`."
 [lib]
 path = "src/lib.rs"
 [[bin]]

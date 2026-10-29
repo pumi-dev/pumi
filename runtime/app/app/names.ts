@@ -5,21 +5,14 @@ import { basename } from "node:path"
 import type { Snapshot, Tree } from "./engine.ts"
 import { shownOf } from "./layout.ts"
 
-type Tab = Snapshot["tabs"][number]
-
 /** The bundled `pumi/launcher`'s block: a new pane's first tab, until what goes in it is picked. */
 export const NEW_TAB = "pumi.launcher.new"
 
-/** A tab that is not an agent, by what it shows: its name, its title, its directory, its type. */
+/** A tab by what it shows: its name, its title, its directory, its type. */
 export function tabLabel(p: { block: string; label?: string; terminal_title?: string | null; cwd?: string | null }): string {
   if (p.block === NEW_TAB) return p.label || "New Tab"
   const dir = p.cwd ? basename(p.cwd) : undefined
   return p.label || p.terminal_title || dir || p.block
-}
-
-/** A tab as its title bar names it: an agent by its title first, else by `tabLabel`. */
-export function tabTitle(p: Tab): string {
-  return (p.agent && (p.terminal_title || p.label || p.agent)) || tabLabel(p)
 }
 
 /** What a view with no tabs, and no name, is called. */
@@ -34,5 +27,5 @@ export function viewName(snapshot: Snapshot | undefined, trees: Record<string, T
   const tree = trees[view]
   const first = tree ? shownOf(tree)[0] : undefined
   const tab = held.find((t) => t.tab_id === active) ?? held.find((t) => t.tab_id === first) ?? held[0]
-  return tab ? tabTitle(tab) : UNNAMED
+  return tab ? tabLabel(tab) : UNNAMED
 }

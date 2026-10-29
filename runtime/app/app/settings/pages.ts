@@ -3,7 +3,7 @@
 // anything. Plain data, so a test can read it.
 import { choicesOf, groupOf, titleOf, type Decl } from "../../sdk/settings/options.ts"
 
-export const BUILT_IN = ["general", "appearance", "keys", "agents", "plugins"] as const
+export const BUILT_IN = ["general", "appearance", "keys", "plugins"] as const
 export type BuiltIn = (typeof BUILT_IN)[number]
 
 export interface PageInfo {
@@ -23,7 +23,6 @@ export const PAGES: Record<BuiltIn, PageInfo> = {
   general: { id: "general", title: "General", icon: "settings" },
   appearance: { id: "appearance", title: "Appearance", icon: "sparkle" },
   keys: { id: "keys", title: "Keybindings", icon: "keyboard" },
-  agents: { id: "agents", title: "Agents", icon: "zap" },
   plugins: { id: "plugins", title: "Plugins", icon: "puzzle" },
 }
 
@@ -50,7 +49,6 @@ export const GROUPS: Record<BuiltIn, string[]> = {
   general: ["General", "Updates"],
   appearance: ["Appearance", DEFAULT_THEME, "Terminal", "Font", "Cursor", "Mouse"],
   keys: ["Keys"],
-  agents: [],
   plugins: ["Plugins"],
 }
 
@@ -77,9 +75,6 @@ export interface PluginSettings {
   sections?: { id: string; page: string; title: string; component: string; keywords?: string[] }[]
 }
 
-/** The agents' options' plugin id: Agents draws them, not a page of their own. */
-export const AGENTS = "agents"
-
 /** The plugins' pages (their own, and one made of the options of each that says nothing of Settings) and their sections. */
 export function pluginPages(plugins: PluginSettings[], decls: Decl[], components: boolean): { pages: PageInfo[]; sections: SectionInfo[] } {
   const pages: PageInfo[] = []
@@ -97,7 +92,7 @@ export function pluginPages(plugins: PluginSettings[], decls: Decl[], components
   }
   // A plugin the server has options of but the app has no manifest for (another app's): its page too.
   for (const d of decls) {
-    if (d.plugin && d.plugin !== AGENTS && !plugins.some((p) => p.id === d.plugin) && !pages.some((page) => page.id === d.plugin)) {
+    if (d.plugin && !plugins.some((p) => p.id === d.plugin) && !pages.some((page) => page.id === d.plugin)) {
       pages.push({ id: d.plugin, title: d.plugin.split("/").pop() ?? d.plugin, icon: "puzzle", plugin: d.plugin })
     }
   }
@@ -119,7 +114,6 @@ export function otherGroups(decls: Decl[]): string[] {
 
 /** The page an option is drawn on. */
 export function pageOfOption(d: Decl, pages: PageInfo[]): string {
-  if (d.plugin === AGENTS) return "agents"
   if (d.plugin) {
     const own = pages.find((p) => p.id === d.plugin)
     if (own) return own.id
@@ -138,7 +132,6 @@ export const ROWS: { id: string; page: BuiltIn; title: string; text: string }[] 
   { id: "updates", page: "general", title: "Current version", text: "updates check for updates restart to update version" },
   { id: "ui_theme", page: "appearance", title: "Theme", text: "theme look ui dark light" },
   { id: "ghostty-config", page: "appearance", title: "config.ghostty", text: "ghostty config import edit file terminal settings config.ghostty" },
-  { id: "agent-hooks", page: "agents", title: "Hooks", text: "agents hooks skill install update claude codex pi gemini cursor opencode" },
   { id: "safe-mode", page: "plugins", title: "Safe mode", text: "safe mode turn off plugins restart" },
   { id: "store", page: "plugins", title: "Community plugins", text: "community plugins themes browse install store" },
   { id: "plugin-updates", page: "plugins", title: "Current plugins", text: "plugin updates check update all" },

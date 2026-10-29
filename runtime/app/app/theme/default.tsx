@@ -45,7 +45,7 @@ import { useTab as useTabModel } from "../../sdk/state.ts"
 import { fromServer } from "../serverkeys.ts"
 import { NEW_TAB } from "../names.ts"
 import { useLocal } from "../local.ts"
-import { tabTitle, viewName } from "../names.ts"
+import { tabLabel, viewName } from "../names.ts"
 import { FONT_DEFAULT } from "../../sdk/font.ts"
 import { AtTop, TileMotion, Tiling } from "./tiles.tsx"
 import * as worktreeViews from "../worktree-views.ts"
@@ -528,9 +528,9 @@ function ViewIcons({ view, ring }: { view: string; ring: string }) {
 
 /**
  * The app's own `TabIcon` part: a tab's status while it says something happened (working, done,
- * blocked, failed), else its own icon (`useTabIcon`): an agent's mark while it is idle, a page's
- * favicon, a plugin block's. A tab with only the core's icon for its block shows any status it
- * has instead, an agent's ring as much as a spinner.
+ * blocked, failed), else its own icon (`useTabIcon`): its `@icon`, a page's favicon, a plugin
+ * block's. A tab with only the core's icon for its block shows any status it has instead, a ring
+ * as much as a spinner.
  */
 function DefaultTabIcon({ tab, size = 14, color }: TabIconProps) {
   const t = useTheme()
@@ -1269,7 +1269,7 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
       style={{ ...bar, gap: 6, paddingLeft: 10, opacity: draggable.dragging ? 0.55 : 1, cursor: draggable.dragging ? "grabbing" : "default" }}
     >
       <TabIcon tab={tab.tab_id} size={12} color={t.faint} />
-      <text style={{ fontSize: ts(12), color: focused ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabTitle(tab)}</text>
+      <text style={{ fontSize: ts(12), color: focused ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabLabel(tab)}</text>
       <div style={{ flexGrow: 1 }} />
       {/* A plugin's buttons sit with the pane's own, spaced as they are. */}
       <Slot slot="tab.toolbar" args={toolbar} gap={2} />
@@ -1287,7 +1287,7 @@ async function closePane(pane: string, tabs: string[]) {
   if (working.length) {
     const one = working.length === 1 ? working[0]! : undefined
     const yes = await confirm({
-      title: one ? `${tabTitle(one)} is still working` : `${working.length} tabs are still working`,
+      title: one ? `${tabLabel(one)} is still working` : `${working.length} tabs are still working`,
       detail: "Closing the pane stops them and closes its tabs.",
       confirm: "Close Pane",
       danger: true,
@@ -1588,10 +1588,10 @@ function StripEnd({ pane, tabs }: { pane: string; tabs: string[] }) {
 }
 
 /**
- * The `PaneTab` part: one tab in a pane's strip, as Zed's. Its icon (its agent's status, for an
- * agent), its title, then dimmer where it is (its directory) when that says more than its title
- * does or another tab in the strip has the same title, and a close, shown on the front tab and
- * the one under the mouse (its room kept, so the tab does not change width). A press
+ * The `PaneTab` part: one tab in a pane's strip, as Zed's. Its icon (`TabIcon`: its status, or
+ * its own icon), its title, then dimmer where it is (its directory) when that says more than its
+ * title does or another tab in the strip has the same title, and a close, shown on the front tab
+ * and the one under the mouse (its room kept, so the tab does not change width). A press
  * brings it to the front and gives its pane the focus; a right press opens its menu. It drags:
  * along its strip, into another pane's (or onto a side of a pane, for a pane of its own), or
  * onto a row of the side bar. A tab dropped on it goes before it, or after it past its middle.
@@ -1615,10 +1615,10 @@ function PaneTab({ tab: id, pane, index, active, focused }: { tab: string; pane:
     const all = s.snapshot?.tabs ?? []
     const me = all.find((t) => t.tab_id === id)
     if (!me) return false
-    const title = tabTitle(me)
+    const title = tabLabel(me)
     return leaf.tabs.some((other) => {
       const it = other !== id && all.find((t) => t.tab_id === other)
-      return !!it && tabTitle(it) === title
+      return !!it && tabLabel(it) === title
     })
   })
   const zone = drop.useDropBox(intoStrip(pane, leaf.tabs), (it, at, box) => {
@@ -1629,7 +1629,7 @@ function PaneTab({ tab: id, pane, index, active, focused }: { tab: string; pane:
   const over = zone.isOver && zone.drag ? firstHalf(zone.drag, zone.box(), true) : undefined
   const carried = zone.drag ? moves.carried(zone.drag.data) : undefined
   const lit = over !== undefined && carried && moves.stripDrop(carried, leaf, over ? index : index + 1) ? (over ? "left" : "right") : undefined
-  const title = tabTitle(tab)
+  const title = tabLabel(tab)
   const where = tab.cwd ? tildePath(tab.cwd) : undefined
   // A terminal named after its directory says where it is already, unless a twin needs telling apart.
   const detail = where && (twin || (title !== basename(tab.cwd!) && where !== title)) ? where : undefined
@@ -1985,7 +1985,7 @@ function FloatBar({ tab: id, held, onPress }: { tab: string; held: boolean; onPr
       }}
     >
       <TabIcon tab={id} size={12} color={t.faint} />
-      <text style={{ fontSize: ts(12), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabTitle(tab)}</text>
+      <text style={{ fontSize: ts(12), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabLabel(tab)}</text>
       <div style={{ flexGrow: 1 }} />
       <IconButton icon="close" title="Close Tab" color={t.text} onClick={() => call(via(id, "tab.close"), id).catch(swallow)} />
     </div>
@@ -2634,7 +2634,7 @@ function MoveGhost() {
           }}
         >
           <TabIcon tab={tab.tab_id} size={14} color={t.muted} />
-          <text style={{ fontSize: ts(13), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabTitle(tab)}</text>
+          <text style={{ fontSize: ts(13), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabLabel(tab)}</text>
         </div>
       </anchored>
     )
@@ -2982,7 +2982,7 @@ function Sessions() {
     const path = snapshot?.views.find((x) => x.view_id === view)?.worktree
     return path ? shortName(path) : undefined
   }
-  const viewHit = (view: string) => has(viewName(snapshot, trees, view), worktreeOf(view), ...(snapshot?.tabs ?? []).filter((p) => p.view_id === view).flatMap((p) => [tabTitle(p), p.agent]))
+  const viewHit = (view: string) => has(viewName(snapshot, trees, view), worktreeOf(view), ...(snapshot?.tabs ?? []).filter((p) => p.view_id === view).map(tabLabel))
   // Expanded: a view's tabs pane by pane as its layout has them, then its floats.
   const laidOut = (view: string) => {
     const tree = layouts[view]
@@ -2992,7 +2992,7 @@ function Sessions() {
   }
   const leaves = (session: string, held: typeof tabs, view: string, whole: boolean) => {
     // Searching, a view that matches by its own name (or its session's) keeps all its tabs.
-    const shown = whole ? held : held.filter((p) => has(tabTitle(p), p.agent))
+    const shown = whole ? held : held.filter((p) => has(tabLabel(p)))
     return shown.map((p) => <TreeLeaf key={p.tab_id} tab={p.tab_id} depth={1} status={!!p.status} session={session} view={view} alone={false} />)
   }
   let shownAny = false
@@ -3058,7 +3058,7 @@ function NeedsAttention() {
         >
           {/* In the ink, not the status's colour, which washes out on yellow: the shape tells them apart. */}
           <Icon name={STATUS_ICON[a.status] ?? "status_unknown"} size={14} color={ink} />
-          <text style={{ fontSize: ts(12), fontWeight: 600, color: ink, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabTitle(a)}</text>
+          <text style={{ fontSize: ts(12), fontWeight: 600, color: ink, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabLabel(a)}</text>
         </div>
       ))}
     </div>
@@ -3401,7 +3401,7 @@ function PlainTabRow({ tab }: { tab: string }) {
           <div style={{ display: "flex", width: 14, height: 14, flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
             <TabIcon tab={tab} size={12} color={t.muted} />
           </div>
-          <text style={{ fontSize: ts(12), color: selected || hovered ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabTitle(p)}</text>
+          <text style={{ fontSize: ts(12), color: selected || hovered ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabLabel(p)}</text>
           {hovered || shown ? <RowButtons menu={show} close={close} /> : null}
           {spot ? <RowDrop row={spot} /> : null}
         </div>
@@ -3465,7 +3465,7 @@ function TabRow({ tab }: { tab: string }) {
   const footer = useMemo(() => ({ tab }), [tab])
   if (!p) return null
   const status = p.status || "unknown"
-  const label = p.terminal_title || p.label || tabTitle(p)
+  const label = p.terminal_title || p.label || tabLabel(p)
   // What wants a look is bold, as unread mail is.
   const loud = wantsLook(status)
   const hasControls = controls.actions.length + controls.components.length > 0

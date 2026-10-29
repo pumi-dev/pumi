@@ -198,10 +198,6 @@ impl Requests {
     pub fn saved(&self) -> Vec<Value> {
         self.open.values().map(|r| serde_json::to_value(r).expect("plain data")).collect()
     }
-    /// Whether `tab` waits on the user: a permission or a question is open for it.
-    pub fn holds(&self, tab: TabId) -> bool {
-        self.open.values().any(|r| r.kind.waits() && r.tab == Some(TabRef(tab)))
-    }
 }
 pub fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
@@ -287,8 +283,6 @@ pub fn close(kernel: &mut Kernel, id: u64, answer: Value, reason: Reason) -> boo
     let data = json!({ "request": request.id, "tab": request.tab, "answer": answer, "reason": reason.word() });
     let about = About { tab: request.tab.map(|p| p.0), ..About::default() };
     kernel.emit("request.closed", &request.id.to_string(), about, data);
-    // Its tab may hold no more: a message waiting for it may go.
-    super::queue::deliver(kernel);
     true
 }
 /// Closes the requests that expired by `now` (Unix ms), and those whose tab closed.

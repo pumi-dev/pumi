@@ -8,7 +8,7 @@ import { addActions, type Action, type ActionContext } from "../sdk/actions.ts"
 import { FILE, TAB_RENDERER, rendererFor, renderersFor, RENDERERS } from "../sdk/contributions.ts"
 import { startRename } from "../sdk/rename.ts"
 import { leavesOf, paneOfTab } from "./layout.ts"
-import { tabTitle, viewName } from "./names.ts"
+import { tabLabel, viewName } from "./names.ts"
 import * as worktreeViews from "./worktree-views.ts"
 
 const swallow = (err: unknown) => console.error(String(err))
@@ -70,7 +70,7 @@ function tabActions(args: Record<string, unknown>, { state }: ActionContext): Ac
       ...(tabs && !floating
         ? others.map((p) => {
             const front = state.snapshot?.tabs.find((t) => t.tab_id === (p.active ?? p.tabs[0]))
-            return act(`move_to.pane.${p.pane}`, `Pane: ${front ? tabTitle(front) : p.pane}`, run("tab.update", id, { place: { kind: "tiled", pane: p.pane } }), { group: "panes" })
+            return act(`move_to.pane.${p.pane}`, `Pane: ${front ? tabLabel(front) : p.pane}`, run("tab.update", id, { place: { kind: "tiled", pane: p.pane } }), { group: "panes" })
           })
         : []),
     ], { group: "place" }),

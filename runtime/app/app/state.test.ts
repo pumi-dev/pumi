@@ -7,53 +7,7 @@ mock.module("./engine.ts", () => ({
   call: () => Promise.resolve(null),
   on: () => () => {},
 }))
-const { agentsOf, HeldModifiers } = await import("./state.ts")
-
-const tab = (id: string, extra: Record<string, unknown> = {}) => ({
-  tab_id: id,
-  block: "terminal",
-  view_id: "@1",
-  workspace_id: "$1",
-  status: "idle",
-  agent: "claude",
-  terminal_title: "zsh",
-  ...extra,
-})
-const snapshot = (tabs: unknown[]) => ({ workspaces: [], views: [], layouts: [], tabs }) as any
-
-describe("agentsOf", () => {
-  test("a snapshot whose agents did not change gives the same list", () => {
-    const first = agentsOf(snapshot([tab("%1"), tab("%2"), tab("%3", { agent: undefined })]))
-    const second = agentsOf(snapshot([tab("%1"), tab("%2"), tab("%3", { agent: undefined, terminal_title: "vim" })]))
-    expect(second).toBe(first)
-    expect(second.map((a) => a.tab_id)).toEqual(["%1", "%2"])
-  })
-
-  test("only the agent that changed is a new object", () => {
-    const first = agentsOf(snapshot([tab("%1"), tab("%2")]))
-    const second = agentsOf(snapshot([tab("%1"), tab("%2", { status: "working" })]))
-    expect(second).not.toBe(first)
-    expect(second[0]).toBe(first[0]!)
-    expect(second[1]).not.toBe(first[1]!)
-    expect(second[1]!.status).toBe("working")
-  })
-
-  test("a plugin's tab is an agent, with what it says of itself", () => {
-    const inView = tab("%4", { block: "pumi_dev.acp.chat", agent: "codex", agent_model: "gpt-5", agent_session: "s1", agent_transcript: "/t.jsonl", agent_conversation: "pumi_dev/acp" })
-    const [agent] = agentsOf(snapshot([inView]))
-    expect(agent).toMatchObject({ tab_id: "%4", block: "pumi_dev.acp.chat", agent: "codex", model: "gpt-5", session: "s1", transcript: "/t.jsonl", conversation: "pumi_dev/acp" })
-  })
-
-  test("what an agent accepts is its words, and the same words keep the same object", () => {
-    const accepting = (words: unknown) => tab("%5", { options: { "@agent.accepts": words } })
-    const [first] = agentsOf(snapshot([accepting(["queue", "wake"])]))
-    expect(first!.accepts).toEqual(["queue", "wake"])
-    const [again] = agentsOf(snapshot([accepting(["queue", "wake"])]))
-    expect(again).toBe(first!)
-    const [none] = agentsOf(snapshot([accepting("queue")]))
-    expect(none!.accepts).toEqual([])
-  })
-})
+const { HeldModifiers } = await import("./state.ts")
 
 describe("HeldModifiers", () => {
   const mods = (held: Partial<Record<"ctrl" | "alt" | "shift" | "cmd", boolean>>) => ({ ctrl: false, alt: false, shift: false, cmd: false, ...held })

@@ -136,7 +136,7 @@ pub struct ListTabs {
     /// Only tabs that hold this block.
     #[serde(default)]
     pub block: Option<String>,
-    /// Only tabs with this trait (`agent`): their option `@<trait>` is set.
+    /// Only tabs with this trait (`pumi_dev.files.file`): their option `@<trait>` is set.
     #[serde(default, rename = "trait")]
     pub has: Option<String>,
     /// The tabs closed lately instead, newest first, each with its saved state and where it
@@ -191,7 +191,7 @@ fn tabs_of(k: &Kernel, view: ViewId) -> Vec<TabId> {
     effect = "read",
     example(args = "[{}]", result = r#"["%1"]"#, desc = "Every tab."),
     example(args = r#"[{"block": "terminal"}]"#, result = r#"["%1"]"#, desc = "Only terminals."),
-    example(args = r#"[{"trait": "agent"}]"#, result = r#"["%3"]"#, desc = "Only agents."),
+    example(args = r#"[{"trait": "pumi_dev.files.file"}]"#, result = r#"["%3"]"#, desc = "Only files."),
     example(args = r#"[{"closed": true}]"#, result = "[]", desc = "The tabs closed lately, to reopen one.")
 )]
 pub fn pumi_tab_list(cx: &mut Cx, opts: Option<ListTabs>) -> Result<TabList> {
@@ -335,8 +335,7 @@ pub fn tab_info(k: &Kernel, tab: TabId) -> Result<TabInfo> {
         state: None,
     })
 }
-/// Each trait a tab has, with its fields (`@<trait>.<field>`). The core's `agent` trait also has
-/// its `name` (`@agent`) and its `queue`.
+/// Each trait a tab has, with its fields (`@<trait>.<field>`).
 fn traits(k: &Kernel, tab: TabId) -> BTreeMap<String, Value> {
     let local =
         |name: &str| k.model.options.get_local(name, Key::Tab(tab)).map_or(Value::Null, |set| set.value.clone());
@@ -345,12 +344,8 @@ fn traits(k: &Kernel, tab: TabId) -> BTreeMap<String, Value> {
         if !super::traits::has(k, tab, &t.id) {
             continue;
         }
-        let mut fields: Map<String, Value> =
+        let fields: Map<String, Value> =
             t.fields.iter().map(|f| (f.clone(), local(&format!("@{}.{f}", t.id)))).collect();
-        if t.id == "agent" {
-            fields.insert("name".into(), local("@agent"));
-            fields.insert("queue".into(), k.queue.trait_queue(tab));
-        }
         out.insert(t.id, Value::Object(fields));
     }
     out

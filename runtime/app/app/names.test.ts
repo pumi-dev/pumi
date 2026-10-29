@@ -8,7 +8,7 @@ function snapshot(label: string | null, focused?: string): Snapshot {
   return {
     workspaces: [],
     views: [{ view_id: "@1", workspace_id: "$1", number: 1, label, status: "" }],
-    tabs: [tab("%1", { terminal_title: "zsh" }), tab("%2", { agent: "pi", terminal_title: "π - pumi" })],
+    tabs: [tab("%1", { terminal_title: "zsh" }), tab("%2", { terminal_title: "π - pumi" })],
     layouts: [{ view_id: "@1", zoomed: false, focused_tab_id: focused }],
   } as unknown as Snapshot
 }

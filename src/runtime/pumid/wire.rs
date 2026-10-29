@@ -137,12 +137,7 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
             terminal_title: title.clone(),
             terminal_title_stripped: title.as_deref().map(strip_title).filter(|t| !t.is_empty()),
             label: text("@label"),
-            agent: text("@agent"),
             status: text("@status").unwrap_or_default(),
-            agent_session: text("@agent.session"),
-            agent_model: text("@agent.model"),
-            agent_transcript: text("@agent.transcript"),
-            agent_conversation: text("@agent.conversation"),
             program_status: program_status(options.get("@program_status")),
             place,
             options,
@@ -226,7 +221,7 @@ mod tests {
             "options": { "view:1": { "worktree": "/src/pumi.worktrees/avid-storm" } },
             "tabs": [
                 { "id": 1, "block": "terminal", "place": { "kind": "tiled", "view": 1 }, "options": { "tab_current_path": "/tmp", "title": "⠋ π - pumi" } },
-                { "id": 2, "block": "pumi_dev.hello.counter", "place": { "kind": "tiled", "view": 1 }, "options": { "@agent": "codex", "@agent.model": "gpt-5", "@agent.transcript": "/tmp/t.jsonl", "@agent.conversation": "pumi_dev/acp" } },
+                { "id": 2, "block": "pumi_dev.hello.counter", "place": { "kind": "tiled", "view": 1 }, "options": { "@status": "working", "@label": "Counter" } },
                 { "id": 3, "block": "pumi_dev.hello.counter", "place": { "kind": "float", "view": 1, "row": 0, "col": 0, "width": 20, "height": 5 }, "options": {} },
             ],
         });
@@ -239,14 +234,9 @@ mod tests {
         assert_eq!(read.snapshot.tabs[0].terminal_title_stripped.as_deref(), Some("π - pumi"));
         assert_eq!(read.snapshot.views[0].worktree.as_deref(), Some("/src/pumi.worktrees/avid-storm"));
         assert_eq!(read.snapshot.tabs[1].block, "pumi_dev.hello.counter");
-        let agent = &read.snapshot.tabs[1];
-        assert_eq!(agent.agent.as_deref(), Some("codex"), "a plugin's tab is an agent as a terminal is");
-        assert_eq!(
-            (agent.agent_model.as_deref(), agent.agent_transcript.as_deref()),
-            (Some("gpt-5"), Some("/tmp/t.jsonl"))
-        );
-        assert_eq!(agent.agent_conversation.as_deref(), Some("pumi_dev/acp"));
-        assert_eq!(read.snapshot.tabs[0].agent_session, None);
+        let counter = &read.snapshot.tabs[1];
+        assert_eq!((counter.status.as_str(), counter.label.as_deref()), ("working", Some("Counter")));
+        assert_eq!(read.snapshot.tabs[0].status, "", "none set");
         let float = &read.snapshot.tabs[2];
         assert_eq!((float.tab_id.as_str(), float.view_id.as_str(), float.workspace_id.as_str()), ("%3", "@1", "$1"));
         assert_eq!(float.place["kind"], "float");

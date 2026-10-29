@@ -87,7 +87,7 @@ pub struct Tab {
     pub tab_id: String,
     /// The block it holds: `terminal`, or a plugin's (`owner.name.id`).
     pub block: String,
-    /// What it is beside that (`agent`): each trait whose option `@<trait>` it has set.
+    /// What it is beside that (`owner.name.x`): each trait whose option `@<trait>` it has set.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub traits: Vec<String>,
     #[serde(skip_serializing_if = "serde_json::Value::is_null")]
@@ -104,18 +104,6 @@ pub struct Tab {
     pub terminal_title_stripped: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
-    /// What the tab's agent says of itself, from its options (`@agent.session`, `@agent.model`,
-    /// `@agent.transcript`, `@agent.conversation`): the options are the truth, these their copy.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_session: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_transcript: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_conversation: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub program_status: Vec<pumi_proto::status::Record>,
 }
@@ -168,7 +156,7 @@ mod tests {
     #[test]
     fn empty_fields_stay_off_the_wire() {
         let value = serde_json::to_value(Tab { tab_id: "p".into(), ..Tab::default() }).unwrap();
-        assert!(value.get("agent_model").is_none() && value.get("agent_transcript").is_none());
+        assert!(value.get("label").is_none() && value.get("traits").is_none() && value.get("program_status").is_none());
         assert_eq!(value["tab_id"], "p");
     }
 }

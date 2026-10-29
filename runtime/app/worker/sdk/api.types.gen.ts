@@ -136,33 +136,8 @@ export type Notification = {
   data?: unknown;
 };
 
-export type QueuedMessage = {
-  id: number;
-  text: string;
-  from: string | null;
-  created: string;
-};
-
-/** An agent transport attached to a tab. A tab has it while its option `@agent` is set; its fields are `@agent.<field>`. */
-export interface AgentTrait {
-  /** Which agent it is. */
-  name: string;
-  /** The agent's own session id. */
-  session: string | null;
-  /** The model it uses. */
-  model: string | null;
-  /** Its transcript's path. */
-  transcript: string | null;
-  /** The conversation provider. */
-  conversation: string | null;
-  /** The visible transports it accepts. */
-  accepts: ("queue" | "wake")[];
-  /** Its queued messages. */
-  queue: QueuedMessage[];
-}
 /** A tab's traits, each with its fields. */
 export interface TabTraits {
-  agent?: AgentTrait;
   [trait: string]: unknown;
 }
 
@@ -309,107 +284,6 @@ export type PluginKey = "version" | "source" | "path" | "enabled";
 /** Every API function: its arguments, in order, and what it answers. */
 export interface Functions {
   /**
-   * Answer turn `id` (`agent.sending`'s `id`) with what the agent should know, or `null` for
-   * nothing. One answer counts per source (the caller's plugin, or its channel's name); the last
-   * one in time wins. Returns whether it counted: `false` when the turn had ended (it came too
-   * late).
-   */
-  "agent.contribute": { args: [id: number, text?: string | null]; returns: boolean };
-  /**
-   * Queue a message for the agent in `tab`: it waits in the core until the agent is done with
-   * its turn, then goes to it as a real message, through the channel the agent itself provides
-   * (its stop hook, its extension, its plugin). pumi never types into an agent. Refused for a tab
-   * that is not an agent, or whose `@agent.accepts` has no `queue`. The message is for one session
-   * of the agent: it goes when the tab's session changes or the tab closes. What waits is the
-   * `queue` field of the tab's agent trait, and each change to it fires `tab.changed` with
-   * `traits.agent`. Answers the message's integer handle, for `agent.unqueue`.
-   */
-  "agent.queue": { args: [tab: TabId, text: string, opts?: {
-    /** The agent's session it is for; the tab's `@agent.session` now without. */
-    session?: string | null;
-    /**
-     * Who queues it, as the agent is told; the caller without (a plugin's id, `cli`, or
-     * `agent %4 (pi)` for the CLI in an agent's tab).
-     */
-    from?: string | null;
-  } | null]; returns: number };
-  /**
-   * The oldest message waiting for the agent in `tab`'s `session`, taken out of the queue, or
-   * `null`. Called by what runs the agent when it is ready for a message: a stop hook at a turn's
-   * end, an extension or a plugin while it is idle (`wait`). Nothing is answered while the tab
-   * has a permission or a question open, or shows an `error` not yet seen. A message is answered
-   * once at most.
-   */
-  "agent.take": { args: [tab: TabId, opts?: {
-    /**
-     * The agent's session asking: only its messages are taken. The tab's `@agent.session`
-     * without.
-     */
-    session?: string | null;
-    /**
-     * Wait for one: the call answers when a message comes (or `null` when the tab closes or
-     * its session changes), and ends when its caller goes.
-     */
-    wait?: boolean;
-  } | null]; returns: {
-    id: number;
-    tab: TabId;
-    session?: string | null;
-    text: string;
-    from?: string | null;
-    /** RFC 3339. */
-    created: string;
-  } | null };
-  /**
-   * Tell the core where the agent in `tab` is: a session starting (`start`), a prompt sent
-   * (`prompt`), a turn ended (`stop`), its context compacted (`compact`). It marks the tab an
-   * agent (`@agent`, and `@agent.session`, `@agent.model`, `@agent.transcript`, `@agent.accepts`
-   * from what it is given), as an agent's hook and a plugin-hosted agent both do. At `start` and
-   * `prompt` it fires `agent.sending` and waits for each source listening to it by name to answer
-   * (`agent.contribute`), until the deadline; the call answers `{context, from, late}`: their texts,
-   * each framed as `<pumi-context from="owner/name">…</pumi-context>` in order of the source, for
-   * the agent to be handed unseen (`null` when nobody said anything), who said them, and who did
-   * not answer in time. At `stop` and `compact` it fires `agent.turned` and answers `null`.
-   */
-  "agent.turn": { args: [tab: TabId, turn: {
-    /** Which agent (`claude`, `codex`, `pi`, …): the tab's `@agent`. */
-    agent: string;
-    /** `start`, `prompt`, `stop` or `compact`. */
-    event: "start" | "prompt" | "stop" | "compact";
-    /** The agent's own session id: `@agent.session`. */
-    session?: string | null;
-    /** `@agent.model`. */
-    model?: string | null;
-    /** Its session file's absolute path: `@agent.transcript`. */
-    transcript?: string | null;
-    /** A `start` that continues a session. */
-    resumed?: boolean;
-    /**
-     * What the agent takes besides hidden text: `@agent.accepts` (`["queue"]`, `["queue",
-     * "wake"]`).
-     */
-    accepts?: ("queue" | "wake")[] | null;
-    /** Tell everything again, not only what changed. */
-    full?: boolean;
-    /**
-     * Ask what the agent would be told without counting it as told; the tab's options are
-     * left as they are.
-     */
-    peek?: boolean;
-  }, opts?: {
-    /** Seconds to wait for those who listen to `agent.sending`: 1 without, at most 3. */
-    timeout?: number | null;
-  } | null]; returns: {
-    /** The text to hand the agent unseen, or `null` when nobody had anything to say. */
-    context?: string | null;
-    /** The sources whose answers are in it, in its order. */
-    from: string[];
-    /** The sources that did not answer before the deadline. */
-    late: string[];
-  } | null };
-  /** Take queued message `id` back; whether it was still waiting. */
-  "agent.unqueue": { args: [id: number]; returns: boolean };
-  /**
    * Call any function by name, as the same caller. `args` is positional (an array) or named (an
    * object); leaving it out calls the function with no arguments. A list of `{name, args}` is a
    * batch: called in order with nothing else running in between, answering every result; it stops
@@ -439,7 +313,7 @@ export interface Functions {
   "event.off": { args: [subscription: number]; returns: boolean };
   /**
    * Subscribe to events, by name or glob (`tab.*`; `*` is every event but those fired before
-   * what they name, such as `agent.sending`). Each one that fires goes to the caller's channel
+   * what they name, in `-ing`). Each one that fires goes to the caller's channel
    * as `{"method": "rpc.event", "params": [subscription, event]}`, until `event.off` or the
    * channel closes. Answers the subscription's integer handle.
    */
@@ -813,9 +687,8 @@ export interface Functions {
    * permission for what runs in `tab` (the `tool` and the `options` to allow or reject it), or a
    * question. Whoever listens to `request.opened` shows it, and anyone may answer it with
    * `request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.
-   * While a permission or a question is open its tab takes no queued message. pumi-host
-   * posts notifications to the OS's notification centre and takes them back when they close.
-   * Answers the request's id.
+   * pumi-host posts notifications to the OS's notification centre and takes them back when they
+   * close. Answers the request's id.
    */
   "request.open": { args: [request: {
     /** What a request puts to the user. */
@@ -922,7 +795,7 @@ export interface Functions {
         view?: ViewId | null;
         /** The block it holds (`terminal`, `owner.name.page`). */
         block: string;
-        /** Each trait it has, with its fields: `{agent: {status, session, …}}`. */
+        /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
         traits: {
           [key: string]: unknown;
         };
@@ -1137,7 +1010,7 @@ export interface Functions {
     view?: ViewId | null;
     /** The block it holds (`terminal`, `owner.name.page`). */
     block: string;
-    /** Each trait it has, with its fields: `{agent: {status, session, …}}`. */
+    /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
     traits: {
       [key: string]: unknown;
     };
@@ -1298,7 +1171,7 @@ export interface Functions {
     view?: ViewId | null;
     /** Only tabs that hold this block. */
     block?: string | null;
-    /** Only tabs with this trait (`agent`): their option `@<trait>` is set. */
+    /** Only tabs with this trait (`pumi_dev.files.file`): their option `@<trait>` is set. */
     trait?: string | null;
     /**
      * The tabs closed lately instead, newest first, each with its saved state and where it
@@ -1754,32 +1627,6 @@ export interface Events {
     reason: "answered" | "timeout" | "closed" | "cancelled";
   };
   /**
-   * An agent is about to be sent something (`agent.turn`): a source listening by this name answers what it should know with `agent.contribute(id, text)`, before the deadline (a second).
-   *
-   * Its `match` is the moment: `start` or `prompt`.
-   */
-  "agent.sending": {
-    id: number;
-    tab: TabId;
-    agent: string;
-    session: string | null;
-    event: "start" | "prompt";
-    resumed: boolean;
-    full: boolean;
-    peek: boolean;
-  };
-  /**
-   * An agent's turn ended (`stop`), or it compacted its context (`compact`): what it was told may be gone.
-   *
-   * Its `match` is the moment: `stop` or `compact`.
-   */
-  "agent.turned": {
-    tab: TabId;
-    agent: string;
-    session: string | null;
-    event: "stop" | "compact";
-  };
-  /**
    * A view opened in a session.
    *
    * Its `match` is the object id.
@@ -1907,126 +1754,6 @@ export interface Events {
 
 /** One object per noun of the export, a method per function: each is one wire call. */
 export interface Nouns {
-  agent: {
-    /**
-     * Answer turn `id` (`agent.sending`'s `id`) with what the agent should know, or `null` for
-     * nothing. One answer counts per source (the caller's plugin, or its channel's name); the last
-     * one in time wins. Returns whether it counted: `false` when the turn had ended (it came too
-     * late).
-     *
-     * @example
-     * await agent.contribute(4, "The tests pass again.") // false
-     */
-    contribute(id: number, text?: string | null): Promise<boolean>;
-    /**
-     * Queue a message for the agent in `tab`: it waits in the core until the agent is done with
-     * its turn, then goes to it as a real message, through the channel the agent itself provides
-     * (its stop hook, its extension, its plugin). pumi never types into an agent. Refused for a tab
-     * that is not an agent, or whose `@agent.accepts` has no `queue`. The message is for one session
-     * of the agent: it goes when the tab's session changes or the tab closes. What waits is the
-     * `queue` field of the tab's agent trait, and each change to it fires `tab.changed` with
-     * `traits.agent`. Answers the message's integer handle, for `agent.unqueue`.
-     *
-     * @example
-     * await agent.queue("%3", "The migration is in: run the tests again.", {}) // 12
-     */
-    queue(tab: TabId, text: string, opts?: {
-    /** The agent's session it is for; the tab's `@agent.session` now without. */
-    session?: string | null;
-    /**
-     * Who queues it, as the agent is told; the caller without (a plugin's id, `cli`, or
-     * `agent %4 (pi)` for the CLI in an agent's tab).
-     */
-    from?: string | null;
-  } | null): Promise<number>;
-    /**
-     * The oldest message waiting for the agent in `tab`'s `session`, taken out of the queue, or
-     * `null`. Called by what runs the agent when it is ready for a message: a stop hook at a turn's
-     * end, an extension or a plugin while it is idle (`wait`). Nothing is answered while the tab
-     * has a permission or a question open, or shows an `error` not yet seen. A message is answered
-     * once at most.
-     *
-     * @example
-     * await agent.take("%3", { wait: false })
-     */
-    take(tab: TabId, opts?: {
-    /**
-     * The agent's session asking: only its messages are taken. The tab's `@agent.session`
-     * without.
-     */
-    session?: string | null;
-    /**
-     * Wait for one: the call answers when a message comes (or `null` when the tab closes or
-     * its session changes), and ends when its caller goes.
-     */
-    wait?: boolean;
-  } | null): Promise<{
-    id: number;
-    tab: TabId;
-    session?: string | null;
-    text: string;
-    from?: string | null;
-    /** RFC 3339. */
-    created: string;
-  } | null>;
-    /**
-     * Tell the core where the agent in `tab` is: a session starting (`start`), a prompt sent
-     * (`prompt`), a turn ended (`stop`), its context compacted (`compact`). It marks the tab an
-     * agent (`@agent`, and `@agent.session`, `@agent.model`, `@agent.transcript`, `@agent.accepts`
-     * from what it is given), as an agent's hook and a plugin-hosted agent both do. At `start` and
-     * `prompt` it fires `agent.sending` and waits for each source listening to it by name to answer
-     * (`agent.contribute`), until the deadline; the call answers `{context, from, late}`: their texts,
-     * each framed as `<pumi-context from="owner/name">…</pumi-context>` in order of the source, for
-     * the agent to be handed unseen (`null` when nobody said anything), who said them, and who did
-     * not answer in time. At `stop` and `compact` it fires `agent.turned` and answers `null`.
-     *
-     * @example
-     * await agent.turn("%3", { agent: "claude", event: "prompt", session: "s-1", accepts: ["queue"] }) // { context: null, from: [], late: [] }
-     */
-    turn(tab: TabId, turn: {
-    /** Which agent (`claude`, `codex`, `pi`, …): the tab's `@agent`. */
-    agent: string;
-    /** `start`, `prompt`, `stop` or `compact`. */
-    event: "start" | "prompt" | "stop" | "compact";
-    /** The agent's own session id: `@agent.session`. */
-    session?: string | null;
-    /** `@agent.model`. */
-    model?: string | null;
-    /** Its session file's absolute path: `@agent.transcript`. */
-    transcript?: string | null;
-    /** A `start` that continues a session. */
-    resumed?: boolean;
-    /**
-     * What the agent takes besides hidden text: `@agent.accepts` (`["queue"]`, `["queue",
-     * "wake"]`).
-     */
-    accepts?: ("queue" | "wake")[] | null;
-    /** Tell everything again, not only what changed. */
-    full?: boolean;
-    /**
-     * Ask what the agent would be told without counting it as told; the tab's options are
-     * left as they are.
-     */
-    peek?: boolean;
-  }, opts?: {
-    /** Seconds to wait for those who listen to `agent.sending`: 1 without, at most 3. */
-    timeout?: number | null;
-  } | null): Promise<{
-    /** The text to hand the agent unseen, or `null` when nobody had anything to say. */
-    context?: string | null;
-    /** The sources whose answers are in it, in its order. */
-    from: string[];
-    /** The sources that did not answer before the deadline. */
-    late: string[];
-  } | null>;
-    /**
-     * Take queued message `id` back; whether it was still waiting.
-     *
-     * @example
-     * await agent.unqueue(12) // false
-     */
-    unqueue(id: number): Promise<boolean>;
-  };
   clipboard: {
     /**
      * The clipboard's text: `null` when it holds none.
@@ -2068,7 +1795,7 @@ export interface Nouns {
     off(subscription: number): Promise<boolean>;
     /**
      * Subscribe to events, by name or glob (`tab.*`; `*` is every event but those fired before
-     * what they name, such as `agent.sending`). Each one that fires goes to the caller's channel
+     * what they name, in `-ing`). Each one that fires goes to the caller's channel
      * as `{"method": "rpc.event", "params": [subscription, event]}`, until `event.off` or the
      * channel closes. Answers the subscription's integer handle.
      *
@@ -2544,9 +2271,8 @@ export interface Nouns {
      * permission for what runs in `tab` (the `tool` and the `options` to allow or reject it), or a
      * question. Whoever listens to `request.opened` shows it, and anyone may answer it with
      * `request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.
-     * While a permission or a question is open its tab takes no queued message. pumi-host
-     * posts notifications to the OS's notification centre and takes them back when they close.
-     * Answers the request's id.
+     * pumi-host posts notifications to the OS's notification centre and takes them back when they
+     * close. Answers the request's id.
      *
      * @example
      * await request.open({ kind: "notification", title: "Build finished" }) // "+7"
@@ -2669,7 +2395,7 @@ export interface Nouns {
         view?: ViewId | null;
         /** The block it holds (`terminal`, `owner.name.page`). */
         block: string;
-        /** Each trait it has, with its fields: `{agent: {status, session, …}}`. */
+        /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
         traits: {
           [key: string]: unknown;
         };
@@ -2906,7 +2632,7 @@ export interface Nouns {
     view?: ViewId | null;
     /** The block it holds (`terminal`, `owner.name.page`). */
     block: string;
-    /** Each trait it has, with its fields: `{agent: {status, session, …}}`. */
+    /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
     traits: {
       [key: string]: unknown;
     };
@@ -3070,7 +2796,7 @@ export interface Nouns {
     view?: ViewId | null;
     /** Only tabs that hold this block. */
     block?: string | null;
-    /** Only tabs with this trait (`agent`): their option `@<trait>` is set. */
+    /** Only tabs with this trait (`pumi_dev.files.file`): their option `@<trait>` is set. */
     trait?: string | null;
     /**
      * The tabs closed lately instead, newest first, each with its saved state and where it

@@ -1,11 +1,11 @@
-// A tab's icon: its own `@icon`, its agent's mark, its block's, the core's; and the forms an icon
+// A tab's icon: its own `@icon`, its block's, the core's; and the forms an icon
 // may take.
 import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { assets } from "../app/assets.ts"
-import { agentIcon, iconSource, showsStatus, tabIcon } from "./icons.ts"
+import { iconSource, showsStatus, tabIcon } from "./icons.ts"
 
 const SVG = "data:image/svg+xml,<svg/>"
 const PNG = "data:image/png;base64,AAAA"
@@ -47,30 +47,25 @@ describe("tabIcon", () => {
   const terminal = { block: "terminal" }
 
   test("a tab's own icon comes first, then its block's, the core's", () => {
-    expect(tabIcon({ ...terminal, agent: "claude", options: { "@icon": SVG } })).toMatchObject({ src: SVG, from: "tab" })
-    expect(tabIcon({ ...terminal, agent: "claude" })).toMatchObject({ src: assets.icon("terminal"), from: "core" })
+    expect(tabIcon({ ...terminal, options: { "@icon": SVG } })).toMatchObject({ src: SVG, from: "tab" })
     expect(tabIcon({ block: "me.board.board" }, { icon: "list" })).toMatchObject({ src: assets.icon("list"), from: "block" })
     expect(tabIcon(terminal)).toMatchObject({ src: assets.icon("terminal"), from: "core" })
     expect(tabIcon({ block: "me.board.board" })).toMatchObject({ src: assets.icon("box"), from: "core" })
   })
 
   test("what does not resolve is passed over", () => {
-    expect(tabIcon({ ...terminal, agent: "someone_new", options: { "@icon": "https://x.test/a.png" } })).toMatchObject({ from: "core" })
+    expect(tabIcon({ ...terminal, options: { "@icon": "https://x.test/a.png" } })).toMatchObject({ from: "core" })
     expect(tabIcon({ block: "me.board.board" }, { icon: "plugin:gone.svg", dir: tmpdir() })).toMatchObject({ from: "core" })
-  })
-
-  test("the app ships no agent marks", () => {
-    for (const agent of ["pi", "omp", "claude", "codex"]) expect(agentIcon(agent)).toBeUndefined()
   })
 })
 
 describe("showsStatus", () => {
   test("a status that says something happened shows in place of any icon", () => {
-    for (const status of ["working", "done", "blocked", "error"]) expect(showsStatus(status, { from: "agent" })).toBe(true)
+    for (const status of ["working", "done", "blocked", "error"]) expect(showsStatus(status, { from: "tab" })).toBe(true)
   })
 
   test("an idle tab shows its own icon, unless it has only the core's", () => {
-    expect(showsStatus("idle", { from: "agent" })).toBe(false)
+    expect(showsStatus("idle", { from: "tab" })).toBe(false)
     expect(showsStatus("unknown", { from: "tab" })).toBe(false)
     expect(showsStatus("idle", { from: "block" })).toBe(false)
     expect(showsStatus("idle", { from: "core" })).toBe(true)

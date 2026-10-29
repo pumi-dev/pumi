@@ -663,28 +663,6 @@ pub fn builtin() -> Vec<Decl> {
         )
         .label("Web Inspector")
         .group("Plugins"),
-        Decl::new(
-            "agents.permissions",
-            Boolean,
-            json!(false),
-            Global,
-            "Ask an agent's permission prompts in pumi (`request.open`), where any client can answer them; unanswered in two minutes, the agent asks in its own prompt. Claude Code's `PermissionRequest` hook, from `pumi skill add claude`.",
-        )
-        .label("Answer permissions in pumi")
-        .plugin("agents")
-        .group("Permissions"),
-        Decl::new(
-            "agents.restore",
-            Table,
-            json!({}),
-            Global,
-            "How an agent resumes its session when its tab comes back, by agent id: the program and its arguments, with {session} for the session. Adds to or replaces the recipe pumi has for that agent; an empty list turns one off. The hook writes the line to the tab's `restore_command`.",
-        )
-        .label("Restore recipes")
-        .placeholder(r#"{"claude": ["claude", "--resume", "{session}"]}"#)
-        .plugin("agents")
-        .group("Restore")
-        .control("json"),
     ]);
     decls.extend(
         [

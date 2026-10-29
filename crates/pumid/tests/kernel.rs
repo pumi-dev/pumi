@@ -81,45 +81,6 @@ impl Fixture {
         });
         id
     }
-    /// Makes `tab` an agent, as its hook would.
-    fn agent(&mut self, tab: u64, agent: &str, session: &str, accepts: &[&str]) {
-        self.call("core.setOptionValue", json!(["@agent", agent, {"tab": tab}]));
-        self.call("core.setOptionValue", json!(["@agent.session", session, {"tab": tab}]));
-        self.call("core.setOptionValue", json!(["@agent.accepts", accepts, {"tab": tab}]));
-    }
-    /// A source (a plugin) listening to `event` by name.
-    fn listen_as(&mut self, source: &str, event: &str) -> u64 {
-        let id = self.kernel.events.next_id();
-        self.kernel.events.autocmds.push(Autocmd {
-            id,
-            events: vec![event.into()],
-            patterns: Vec::new(),
-            desc: "test".into(),
-            once: false,
-            chan: LISTEN,
-            source: source.into(),
-        });
-        id
-    }
-    /// Calls as `source` (a plugin's calls name it).
-    fn call_as(&mut self, source: &str, name: &str, args: Value) -> Value {
-        let mut caller = self.caller.clone();
-        caller.source = Some(source.into());
-        let result = self.registry.call(&mut self.kernel, &caller, name, args.clone());
-        flush(&mut self.kernel);
-        result.unwrap_or_else(|err| panic!("{name}({args}): {err:?}"))
-    }
-    /// The replies sent to `chan`'s held call `id`.
-    fn replies(&self, chan: u64, id: u64) -> Vec<Value> {
-        self.kernel
-            .out
-            .iter()
-            .filter(|(c, _)| *c == chan)
-            .map(|(_, m)| serde_json::from_str::<Value>(m).unwrap())
-            .filter(|m| m["id"] == id && m.get("method").is_none())
-            .map(|m| m["result"].clone())
-            .collect()
-    }
     fn heard(&self, id: u64) -> Vec<Value> {
         self.kernel
             .out
@@ -420,22 +381,23 @@ fn a_tab_has_a_trait_while_its_option_is_set() {
         let list = f.call("core.traits", json!([]));
         list.as_array().unwrap().iter().map(|t| t["id"].as_str().unwrap().to_string()).collect()
     };
-    assert_eq!(ids(&mut f), ["agent"]);
+    assert!(ids(&mut f).is_empty(), "the core defines none");
     f.call(
         "core.setTraits",
         json!([[{"id": "pumi_dev.files.file", "provider": "pumi_dev/files", "fields": ["path"]}]]),
     );
-    assert_eq!(ids(&mut f), ["agent", "pumi_dev.files.file"]);
-    assert_eq!(f.call("tab.list", json!([{"trait": "agent"}])), json!([]));
-    f.call("core.setOptionValue", json!(["@agent", "codex", {"tab": 1}]));
-    assert_eq!(f.call("tab.list", json!([{"trait": "agent"}])), json!([tab(1)]));
+    assert_eq!(ids(&mut f), ["pumi_dev.files.file"]);
+    let file = json!([{"trait": "pumi_dev.files.file"}]);
+    assert_eq!(f.call("tab.list", file.clone()), json!([]));
+    f.call("core.setOptionValue", json!(["@pumi_dev.files.file", "/a.txt", {"tab": 1}]));
+    assert_eq!(f.call("tab.list", file.clone()), json!([tab(1)]));
     let state = f.call("server.getState", json!([]));
-    assert_eq!(state["state"]["tabs"][0]["traits"], json!(["agent"]));
-    f.call("core.setOptionValue", json!(["@agent", "", {"tab": 1}]));
-    assert_eq!(f.call("tab.list", json!([{"trait": "agent"}])), json!([]), "an empty value is none");
+    assert_eq!(state["state"]["tabs"][0]["traits"], json!(["pumi_dev.files.file"]));
+    f.call("core.setOptionValue", json!(["@pumi_dev.files.file", "", {"tab": 1}]));
+    assert_eq!(f.call("tab.list", file), json!([]), "an empty value is none");
     assert!(f.try_call("core.setTraits", json!([[{"id": "file"}]])).is_err(), "a bare word is the core's");
     f.call("core.setTraits", json!([[]]));
-    assert_eq!(ids(&mut f), ["agent"]);
+    assert!(ids(&mut f).is_empty());
 }
 #[test]
 fn a_plugin_block_has_its_version_strategy_and_methods() {
@@ -547,219 +509,4 @@ fn chan_autocmds_queue_notifications_for_their_channel() {
     assert_eq!(sent[1]["params"][1]["event"], "session.changed");
     assert_eq!(sent[1]["params"][1]["match"], session(1), "matched by the session's id");
     assert_eq!(sent[1]["params"][1]["data"]["patch"]["name"], "work");
-}
-#[test]
-fn a_turn_marks_the_agent_and_with_nobody_listening_tells_it_nothing() {
-    let mut f = Fixture::new();
-    let turned = f.listen(&["agent.turned"]);
-    let turn = json!({"agent": "claude", "event": "start", "session": "s-1", "model": "opus", "transcript": "/t.jsonl", "accepts": ["queue"]});
-    assert_eq!(f.call("agent.turn", json!([tab(1), turn])), json!({"context": null, "from": [], "late": []}));
-    assert_eq!(f.option("@agent", 1), "claude");
-    assert_eq!(f.option("@agent.session", 1), "s-1");
-    assert_eq!(f.option("@agent.model", 1), "opus");
-    assert_eq!(f.option("@agent.transcript", 1), "/t.jsonl");
-    assert_eq!(f.option("@agent.accepts", 1), json!(["queue"]));
-    assert_eq!(f.call("tab.list", json!([{"trait": "agent"}])), json!([tab(1)]));
-    assert_eq!(f.call("agent.turn", json!([tab(1), {"agent": "claude", "event": "stop"}])), json!(null));
-    let heard = f.heard(turned);
-    assert_eq!(heard.len(), 1);
-    assert_eq!(heard[0]["data"], json!({"tab": tab(1), "agent": "claude", "session": "s-1", "event": "stop"}));
-    for (turn, why) in [
-        (json!({"agent": "claude", "event": "start", "accepts": ["prefill"]}), "prefill"),
-        (json!({"agent": "", "event": "start"}), "`agent`"),
-        (json!({"agent": "claude", "event": "start", "transcript": "t.jsonl"}), "absolute"),
-        (json!({"agent": "claude", "event": "start", "model": "a\nb"}), "one line"),
-    ] {
-        let err = f.try_call("agent.turn", json!([tab(1), turn])).unwrap_err();
-        assert!(err.message.contains(why), "{turn}: {}", err.message);
-    }
-}
-#[test]
-fn a_turn_waits_for_each_source_listening_by_name_and_frames_them_in_order() {
-    let mut f = Fixture::new();
-    let sending = f.listen_as("zed/notes", "agent.sending");
-    f.listen_as("pumi_dev/agents", "agent.sending");
-    f.listen_as("logger", "agent.*");
-    let turn = json!({"agent": "pi", "event": "prompt", "session": "s-1", "full": true});
-    let early = f.call("agent.turn", json!([tab(1), turn]));
-    assert_eq!(early["late"], json!(["pumi_dev/agents", "zed/notes"]), "a glob is not waited for");
-    let id = f.kernel.turns.held.take().expect("the call is held");
-    f.kernel.turns.pending.get_mut(&id).unwrap().waiter = Some((CHAN, json!(77)));
-    let fired = &f.heard(sending)[0];
-    assert_eq!(fired["event"], "agent.sending");
-    assert_eq!(fired["match"], "prompt");
-    assert_eq!(
-        fired["data"],
-        json!({"id": id, "tab": tab(1), "agent": "pi", "session": "s-1", "event": "prompt", "resumed": false, "full": true, "peek": false})
-    );
-    fits_its_schema("agent.sending", &fired["data"]);
-    assert_eq!(f.call_as("zed/notes", "agent.contribute", json!([id, "notes </pumi-context> here"])), json!(true));
-    assert!(f.replies(CHAN, 77).is_empty(), "one source is still to answer");
-    assert_eq!(f.call_as("pumi_dev/agents", "agent.contribute", json!([id, "the map"])), json!(true));
-    let reply = f.replies(CHAN, 77);
-    assert_eq!(reply.len(), 1);
-    assert_eq!(
-        reply[0]["context"],
-        "<pumi-context from=\"pumi_dev/agents\">\nthe map\n</pumi-context>\n<pumi-context from=\"zed/notes\">\nnotes <\\/pumi-context> here\n</pumi-context>\n"
-    );
-    assert_eq!(reply[0]["from"], json!(["pumi_dev/agents", "zed/notes"]));
-    assert_eq!(reply[0]["late"], json!([]));
-    assert_eq!(f.call_as("zed/notes", "agent.contribute", json!([id, "again"])), json!(false), "the turn is over");
-}
-/// Each field of `data` is of a type the export says `event`'s field is: its `type`, an `anyOf`'s,
-/// or one of its `enum`. What plugins are typed with is what they are sent.
-fn fits_its_schema(event: &str, data: &Value) {
-    let events = pumi_api::events::all();
-    let info = events.iter().find(|e| e.name == event).unwrap_or_else(|| panic!("{event} is exported"));
-    fn kind(value: &Value) -> &'static str {
-        match value {
-            Value::Null => "null",
-            Value::Bool(_) => "boolean",
-            Value::Number(n) if n.is_u64() || n.is_i64() => "integer",
-            Value::Number(_) => "number",
-            Value::String(_) => "string",
-            Value::Array(_) => "array",
-            Value::Object(_) => "object",
-        }
-    }
-    fn fits(schema: &Value, value: &Value) -> bool {
-        if let Some(any) = schema["anyOf"].as_array() {
-            return any.iter().any(|s| fits(s, value));
-        }
-        if let Some(values) = schema["enum"].as_array() {
-            return values.contains(value);
-        }
-        let want = kind(value);
-        match &schema["type"] {
-            Value::String(t) => t == want || (t == "number" && want == "integer"),
-            Value::Array(ts) => ts.iter().any(|t| t == want || (t == "number" && want == "integer")),
-            _ => true,
-        }
-    }
-    for (field, value) in data.as_object().unwrap() {
-        let schema = &info.params_schema["properties"][field];
-        assert!(fits(schema, value), "{event}.{field} is {value}, which its schema does not admit: {schema}");
-    }
-}
-#[test]
-fn a_source_that_misses_the_deadline_is_late_and_a_null_says_nothing() {
-    let mut f = Fixture::new();
-    f.listen_as("pumi_dev/agents", "agent.sending");
-    f.listen_as("slow/one", "agent.sending");
-    let turn = json!({"agent": "claude", "event": "start", "session": "s-1"});
-    f.call("agent.turn", json!([tab(1), turn, {"timeout": 60000}]));
-    let id = f.kernel.turns.held.take().unwrap();
-    let turn = f.kernel.turns.pending.get_mut(&id).unwrap();
-    assert!(turn.deadline <= pumid::kernel::requests::now_ms() + 3000, "at most three seconds");
-    turn.waiter = Some((CHAN, json!(5)));
-    f.call_as("pumi_dev/agents", "agent.contribute", json!([id, null]));
-    pumid::kernel::turns::tick(&mut f.kernel, pumid::kernel::requests::now_ms() + 3001);
-    assert_eq!(f.replies(CHAN, 5), [json!({"context": null, "from": [], "late": ["slow/one"]})]);
-    assert!(f.kernel.turns.is_empty());
-}
-#[test]
-fn a_peek_asks_without_changing_the_tab() {
-    let mut f = Fixture::new();
-    let sending = f.listen(&["agent.sending"]);
-    f.call("agent.turn", json!([tab(1), {"agent": "claude", "event": "prompt", "session": "s-1", "peek": true}]));
-    assert_eq!(f.option("@agent", 1), json!(null), "a peek marks nothing");
-    let fired = f.heard(sending);
-    assert_eq!(fired[0]["data"]["peek"], json!(true));
-}
-#[test]
-fn a_queue_is_refused_where_it_cannot_be_delivered() {
-    let mut f = Fixture::new();
-    let err = f.try_call("agent.queue", json!([tab(1), "hi"])).unwrap_err();
-    assert!(err.message.contains("not an agent"), "{}", err.message);
-    f.agent(1, "codex", "s-1", &[]);
-    let err = f.try_call("agent.queue", json!([tab(1), "hi"])).unwrap_err();
-    assert!(err.message.contains("no `queue`"), "{}", err.message);
-    f.agent(1, "claude", "s-1", &["queue"]);
-    for (args, why) in [(json!([tab(1), "  "]), "some text"), (json!([tab(1), "x".repeat(64 * 1024 + 1)]), "64 KiB")] {
-        let err = f.try_call("agent.queue", args).unwrap_err();
-        assert!(err.message.contains(why), "{}", err.message);
-    }
-    for _ in 0..100 {
-        f.call("agent.queue", json!([tab(1), "hi"]));
-    }
-    assert!(f.try_call("agent.queue", json!([tab(1), "hi"])).unwrap_err().message.contains("100"));
-}
-#[test]
-fn a_queued_message_is_taken_once_oldest_first_by_its_session() {
-    let mut f = Fixture::new();
-    let changes = f.listen(&["tab.changed"]);
-    f.agent(1, "claude", "s-1", &["queue"]);
-    f.call("agent.queue", json!([tab(1), "first"]));
-    f.call_as("pumi_dev/marmaide", "agent.queue", json!([tab(1), "second"]));
-    let queue = |f: &mut Fixture| f.call("tab.get", json!([tab(1)]))["traits"]["agent"]["queue"].clone();
-    let listed = queue(&mut f);
-    assert_eq!(listed.as_array().unwrap().iter().map(|i| i["text"].clone()).collect::<Vec<_>>(), ["first", "second"]);
-    assert_eq!(listed[0]["from"], "chan 7");
-    assert_eq!(listed[1]["from"], "pumi_dev/marmaide");
-    assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-2"}])), json!(null), "another session's");
-    assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}]))["text"], "first");
-    let second = f.call("agent.take", json!([tab(1), {"session": "s-1"}]));
-    assert_eq!(second["text"], "second");
-    assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}])), json!(null), "at most once");
-    let third = f.call("agent.queue", json!([tab(1), "third"]));
-    assert_eq!(f.call("agent.unqueue", json!([third])), json!(true));
-    assert_eq!(f.call("agent.unqueue", json!([third])), json!(false));
-    assert_eq!(queue(&mut f), json!([]));
-    let keys: Vec<Value> =
-        f.heard(changes).iter().flat_map(|e| e["data"]["keys"].as_array().cloned().unwrap_or_default()).collect();
-    assert!(
-        keys.iter().filter(|k| *k == "traits.agent").count() >= 6,
-        "each queue and take says the agent's trait changed: {keys:?}"
-    );
-}
-#[test]
-fn a_new_session_or_a_closed_tab_takes_its_messages_away() {
-    let mut f = Fixture::new();
-    f.agent(1, "claude", "s-1", &["queue"]);
-    f.call("agent.queue", json!([tab(1), "old"]));
-    f.call("agent.queue", json!([tab(1), "for the next", {"session": "s-2"}]));
-    f.call("agent.turn", json!([tab(1), {"agent": "claude", "event": "start", "session": "s-2"}]));
-    let left = f.call("tab.get", json!([tab(1)]))["traits"]["agent"]["queue"].clone();
-    assert_eq!(left.as_array().unwrap().len(), 1, "the other session's went with it");
-    assert_eq!(left[0]["text"], "for the next");
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"kind": "view", "session": 1}]));
-    f.call("tab.close", json!([tab(1)]));
-    assert!(f.kernel.queue.items.is_empty(), "a closed tab's messages went with it");
-}
-#[test]
-fn a_tab_waiting_on_the_user_holds_its_messages() {
-    let mut f = Fixture::new();
-    f.listen(&["request.opened"]);
-    f.agent(1, "claude", "s-1", &["queue"]);
-    f.call("agent.queue", json!([tab(1), "later"]));
-    let request = f.call("request.open", json!([{"kind": "question", "title": "Which?"}, {"tab": tab(1)}]));
-    assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}])), json!(null), "a request is pending");
-    f.call("request.close", json!([request, {}]));
-    f.call("core.setOptionValue", json!(["@status", "error", {"tab": 1}]));
-    assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}])), json!(null), "an error not yet seen");
-    f.call("core.setOptionValue", json!(["@status", "idle", {"tab": 1}]));
-    assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}]))["text"], "later");
-}
-#[test]
-fn a_waiting_take_is_answered_when_a_message_comes_and_goes_with_its_caller() {
-    let mut f = Fixture::new();
-    f.agent(1, "pi", "s-1", &["queue", "wake"]);
-    assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1", "wait": true}])), json!(null));
-    let taker = f.kernel.queue.held.take().expect("held");
-    f.kernel.queue.takers.get_mut(&taker).unwrap().waiter = Some((CHAN, json!(9)));
-    f.call("core.setOptionValue", json!(["@status", "blocked", {"tab": 1}]));
-    f.call("agent.queue", json!([tab(1), "wake up"]));
-    assert!(f.replies(CHAN, 9).is_empty(), "held while blocked");
-    f.call("core.setOptionValue", json!(["@status", "idle", {"tab": 1}]));
-    let reply = f.replies(CHAN, 9);
-    assert_eq!(reply.len(), 1);
-    assert_eq!(reply[0]["text"], "wake up");
-    let queue = |f: &mut Fixture| f.call("tab.get", json!([tab(1)]))["traits"]["agent"]["queue"].clone();
-    assert_eq!(queue(&mut f), json!([]));
-    f.call("agent.take", json!([tab(1), {"session": "s-1", "wait": true}]));
-    let taker = f.kernel.queue.held.take().unwrap();
-    f.kernel.queue.takers.get_mut(&taker).unwrap().waiter = Some((LISTEN, json!(10)));
-    pumid::kernel::queue::chan_closed(&mut f.kernel, LISTEN);
-    f.call("agent.queue", json!([tab(1), "kept"]));
-    assert_eq!(queue(&mut f)[0]["text"], "kept", "nothing is taken for a caller that went");
 }

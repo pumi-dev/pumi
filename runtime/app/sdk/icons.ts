@@ -1,6 +1,5 @@
 // A tab's icon, as every theme shows it: the tab's own (`@icon`, which its block, its program or
-// anyone may set), else its agent's mark, else its block's (`blocks[].icon` in the manifest),
-// else the core block's. The value is an icon of the app's by name, a `data:image/…` URI, or
+// anyone may set), else its block's (`blocks[].icon` in the manifest), else the core block's. The value is an icon of the app's by name, a `data:image/…` URI, or
 // `plugin:<path>`, a file in the plugin whose block the tab holds; as `@icon` it may also be
 // `{src, tint}`. The server checks each (`pumi_api::icon`); what still doesn't resolve is skipped.
 import { existsSync } from "node:fs"
@@ -8,7 +7,7 @@ import { isAbsolute, relative, resolve } from "node:path"
 import { useMemo } from "react"
 import { assets } from "../app/assets.ts"
 import { NEW_TAB } from "../app/names.ts"
-import { useAgentOf, useApp } from "../app/state.ts"
+import { useApp } from "../app/state.ts"
 import { useBlockOwner } from "./contributions.ts"
 
 /** The tab option holding a tab's own icon. */
@@ -22,8 +21,8 @@ export interface IconSource {
   tint: boolean
 }
 
-/** Where a tab's icon came from: its `@icon`, its agent's mark, its block's manifest, or the core's. */
-export type IconFrom = "tab" | "agent" | "block" | "core"
+/** Where a tab's icon came from: its `@icon`, its block's manifest, or the core's. */
+export type IconFrom = "tab" | "block" | "core"
 
 export interface TabIconInfo extends IconSource {
   from: IconFrom
@@ -32,9 +31,6 @@ export interface TabIconInfo extends IconSource {
 /** The core blocks' icons, and the one for a block without any. */
 const CORE: Record<string, string> = { terminal: "terminal", file: "file", browser: "tool_web", files: "folder", image: "image", [NEW_TAB]: "plus" }
 const FALLBACK = "box"
-
-/** An agent's mark is `assets/icons/agent_<name>.svg`; these are another's. */
-const AGENT_ALIASES: Record<string, string> = { omp: "pi" }
 
 const IMAGE = /^data:image\/(svg\+xml|png|jpeg|webp|gif)[;,]/i
 const NAME = /^[a-z0-9_]{1,64}$/
@@ -70,49 +66,35 @@ export function iconSource(value: unknown, dir?: string): IconSource | undefined
   return file ? { src: file, tint: tint ?? true } : undefined
 }
 
-/** The mark the app has for an agent (`claude`, `pi`, …), if it has one. */
-export function agentIcon(agent: string | undefined): IconSource | undefined {
-  if (!agent) return undefined
-  const name = agent.toLowerCase().replace(/[^a-z0-9_]/g, "_")
-  const file = assets.icon(`agent_${AGENT_ALIASES[name] ?? name}`)
-  return file ? { src: file, tint: true } : undefined
-}
-
 /**
- * What a tab with these shows, the first that resolves: its own icon, its agent's mark, its
- * block's icon (`owner`: the plugin that defines the block, `dir` where it is), the core block's,
- * then a box.
+ * What a tab with these shows, the first that resolves: its own icon, its block's icon (`owner`:
+ * the plugin that defines the block, `dir` where it is), the core block's, then a box.
  */
-export function tabIcon(tab: { block: string; options?: Record<string, unknown> | null; agent?: string } | undefined, owner?: { icon?: string; dir?: string }): TabIconInfo {
+export function tabIcon(tab: { block: string; options?: Record<string, unknown> | null } | undefined, owner?: { icon?: string; dir?: string }): TabIconInfo {
   const own = iconSource(tab?.options?.[ICON], owner?.dir)
   if (own) return { ...own, from: "tab" }
-  const agent = agentIcon(tab?.agent)
-  if (agent) return { ...agent, from: "agent" }
   const block = owner?.icon ? iconSource(owner.icon, owner.dir) : undefined
   if (block) return { ...block, from: "block" }
   const core = assets.icon(CORE[tab?.block ?? ""] ?? FALLBACK) ?? assets.icon(FALLBACK) ?? ""
   return { src: core, tint: true, from: "core" }
 }
 
-/** `tab`'s icon (`tabIcon`), drawn again when its `@icon`, its agent or its block's plugin changes. */
+/** `tab`'s icon (`tabIcon`), drawn again when its `@icon` or its block's plugin changes. */
 export function useTabIcon(tab: string | undefined): TabIconInfo {
   const block = useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.block) ?? ""
   const own = useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.options?.[ICON])
-  const agent = useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.agent)
   const owner = useBlockOwner(block)
   const key = typeof own === "object" && own ? JSON.stringify(own) : own
-  return useMemo(() => tabIcon({ block, agent, options: { [ICON]: own } }, owner), [block, agent, key, owner?.icon, owner?.dir])
+  return useMemo(() => tabIcon({ block, options: { [ICON]: own } }, owner), [block, key, owner?.icon, owner?.dir])
 }
 
 /**
- * The status a tab shows: its agent's (`unknown` while it says none), or what its program
- * reported (OSC 7501, or a fallback: OSC 9;4, a spinning title, a notification). `undefined`
- * for a tab with neither.
+ * The status a tab shows (`@status`): what its block set, or what its program reported (OSC
+ * 7501, or a fallback: OSC 9;4, a spinning title, a notification). `undefined` for a tab with
+ * none.
  */
 export function useTabStatus(tab: string | undefined): string | undefined {
-  const agent = useAgentOf(tab)
-  const own = useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.status)
-  return agent ? agent.status || "unknown" : own || undefined
+  return useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.status) || undefined
 }
 
 /** A status that says something happened (working, done, blocked, error): what a tab's icon gives way to. */
@@ -120,7 +102,6 @@ export const loudStatus = (status: string | undefined): status is string => !!st
 
 /**
  * Whether a tab shows its `status` in place of its `icon`, as the app's own `TabIcon` part does:
- * while it says something happened, and whenever its icon is only the core block's (an agent the
- * app has no mark for keeps its ring).
+ * while it says something happened, and whenever its icon is only the core block's.
  */
 export const showsStatus = (status: string | undefined, icon: Pick<TabIconInfo, "from">): status is string => !!status && (loudStatus(status) || icon.from === "core")

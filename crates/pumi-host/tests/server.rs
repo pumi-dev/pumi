@@ -1031,7 +1031,7 @@ fn a_programs_own_report_is_its_tabs_status() {
     }
 }
 #[test]
-fn a_package_tab_is_an_agent_and_its_requests_block_it_until_answered() {
+fn a_package_tabs_requests_block_it_until_answered() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut client = server.client();
@@ -1040,9 +1040,6 @@ fn a_package_tab_is_an_agent_and_its_requests_block_it_until_answered() {
     client.call("core.setBlocks", json!([[{"id": "pumi_dev.acp.chat", "provider": "pumi_dev/acp"}]]));
     let tab = client
         .call("tab.open", json!(["pumi_dev.acp.chat", {}, {"kind": "tiled", "beside": terminal, "split": "right"}]));
-    for (name, value) in [("@agent", "codex"), ("@agent.session", "s-1"), ("@agent.model", "gpt-5")] {
-        client.call("option.set", json!([name, value, {"id": tab}]));
-    }
     assert_eq!(client.call("tab.call", json!([tab, "report", {"body": "state=working:app=codex"}])), json!(true));
     let until = |client: &mut Client, want: &str| {
         let deadline = Instant::now() + Duration::from_secs(10);

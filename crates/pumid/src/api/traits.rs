@@ -1,7 +1,7 @@
 //! Traits: what a tab is beside its block (an agent, a file, …). A tab has trait `x` while its
 //! option `@x` is set, and a trait's fields are its options `@x.<field>`: there are no verbs, only
-//! options, and the tab's `changed` says when a tab gains or loses one. The core defines
-//! `agent`; a plugin's are `owner.name.x`, from its manifest (`core.setTraits`).
+//! options, and the tab's `changed` says when a tab gains or loses one. The core defines none
+//! (`surface.json`'s `traits`); a plugin's are `owner.name.x`, from its manifest (`core.setTraits`).
 use super::kernel;
 use crate::kernel::Kernel;
 use crate::kernel::TabId;
@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TraitInfo {
-    /// `agent`, or a plugin's `owner.name.x`.
+    /// A plugin's `owner.name.x`.
     pub id: String,
     /// Who defines it: `core`, or the plugin (`owner/name`).
     #[serde(default)]
@@ -61,7 +61,7 @@ pub fn of(kernel: &Kernel, tab: TabId) -> Vec<String> {
         .map(|t| t.id)
         .collect()
 }
-/// Every trait there is: the core's (`agent`), and the enabled plugins' (their manifests'
+/// Every trait there is: the core's, and the enabled plugins' (their manifests'
 /// `traits`). A tab has trait `x` while its option `@x` is set; its fields are `@x.<field>`.
 #[api(
     name = "core.traits",
@@ -69,7 +69,7 @@ pub fn of(kernel: &Kernel, tab: TabId) -> Vec<String> {
     effect = "read",
     example(
         args = "[]",
-        result = r#"[{"id": "agent", "provider": "core", "desc": "An agent transport attached to a tab.", "fields": ["name", "session", "model", "transcript", "conversation", "accepts", "queue"]}]"#
+        result = r#"[{"id": "pumi_dev.files.file", "provider": "pumi_dev/files", "fields": ["path"]}]"#
     )
 )]
 pub fn pumi_trait_list(cx: &mut Cx) -> Result<Vec<TraitInfo>> {

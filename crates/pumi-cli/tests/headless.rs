@@ -283,12 +283,10 @@ fn tab_list_is_a_table_and_its_json_the_ids() {
     assert!(lines.any(|line| line.starts_with(&format!("{tab} ")) && line.contains("terminal")), "{table}");
     let ids: Value = serde_json::from_str(said(&cli, &core, &["tab", "list", "--json"]).trim()).unwrap();
     assert_eq!(ids, json!([tab]));
-    let (status, out, _) = pumi(&cli, &core, &["agent", "list"]);
-    assert_eq!(
-        (status, out.trim()),
-        (0, "TAB  AGENT  STATUS  MODEL  WAITING  TITLE  CWD  PANE"),
-        "no agents, only the header"
-    );
+    said(&cli, &core, &["call", "option.set", "@status", "working", &json!({ "id": tab }).to_string()]);
+    let table = said(&cli, &core, &["tab", "list"]);
+    assert!(table.lines().next().is_some_and(|header| header.contains("STATUS")), "{table}");
+    assert!(table.lines().any(|line| line.starts_with(&format!("{tab} ")) && line.contains("working")), "{table}");
 }
 
 #[test]
@@ -299,7 +297,7 @@ fn every_command_is_listed_and_each_has_its_help() {
     assert!(names.lines().any(|line| line.starts_with("tab.open ") && line.contains("Open a tab")), "{names}");
     assert!(names.lines().all(|line| !line.starts_with('{')), "names, not JSON");
     let help = said(&cli, &core, &["help"]);
-    for line in ["  tab read ", "  tab open ", "  agent ask ", "  agent wait "] {
+    for line in ["  tab read ", "  tab open "] {
         assert!(help.contains(line), "`{line}` in the listing: {help}");
     }
     // A tab method is a command, and `help` knows it by either spelling.
@@ -309,8 +307,6 @@ fn every_command_is_listed_and_each_has_its_help() {
         let help = said(&cli, &core, &args);
         assert!(help.starts_with("pumi tab read [TAB]") && help.contains("tab.call"), "{help}");
     }
-    assert!(said(&cli, &core, &["help", "agent.ask"]).starts_with("pumi agent ask TAB TEXT"));
-    assert!(said(&cli, &core, &["help", "agent"]).contains("    ask "), "a noun lists the CLI's own verbs too");
 }
 
 /// A channel that provides `name` as the app does (`fn.set`), with its schema.

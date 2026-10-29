@@ -17,7 +17,6 @@ const decls: Decl[] = [
   { name: "default_size", type: "string" },
   { name: "me.remote.position", type: "string", plugin: "me/remote", desc: "Where the code shows." },
   { name: "you.git.fetch", type: "boolean", plugin: "you/git", label: "Fetch" },
-  { name: "agents.permissions", type: "boolean", plugin: "agents", label: "Answer permissions in pumi" },
 ]
 
 const remote: PluginSettings = {
@@ -65,9 +64,6 @@ describe("pages", () => {
     expect(at("me.remote.position")).toBe("me.remote.remote")
     expect(at("you.git.fetch")).toBe("you/git")
     expect(at("safe-mode")).toBe("plugins")
-    expect(at("agents.permissions")).toBe("agents")
-    expect(at("agent-hooks")).toBe("agents")
-    expect(pages.some((p) => p.id === "agents"), "the agents' options are Agents', not a page of their own").toBe(false)
     expect(at("command:new_view")).toBe("keys")
     expect(at("nothing")).toBeUndefined()
   })

@@ -1,7 +1,7 @@
 // Generated from api/pumi-api.json by `bun runtime/app/gen/index.ts` (`cargo xtask api` runs it); do not edit.
 
 import { Model, installClasses } from "./model.ts";
-import type { Layout, Neighbors, Notification, ObjectId, PaneData, PaneId, PaneKey, PluginData, PluginId, PluginKey, Process, QueuedMessage, RequestData, RequestId, RequestKey, Scroll, SessionData, SessionId, SessionKey, TabData, TabId, TabKey, TabPlace, TabTraits, ViewData, ViewId, ViewKey } from "./api.types.gen.ts";
+import type { Layout, Neighbors, Notification, ObjectId, PaneData, PaneId, PaneKey, PluginData, PluginId, PluginKey, Process, RequestData, RequestId, RequestKey, Scroll, SessionData, SessionId, SessionKey, TabData, TabId, TabKey, TabPlace, TabTraits, ViewData, ViewId, ViewKey } from "./api.types.gen.ts";
 
 /** A session containing views. Its fields read the live cache; each method is one call. */
 export class Session extends Model<SessionData, SessionKey> {

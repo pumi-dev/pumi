@@ -1,7 +1,6 @@
 // What a plugin's `main.ts` imports as `pumi`, in its worker: `workspace` (the models and the
 // caller's own objects), `call`, `on` and `emit`, `fn`, `option`, `registry`, `request`, `menu`,
-// `plugin`, `fs`, `clipboard`, `process`, the `agent` transport helpers, `self`, `layout`, `stop`,
-// `paths` and `ui.post` (what its `ui.tsx` hears with `useChannel`).
+// `plugin`, `fs`, `clipboard`, `process`, `self`, `layout`, `stop`, `paths` and `ui.post` (what its `ui.tsx` hears with `useChannel`).
 //
 // It speaks the server's export (api/pumi-api.json), and so does the wire under it.
 import { mkdirSync } from "node:fs";
@@ -336,91 +335,6 @@ export const ui = {
   /** Sends `data` (anything structured-cloneable) to the plugin's components listening on `topic`. */
   post(topic: string, data?: unknown): void {
     connection.post({ t: "ui", topic, data });
-  },
-};
-
-// Agents.
-
-type AgentTakeArgs = Functions["agent.take"]["args"];
-type QueuedItem = NonNullable<Functions["agent.take"]["returns"]>;
-/** What `agent.onSend` is asked: the turn (`agent.sending`'s data). */
-export type AgentSending = Events["agent.sending"];
-/** What `agent.onTurn` is told (`agent.turned`'s data). */
-export type AgentTurned = Events["agent.turned"];
-/** `agent.take`'s options in a plugin: `wait` waits here, and `signal` stops the wait. */
-export type AgentTakeOptions = AgentTakeArgs[1] & { signal?: AbortSignal };
-
-export const agent = {
-  ...raw.agent,
-  /**
-   * Says what an agent should know when it is sent something: `handler` gets each turn
-   * (`agent.sending`) and returns the text to hand it unseen, or `null` for nothing. Its answer
-   * goes back with `agent.contribute` before the deadline (a second); a throw answers `null`, and
-   * the error and a late answer go to the plugin's log. Returns its disposer.
-   */
-  onSend(handler: (turn: AgentSending) => string | null | undefined | Promise<string | null | undefined>): Disposer {
-    return on("agent.sending", async (e) => {
-      const turn = e.data;
-      let text: string | null = null;
-      try {
-        text = (await handler(turn)) ?? null;
-      } catch (err: any) {
-        console.error(`pumi: agent.onSend for ${turn.tab} threw: ${err?.stack ?? err}`);
-      }
-      try {
-        const counted = await cache.call("agent.contribute", [turn.id, text]);
-        if (!counted) console.error(`pumi: agent.onSend answered ${turn.tab}'s ${turn.event} after its deadline: the agent was not told it`);
-      } catch (err: any) {
-        console.error(`pumi: agent.contribute: ${err?.message ?? err}`);
-      }
-    });
-  },
-  /** Runs `handler` when an agent's turn ends or it compacts its context (`agent.turned`). */
-  onTurn(handler: (turn: AgentTurned) => unknown): Disposer {
-    return on("agent.turned", (e) => handler(e.data));
-  },
-  /**
-   * The oldest message waiting for the agent in `tab`'s `session`, taken out of the queue, or
-   * `null` (`agent.take`). With `wait` it waits for one here, on the tab's changes, rather than in
-   * one call: until an item comes, the tab closes or its session changes (`null`), or `signal`
-   * aborts.
-   */
-  async take(tab: TabId, opts: AgentTakeOptions): Promise<QueuedItem | null> {
-    const { signal, wait, session } = opts;
-    if (!wait) return cache.call("agent.take", [tab, { session }]);
-    let wake: (why: "again" | "gone") => void = () => {};
-    const about = (e: PumiEvent) => e.tab === tab || e.data?.tab === tab;
-    // Its queue growing, or its agent's session changing, is a change to the tab.
-    const queueChanged = (e: PumiEvent) => {
-      if (!about(e)) return;
-      const keys: string[] = e.data?.keys ?? [];
-      if (!keys.some((k) => k === "traits.agent" || k === "agentQueue" || k === "options.@agent.session")) return;
-      const moved = keys.some((k) => k.includes("@agent.session")) && e.data?.patch?.["options.@agent.session"] !== session;
-      wake(moved ? "gone" : "again");
-    };
-    // A tab's own options are its changes (`tab.changed`), not the global `option.changed`'s.
-    const offs = [
-      on("tab.changed", queueChanged),
-      on("tab.closed", (e) => {
-        if (about(e)) wake("gone");
-      }),
-    ];
-    const aborted = new Promise<"gone">((resolve) => {
-      if (signal?.aborted) resolve("gone");
-      signal?.addEventListener("abort", () => resolve("gone"), { once: true });
-    });
-    try {
-      await Promise.all(offs.map((off) => off.ready));
-      for (;;) {
-        const woken = new Promise<"again" | "gone">((resolve) => (wake = resolve));
-        if (signal?.aborted) return null;
-        const item = await cache.call("agent.take", [tab, { session }]);
-        if (item) return item;
-        if ((await Promise.race([woken, aborted])) === "gone") return null;
-      }
-    } finally {
-      offs.forEach((off) => off());
-    }
   },
 };
 

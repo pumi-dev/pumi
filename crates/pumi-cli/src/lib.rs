@@ -1,4 +1,3 @@
-pub mod agents;
 pub mod client;
 pub mod completion;
 pub mod help;
@@ -7,7 +6,7 @@ pub mod plugin;
 pub mod plugin_new;
 pub mod run_do;
 pub mod server;
-pub mod skill;
+pub mod tabs;
 use client::{Address, Client};
 use pumi_api::{Error, ErrorKind};
 use serde_json::{Value, json};
@@ -22,7 +21,6 @@ pub const OWN: &[(&str, &[&str], &str)] = &[
     ("open", &[], "a file in a tab: `pumi open PATH [--line N]`"),
     ("plugin", &["new", "dev", "logs"], "make a plugin, run it as you edit it, read its log"),
     ("server", &["list", "stop"], "the server processes themselves"),
-    ("skill", &["add", "remove", "list", "hook"], "agents' hooks, installed and run"),
     ("wait", &[], "until a tab's program ends, with its status: `tab wait --exit`"),
 ];
 
@@ -47,8 +45,7 @@ A tab is an id (`%3`), a pane `:4`, a view `@2`, a session `$1`, a request `+4`;
 takes the sigil its place asks for. After `--`, a program and its words: `pumi tab open terminal
 --split right -- pi \"hi\"`.
 
-For agents: `pumi tab list` and `pumi agent list` (what runs where), `pumi tab read %3` (its
-text), `pumi agent status|wait %3`, `pumi agent ask %3 'text' --wait` and `pumi agent reply`,
+For agents: `pumi tab list` (what runs where), `pumi tab read %3` (its text), `pumi tab wait %3`,
 `pumi help` (every command), `pumi registry list fn --names`.
 
 Global flags: --json, --server NAME, --socket PATH, --headless, --clean, --version, --help.
@@ -171,7 +168,7 @@ fn run(args: Vec<String>) -> Result<i32, Error> {
     } else {
         None
     };
-    if let Some(ran) = agents::run(&global.address, &rest, global.json) {
+    if let Some(ran) = tabs::run(&global.address, &rest, global.json) {
         return ran;
     }
     let first = rest.first().map(String::as_str);
@@ -192,7 +189,6 @@ fn run(args: Vec<String>) -> Result<i32, Error> {
         Some("wait") => nouns::run(&global.address, &waited(&rest[1..])?, global.json)?.ok_or_else(|| unknown("wait")),
         Some("plugin") => plugin::main(&global.address, &rest[1..], global.json),
         Some("server") => server::main(&global.address, &rest[1..], global.json),
-        Some("skill") => skill::main(&global.address, &rest[1..]),
         Some("registry") if rest.iter().any(|word| word == "--names") => names(&global.address, &rest),
         Some(word) if nouns::could_be(word) => match nouns::run(&global.address, &rest, global.json)? {
             Some(code) => Ok(code),

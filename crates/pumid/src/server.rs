@@ -320,13 +320,6 @@ impl Loop<'_> {
                 COALESCE.saturating_sub(last_refresh.elapsed())
             };
             let wait = if self.kernel.dirty { wait.min(SAVE_AFTER) } else { wait };
-            // A turn's deadline is short: the loop wakes for it.
-            let wait = match self.kernel.turns.next_deadline() {
-                Some(at) => {
-                    wait.min(Duration::from_millis(at.saturating_sub(crate::kernel::requests::now_ms()).max(1)))
-                }
-                None => wait,
-            };
             let mut batch = Vec::new();
             match messages.recv_timeout(wait) {
                 Ok(msg) => {
@@ -395,10 +388,6 @@ impl Loop<'_> {
             }
             if !self.kernel.waits.is_empty() {
                 crate::kernel::waits::tick(self.kernel, crate::kernel::requests::now_ms());
-                self.turn(None);
-            }
-            if !self.kernel.turns.is_empty() {
-                crate::kernel::turns::tick(self.kernel, crate::kernel::requests::now_ms());
                 self.turn(None);
             }
             if !changed.is_empty() && last_refresh.elapsed() >= COALESCE {
@@ -496,8 +485,6 @@ impl Loop<'_> {
         crate::api::ui::detach(self.kernel, chan);
         crate::kernel::requests::chan_closed(self.kernel, chan);
         crate::attach::chan_closed(self.kernel, chan);
-        crate::kernel::turns::chan_closed(self.kernel, chan);
-        crate::kernel::queue::chan_closed(self.kernel, chan);
         crate::kernel::waits::chan_closed(self.kernel, chan);
         self.kernel.events.chan_closed(chan);
         self.kernel.withdraw_routes(chan, None);
@@ -633,33 +620,6 @@ impl Loop<'_> {
                     }
                     _ => pumi_api::rpc::handle(self.registry, self.kernel, &caller, text),
                 };
-                if let Some(turn) = self.kernel.turns.held.take() {
-                    match parsed.as_ref().and_then(|m| waits(m, "agent.turn")) {
-                        Some(id) if self.kernel.turns.pending.contains_key(&turn) => {
-                            if let Some(t) = self.kernel.turns.pending.get_mut(&turn) {
-                                t.waiter = Some((chan, id));
-                            }
-                            self.turn(None);
-                            self.host_up();
-                            return;
-                        }
-                        // Inside `call.atomic`: it answered at once, with no one heard.
-                        _ => crate::kernel::turns::forget(self.kernel, turn),
-                    }
-                }
-                if let Some(taker) = self.kernel.queue.held.take() {
-                    match parsed.as_ref().and_then(|m| waits(m, "agent.take")) {
-                        Some(id) if self.kernel.queue.takers.contains_key(&taker) => {
-                            if let Some(t) = self.kernel.queue.takers.get_mut(&taker) {
-                                t.waiter = Some((chan, id));
-                            }
-                            self.turn(None);
-                            self.host_up();
-                            return;
-                        }
-                        _ => self.kernel.queue.forget_taker(taker),
-                    }
-                }
                 if let Some(wait) = self.kernel.waits.held.take() {
                     match parsed.as_ref().and_then(|m| waits(m, "event.wait")) {
                         Some(id) if self.kernel.waits.contains(wait) => {
@@ -737,7 +697,7 @@ impl Loop<'_> {
         }
     }
 }
-/// The id of a message that calls `function` itself (`agent.take`, `event.wait`; not in
+/// The id of a message that calls `function` itself (`event.wait`; not in
 /// `call.atomic`), which is answered when what it waits on ends rather than at once.
 fn waits(message: &Value, function: &str) -> Option<Value> {
     let method = message.get("method")?.as_str()?;

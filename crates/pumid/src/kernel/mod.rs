@@ -3,10 +3,8 @@ pub use pumi_layout as layout;
 pub mod ops;
 pub mod options;
 pub mod persist;
-pub mod queue;
 pub mod requests;
 pub use pumi_model::state;
-pub mod turns;
 pub mod types;
 pub mod waits;
 use events::{About, Event, Events};
@@ -79,10 +77,6 @@ pub struct Kernel {
     pub events: Events,
     /// The open requests (`request.open`).
     pub requests: requests::Requests,
-    /// The turns waiting for what their agent is told (`agent.turn`).
-    pub turns: turns::Turns,
-    /// The messages waiting for their agents (`agent.queue`).
-    pub queue: queue::Queue,
     /// The callers blocked in `event.wait`.
     pub waits: waits::Waits,
     pub blobs: Blobs,
@@ -147,8 +141,6 @@ impl Kernel {
             plugin_traits: Vec::new(),
             events: Events::default(),
             requests: requests::Requests::default(),
-            turns: turns::Turns::default(),
-            queue: queue::Queue::default(),
             waits: waits::Waits::default(),
             blobs,
             closed: VecDeque::new(),
@@ -397,12 +389,6 @@ impl Kernel {
             Key::Client(_) => {}
         }
         if let Key::Tab(tab) = change.key {
-            match change.name.as_str() {
-                "@agent.session" => queue::session_changed(self, tab),
-                // The tab may hold no more: what waits for it may go.
-                "@status" => queue::deliver(self),
-                _ => {}
-            }
             let _ = self.with_instance(tab, |instance, kernel| {
                 instance.option_set(kernel, tab, change);
                 Ok(())

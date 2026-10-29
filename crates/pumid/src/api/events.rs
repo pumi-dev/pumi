@@ -54,7 +54,7 @@ pub struct EventOnOpts {
     pub desc: Option<String>,
 }
 /// Subscribe to events, by name or glob (`tab.*`; `*` is every event but those fired before
-/// what they name, such as `agent.sending`). Each one that fires goes to the caller's channel
+/// what they name, in `-ing`). Each one that fires goes to the caller's channel
 /// as `{"method": "rpc.event", "params": [subscription, event]}`, until `event.off` or the
 /// channel closes. Answers the subscription's integer handle.
 #[api(

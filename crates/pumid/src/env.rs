@@ -16,8 +16,7 @@ const DROP: &[&str] = &[
     "TMUX_PANE",
 ];
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(5);
-/// The tab's id under the name `PUMI_PANE` (`%3`) as well, for agents' hooks that read it: `pumi
-/// skill add` installs the hooks that read `PUMI_TAB`.
+/// The tab's id under the name `PUMI_PANE` (`%3`) as well, for agents' hooks that read it.
 const LEGACY_TAB: &str = "PUMI_PANE";
 pub fn login_env(cache: &Path, refresh: bool) -> BTreeMap<String, String> {
     let own: BTreeMap<String, String> = std::env::vars().collect();

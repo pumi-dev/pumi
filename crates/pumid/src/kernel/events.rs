@@ -10,8 +10,7 @@ pub struct Autocmd {
     pub once: bool,
     /// The channel its events go to, as `rpc.event` notifications.
     pub chan: u64,
-    /// Who subscribed (its channel's name, or the plugin calling through it): who a turn waits
-    /// for when it listens to `agent.sending`.
+    /// Who subscribed (its channel's name, or the plugin calling through it).
     pub source: String,
 }
 impl Autocmd {
@@ -46,8 +45,6 @@ pub const EVENTS: &[&str] = &[
     "tab.alerted",
     "request.opened",
     "request.closed",
-    "agent.sending",
-    "agent.turned",
     "option.changed",
     "registry.changed",
     "app.changed",
