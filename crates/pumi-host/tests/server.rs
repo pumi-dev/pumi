@@ -8,6 +8,14 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 /// A plugin block with the generic engine, declared as the browser plugin's manifest would.
 const PAGE: &str = "pumi_dev.browser.page";
+/// A block the core runs on its terminal engine, as the terminal plugin's manifest declares it.
+const TERM: &str = "test.term.shell";
+/// `core.setBlocks`' arguments: the terminal engine's block, and `extra`'s after it.
+fn blocks(extra: Value) -> Value {
+    let mut all = vec![json!({"id": TERM, "provider": "test/term", "engine": "terminal"})];
+    all.extend(extra.as_array().cloned().unwrap_or_default());
+    json!([all])
+}
 struct Server {
     dir: PathBuf,
     child: Option<Child>,
@@ -175,9 +183,13 @@ impl Client {
             Ok(_) => Some(serde_json::from_str(&line).unwrap()),
         }
     }
+    /// Declares the terminal engine's block, as the terminal plugin's manifest would.
+    fn term(&mut self) {
+        self.call("core.setBlocks", blocks(json!([])));
+    }
     /// Declares the browser plugin's page block and its options, as its manifest would.
     fn page(&mut self) {
-        self.call("core.setBlocks", json!([[{"id": PAGE, "provider": "pumi_dev/browser"}]]));
+        self.call("core.setBlocks", blocks(json!([{"id": PAGE, "provider": "pumi_dev/browser"}])));
         for (name, ty, default) in [("url", "string", json!("about:blank")), ("zoom", "number", json!(1))] {
             let spec = json!({"type": ty, "default": default, "scope": "tab", "blocks": [PAGE], "desc": name});
             self.call("option.declare", json!([name, spec]));
@@ -200,10 +212,11 @@ impl Client {
     }
 }
 fn build(client: &mut Client, cwd: &Path) -> (Value, Value) {
+    client.term();
     let terminal = client.call(
         "tab.open",
         json!([
-            "terminal",
+            TERM,
             {"command": ["/bin/sh"], "cwd": cwd},
             {"kind": "session", "name": "work", "cwd": cwd}
         ]),
@@ -224,7 +237,7 @@ fn check_back(client: &mut Client, cwd: &Path, scrollback: bool) {
     let tabs = client.call("tab.list", json!([{}]));
     assert_eq!(tabs.as_array().unwrap().len(), 2, "both tabs came back: {tabs}");
     let types: Vec<Value> = tabs.as_array().unwrap().iter().map(|p| client.option("tab_block", p)).collect();
-    assert_eq!(types, [json!("terminal"), json!(PAGE)]);
+    assert_eq!(types, [json!(TERM), json!(PAGE)]);
     let (terminal, browser) = (tabs[0].clone(), tabs[1].clone());
     assert_eq!(client.option("url", &browser), json!("https://example.com/docs"));
     assert_eq!(client.option("title", &browser), json!("Docs"));
@@ -240,6 +253,28 @@ fn check_back(client: &mut Client, cwd: &Path, scrollback: bool) {
     }
     client.call("tab.call", json!([terminal, "input", {"text": "echo again-$((1+1))\r"}]));
     client.wait_for_text(&terminal, "again-2");
+}
+#[test]
+fn a_tab_opened_with_no_block_holds_what_a_new_tab_does() {
+    let dir = Server::dir();
+    let server = Server::start_home(dir.path());
+    let mut client = server.client();
+    let blocks = client.call("registry.list", json!(["block"]));
+    if blocks.as_array().unwrap().iter().any(|b| b["id"] == "pumi.launcher.new") {
+        let launcher = client.call("tab.open", json!([null, {}, {"kind": "session", "name": "launcher"}]));
+        assert_eq!(
+            client.call("tab.get", json!([&launcher]))["block"],
+            json!("pumi.launcher.new"),
+            "no option, the launcher"
+        );
+    } else {
+        let refused = client.try_call("tab.open", json!([null, {}, {"kind": "session"}])).unwrap_err();
+        assert!(refused.to_string().contains("pumi.launcher.new"), "{refused}");
+    }
+    client.term();
+    client.call("option.set", json!(["new_tab", TERM, {"scope": "global"}]));
+    let chosen = client.call("tab.open", json!([null, {}, {"kind": "session", "name": "chosen"}]));
+    assert_eq!(client.call("tab.get", json!([&chosen]))["block"], json!(TERM), "the option names what it holds");
 }
 #[test]
 fn a_session_survives_the_server_stopping() {
@@ -274,11 +309,12 @@ fn an_attached_client_receives_every_change_in_order() {
     let attached = watcher.call("client.attach", json!([{"width": 100, "height": 30}]));
     let mut seq = attached["seq"].as_u64().unwrap();
     let mut actor = server.client();
+    actor.term();
     actor.page();
-    let p1 = actor.call("tab.open", json!(["terminal", {"command": ["cat"]}, {"kind": "session", "name": "one"}]));
+    let p1 = actor.call("tab.open", json!([TERM, {"command": ["cat"]}, {"kind": "session", "name": "one"}]));
     let s = actor.call("tab.get", json!([&p1]))["session"].clone();
-    let p2 = actor
-        .call("tab.open", json!(["terminal", {"command": ["cat"]}, {"kind": "tiled", "beside": p1, "split": "right"}]));
+    let p2 =
+        actor.call("tab.open", json!([TERM, {"command": ["cat"]}, {"kind": "tiled", "beside": p1, "split": "right"}]));
     let p3 = actor.call(
         "tab.open",
         json!([PAGE, {"url": "example.com"}, {"kind": "tiled", "beside": p2, "split": "down", "size": "30%"}]),
@@ -292,7 +328,7 @@ fn an_attached_client_receives_every_change_in_order() {
     actor.call("tab.update", json!([&p1, {"place": {"kind": "tiled", "swap": p3}}]));
     actor.call("tab.update", json!([&p2, {"place": {"kind": "view", "name": "two"}}]));
     let view = actor.call("tab.get", json!([&p2]))["place"]["view"].clone();
-    let float = actor.call("tab.open", json!(["terminal", {"command": ["cat"]}, {"kind": "float", "view": view}]));
+    let float = actor.call("tab.open", json!([TERM, {"command": ["cat"]}, {"kind": "float", "view": view}]));
     actor.call("option.set", json!(["url", "https://example.com/next", {"id": p3}]));
     actor.call("tab.focus", json!([&p1]));
     actor.call("tab.close", json!([float]));
@@ -350,11 +386,12 @@ fn the_host_places_tabs_and_the_core_makes_the_place() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut c = server.client();
+    c.term();
     let cat = json!({"command": ["cat"]});
-    let first = c.call("tab.open", json!(["terminal", cat, {"kind": "session", "name": "place"}]));
+    let first = c.call("tab.open", json!([TERM, cat, {"kind": "session", "name": "place"}]));
     let s = c.call("tab.get", json!([&first]))["session"].clone();
     c.call("session.focus", json!([&s]));
-    let right = c.call("tab.open", json!(["terminal", cat, {"kind": "tiled", "beside": first, "split": "right"}]));
+    let right = c.call("tab.open", json!([TERM, cat, {"kind": "tiled", "beside": first, "split": "right"}]));
     let view = c.call("tab.get", json!([right]))["place"]["view"].clone();
     let pane_of = |c: &mut Client, tab: &Value| c.call("tab.get", json!([tab]))["place"]["pane"].clone();
     let (left_pane, right_pane) = (pane_of(&mut c, &first), pane_of(&mut c, &right));
@@ -376,19 +413,17 @@ fn the_host_places_tabs_and_the_core_makes_the_place() {
     };
     wait_width(&mut c, &first, 40);
     wait_width(&mut c, &right, 39);
-    let narrow =
-        c.call("tab.open", json!(["terminal", cat, {"kind": "tiled", "split": "right", "size": 20, "full": true}]));
+    let narrow = c.call("tab.open", json!([TERM, cat, {"kind": "tiled", "split": "right", "size": 20, "full": true}]));
     let layout = c.call("view.get", json!([&view]))["layout"].clone();
     let narrow_share = share(&layout, &narrow).unwrap_or_else(|| panic!("the narrow tab is in the layout: {layout}"));
     assert!(narrow_share > 0.15 && narrow_share < 0.35, "the size it was given: {layout}");
-    let float =
-        c.call("tab.open", json!(["terminal", cat, {"kind": "float", "view": view, "width": "50%", "height": 10}]));
+    let float = c.call("tab.open", json!([TERM, cat, {"kind": "float", "view": view, "width": "50%", "height": 10}]));
     let place = c.call("tab.get", json!([float]))["place"].clone();
     assert_eq!((place["kind"].clone(), place["view"].clone()), (json!("float"), view.clone()));
     assert_eq!((place["width"].clone(), place["height"].clone()), (json!("50%"), json!(10)), "{place}");
     let client = c.call(
         "tab.open",
-        json!(["terminal", cat, {
+        json!([TERM, cat, {
             "kind": "float", "relative": "client", "anchor": "center", "width": "80%", "height": 18,
             "backdrop": 30, "dismiss": ["escape", "press"], "zIndex": 70, "focus": false,
         }]),
@@ -405,7 +440,7 @@ fn the_host_places_tabs_and_the_core_makes_the_place() {
         "{place}"
     );
     c.call("tab.close", json!([client]));
-    let alone = c.call("tab.open", json!(["terminal", cat, {"kind": "view"}]));
+    let alone = c.call("tab.open", json!([TERM, cat, {"kind": "view"}]));
     assert_eq!(c.call("session.get", json!([&s]))["views"].as_array().unwrap().len(), 2, "into the current session");
     c.call("tab.update", json!([alone, {"place": {"kind": "tiled", "beside": first, "split": "down"}}]));
     assert_eq!(
@@ -413,7 +448,7 @@ fn the_host_places_tabs_and_the_core_makes_the_place() {
         1,
         "its view closed when it left"
     );
-    let err = c.try_call("core.openTab", json!(["terminal", cat, {"kind": "tiled", "split": "right"}])).unwrap_err();
+    let err = c.try_call("core.openTab", json!([TERM, cat, {"kind": "tiled", "split": "right"}])).unwrap_err();
     assert!(err.to_string().contains("beside"), "the core chooses nothing: {err}");
     c.call("tab.update", json!([right, {"zoom": true}]));
     assert_eq!(c.call("view.get", json!([&view]))["zoom"], right_pane, "its pane fills the view");
@@ -424,16 +459,16 @@ fn the_host_places_tabs_and_the_core_makes_the_place() {
     c.call("pane.update", json!([&right_pane, {"zoom": "toggle"}]));
     assert_eq!(c.call("view.get", json!([&view]))["zoom"], json!(null));
     // Into a pane, as one of its tabs; with `pane_tabs` off, beside it in a pane of its own.
-    let joined = c.call("tab.open", json!(["terminal", cat, {"kind": "tiled", "pane": &right_pane}]));
+    let joined = c.call("tab.open", json!([TERM, cat, {"kind": "tiled", "pane": &right_pane}]));
     assert_eq!(pane_of(&mut c, &joined), right_pane, "a tab of the pane");
     assert_eq!(c.call("pane.get", json!([&right_pane]))["tabs"], json!([right, joined]));
     c.call("option.set", json!(["pane_tabs", false, {"scope": "global"}]));
-    let split = c.call("tab.open", json!(["terminal", cat, {"kind": "tiled", "pane": &right_pane}]));
+    let split = c.call("tab.open", json!([TERM, cat, {"kind": "tiled", "pane": &right_pane}]));
     assert_ne!(pane_of(&mut c, &split), right_pane, "a pane of its own");
     c.call("option.set", json!(["pane_tabs", true, {"scope": "global"}]));
     c.call("tab.close", json!([split]));
     c.call("tab.close", json!([joined]));
-    let theirs_tab = c.call("tab.open", json!(["terminal", cat, {"kind": "session", "name": "other"}]));
+    let theirs_tab = c.call("tab.open", json!([TERM, cat, {"kind": "session", "name": "other"}]));
     let other = c.call("tab.get", json!([theirs_tab]))["session"].clone();
     let theirs = c.call("tab.get", json!([theirs_tab]))["view"].clone();
     assert_eq!(c.call("session.get", json!([&other]))["views"], json!([theirs]), "its own view, at index 0");
@@ -442,15 +477,15 @@ fn the_host_places_tabs_and_the_core_makes_the_place() {
     assert_eq!(c.call("session.get", json!([&s]))["views"], json!([view]));
     let refused = c.try_call("view.update", json!([&view, {"session": other, "index": 0}]));
     assert!(refused.is_err(), "index 0 is theirs: {refused:?}");
-    let gone = c.call("tab.open", json!(["terminal", cat, {"kind": "tiled", "beside": first, "split": "down"}]));
-    let next = c.call("tab.open", json!(["terminal", cat, {"kind": "tiled", "beside": gone, "split": "right"}]));
+    let gone = c.call("tab.open", json!([TERM, cat, {"kind": "tiled", "beside": first, "split": "down"}]));
+    let next = c.call("tab.open", json!([TERM, cat, {"kind": "tiled", "beside": gone, "split": "right"}]));
     c.call("tab.close", json!([next]));
     c.call("tab.close", json!([gone]));
     let closed = c.call("tab.list", json!([{"closed": true}]));
     let entry = closed.as_array().unwrap().iter().find(|e| e["tab"] == next).cloned().unwrap();
     assert_eq!(entry["beside"], gone, "it was beside a tab that closed after it");
     let place = json!({"kind": "tiled", "view": entry["view"], "beside": entry["beside"]});
-    let back = c.call("tab.open", json!(["terminal", {"state": entry["state"]}, place]));
+    let back = c.call("tab.open", json!([TERM, {"state": entry["state"]}, place]));
     assert_eq!(c.call("tab.get", json!([back]))["place"]["view"], entry["view"], "into its view, beside what is there");
     c.call("option.set", json!(["remain_on_exit", true, {"id": first}]));
     assert_eq!(c.call("option.get", json!(["remain_on_exit", {"id": first}])), json!(true));
@@ -466,9 +501,10 @@ fn tabs_are_sized_by_their_client_and_headless_by_the_host() {
     let mut ui = server.client();
     ui.call("client.attach", json!([{"width": 120, "height": 40}]));
     let mut c = server.client();
+    c.term();
     let cat = json!({"command": ["cat"]});
-    let first = c.call("tab.open", json!(["terminal", cat, {"kind": "session", "name": "sized"}]));
-    let right = c.call("tab.open", json!(["terminal", cat, {"kind": "tiled", "beside": first, "split": "right"}]));
+    let first = c.call("tab.open", json!([TERM, cat, {"kind": "session", "name": "sized"}]));
+    let right = c.call("tab.open", json!([TERM, cat, {"kind": "tiled", "beside": first, "split": "right"}]));
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(c.option("pane_width", &right), json!(80), "a client is attached: the host leaves sizing to it");
     // As a client sizes a terminal it draws: the core's own call, not the API's.
@@ -484,8 +520,8 @@ fn tabs_are_sized_by_their_client_and_headless_by_the_host() {
 }
 fn make(client: &mut Client, ty: &str) -> Value {
     match ty {
-        "terminal" => {
-            let tab = client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session"}]));
+        TERM => {
+            let tab = client.call("tab.open", json!([TERM, {"command": ["/bin/sh"]}, {"kind": "session"}]));
             client.call("tab.call", json!([tab, "input", {"text": "echo round-$((20+1))\r"}]));
             client.wait_for_text(&tab, "round-21");
             tab
@@ -932,7 +968,8 @@ fn a_program_without_osc_7501_falls_back_to_its_title_and_notifications() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut client = server.client();
-    let tab = client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session", "name": "a"}]));
+    client.term();
+    let tab = client.call("tab.open", json!([TERM, {"command": ["/bin/sh"]}, {"kind": "session", "name": "a"}]));
     let wait = |client: &mut Client, want: Value, why: &str| {
         let deadline = Instant::now() + Duration::from_secs(10);
         while client.option("@status", &tab) != want {
@@ -961,7 +998,8 @@ fn a_programs_own_report_is_its_tabs_status() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut client = server.client();
-    let tab = client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session", "name": "a"}]));
+    client.term();
+    let tab = client.call("tab.open", json!([TERM, {"command": ["/bin/sh"]}, {"kind": "session", "name": "a"}]));
     let report = "printf '\\033]7501;state=working:app=toy\\033\\\\'\r";
     client.call("tab.call", json!([tab, "input", {"text": report}]));
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -1035,9 +1073,9 @@ fn a_package_tabs_requests_block_it_until_answered() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut client = server.client();
-    let terminal =
-        client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session", "name": "a"}]));
-    client.call("core.setBlocks", json!([[{"id": "pumi_dev.acp.chat", "provider": "pumi_dev/acp"}]]));
+    client.term();
+    let terminal = client.call("tab.open", json!([TERM, {"command": ["/bin/sh"]}, {"kind": "session", "name": "a"}]));
+    client.call("core.setBlocks", blocks(json!([{"id": "pumi_dev.acp.chat", "provider": "pumi_dev/acp"}])));
     let tab = client
         .call("tab.open", json!(["pumi_dev.acp.chat", {}, {"kind": "tiled", "beside": terminal, "split": "right"}]));
     assert_eq!(client.call("tab.call", json!([tab, "report", {"body": "state=working:app=codex"}])), json!(true));
@@ -1135,11 +1173,11 @@ fn an_update_restarts_the_server_and_its_host_as_the_new_binaries_keeping_its_pr
     install(Path::new(env!("CARGO_BIN_EXE_pumi-host")), &bin, "pumi-host");
     let server = Server::start_installed(&bin, dir.path());
     let mut client = server.client();
+    client.term();
     let image = client.call("server.getImage", json!([]));
     assert_eq!(image["outdated"], false, "{image}");
     assert_eq!(image["host"]["path"], json!(bin.join(pumi_sys::paths::exe("pumi-host")).display().to_string()));
-    let tab =
-        client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session", "name": "work"}]));
+    let tab = client.call("tab.open", json!([TERM, {"command": ["/bin/sh"]}, {"kind": "session", "name": "work"}]));
     client.call("tab.call", json!([tab, "input", {"text": "echo before-$((40+2))\r"}]));
     client.wait_for_text(&tab, "before-42");
     let old_host = host_pid(&mut client);
@@ -1188,8 +1226,8 @@ fn a_stop_loses_an_attached_stream_rather_than_ending_it() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut client = server.client();
-    let tab =
-        client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session", "name": "work"}]));
+    client.term();
+    let tab = client.call("tab.open", json!([TERM, {"command": ["/bin/sh"]}, {"kind": "session", "name": "work"}]));
     let size = Size { cols: 80, rows: 24, cell_width: 8, cell_height: 16 };
     let target = tab.as_str().unwrap().to_string();
     let (mut stream, _writer) = pumi_proto::client::attach(
@@ -1215,8 +1253,8 @@ fn a_restart_keeps_programs_and_returns_once_the_server_is_back() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut client = server.client();
-    let tab =
-        client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session", "name": "work"}]));
+    client.term();
+    let tab = client.call("tab.open", json!([TERM, {"command": ["/bin/sh"]}, {"kind": "session", "name": "work"}]));
     client.call("tab.call", json!([tab, "input", {"text": "echo before-$((40+2))\r"}]));
     client.wait_for_text(&tab, "before-42");
     let paths = pumi_proto::paths::Paths::at(dir.path());
@@ -1232,8 +1270,9 @@ fn a_menu_item_is_a_function_with_its_arguments() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut c = server.client();
+    c.term();
     let cat = json!({"command": ["cat"]});
-    let tab = c.call("tab.open", json!(["terminal", cat, {"kind": "session", "name": "points"}]));
+    let tab = c.call("tab.open", json!([TERM, cat, {"kind": "session", "name": "points"}]));
     let rhs = json!({"fn": "option.set", "args": ["@clicked", "yes", {"id": tab}], "title": "Mark it"});
     c.call("menu.set", json!(["TabStrip.Mark", rhs]));
     c.call(
@@ -1260,10 +1299,11 @@ fn a_file_opens_on_the_right_and_reads_without_a_renderer() {
     let dir = Server::dir();
     let server = Server::start(dir.path());
     let mut c = server.client();
+    c.term();
     let files = Server::dir();
     std::fs::write(files.path().join("a.md"), "# a\n").unwrap();
     let cat = json!({"command": ["cat"], "cwd": files.path()});
-    let first = c.call("tab.open", json!(["terminal", cat, {"kind": "session", "name": "files"}]));
+    let first = c.call("tab.open", json!([TERM, cat, {"kind": "session", "name": "files"}]));
     let a = files.path().join("a.md").display().to_string();
     let tab = c.call(
         "tab.open",

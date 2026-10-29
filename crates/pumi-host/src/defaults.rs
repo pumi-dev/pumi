@@ -29,7 +29,7 @@ fn call(name: &str, args: Value) -> Value {
     json!({ "call": name, "args": args })
 }
 fn split(side: &str) -> Value {
-    call("tab.open", json!(["terminal", {}, { "kind": "tiled", "split": side }]))
+    call("tab.open", json!([null, {}, { "kind": "tiled", "split": side }]))
 }
 fn layout(name: &str) -> Value {
     call("view.update", json!([null, { "layout": name }]))
@@ -39,7 +39,7 @@ fn keys(cx: &mut Cx) {
     let mut prefix: Vec<(String, Value)> = vec![
         ("\"".into(), split("down")),
         ("%".into(), split("right")),
-        ("c".into(), call("tab.open", json!(["terminal", {}, { "kind": "view" }]))),
+        ("c".into(), call("tab.open", json!([null, {}, { "kind": "view" }]))),
         ("!".into(), call("tab.update", json!([null, { "place": { "kind": "view" } }]))),
         ("n".into(), call("view.focus", json!([null, { "offset": 1 }]))),
         ("p".into(), call("view.focus", json!([null, { "offset": -1 }]))),
@@ -93,11 +93,11 @@ fn keys(cx: &mut Cx) {
 /// The menus' items, each the function choosing it calls: `menu.set` takes a path and one.
 fn menus(cx: &mut Cx) {
     let items: Vec<(&str, Value)> = vec![
-        ("Session.New Session", call("tab.open", json!(["terminal", {}, { "kind": "session", "focus": false }]))),
+        ("Session.New Session", call("tab.open", json!([null, {}, { "kind": "session", "focus": false }]))),
         ("Session.Next Session", call("session.focus", json!([null, { "offset": 1 }]))),
         ("Session.Previous Session", call("session.focus", json!([null, { "offset": -1 }]))),
-        ("Session.New View", call("tab.open", json!(["terminal", {}, { "kind": "view" }]))),
-        ("Session.New Tab", call("tab.open", json!(["terminal", {}, { "kind": "tiled", "pane": "current" }]))),
+        ("Session.New View", call("tab.open", json!([null, {}, { "kind": "view" }]))),
+        ("Session.New Tab", call("tab.open", json!([null, {}, { "kind": "tiled", "pane": "current" }]))),
         ("Session.Split Right", split("right")),
         ("Session.Split Down", split("down")),
         ("Session.Zoom Pane", call("pane.update", json!([null, { "zoom": "toggle" }]))),

@@ -5,6 +5,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+/// A block the core runs on its terminal engine, as the terminal plugin's manifest declares it.
+const TERM: &str = "test.term.shell";
 struct Core {
     child: Child,
     socket: PathBuf,
@@ -101,6 +103,16 @@ impl Conn {
 fn tab_ref(tab: u64) -> Value {
     json!(format!("%{tab}"))
 }
+/// `core.setBlocks`' arguments: the terminal engine's block, and `extra`'s after it.
+fn blocks(extra: Value) -> Value {
+    let mut all = vec![json!({"id": TERM, "provider": "test/term", "engine": "terminal"})];
+    all.extend(extra.as_array().cloned().unwrap_or_default());
+    json!([all])
+}
+/// Declares the terminal engine's block on a core that has none.
+fn term(c: &mut Conn) {
+    c.ok("core.setBlocks", blocks(json!([])));
+}
 fn attach(grid: &Path, tab: u64, resume: Option<u64>) -> pumi_proto::client::AttachStream {
     let size = Size { cols: 80, rows: 24, cell_width: 8, cell_height: 16 };
     let (stream, writer) =
@@ -128,8 +140,9 @@ fn read_until(stream: &mut pumi_proto::client::AttachStream, text: &str) -> (Str
 fn tabs_options_and_events_over_json_rpc() {
     let core = Core::start();
     let mut c = Conn::open(&core.socket);
+    term(&mut c);
     c.ok("event.on", json!(["tab.opened", {}]));
-    let (tab, notes) = c.call("core.openTab", json!(["terminal", { "command": ["/bin/cat"] }, { "kind": "session" }]));
+    let (tab, notes) = c.call("core.openTab", json!([TERM, { "command": ["/bin/cat"] }, { "kind": "session" }]));
     let tab = tab.unwrap().as_u64().expect("a tab id");
     let heard = notes.iter().any(|n| n["method"] == "rpc.event" && n["params"][1]["event"] == "tab.opened");
     assert!(heard, "the subscription heard the tab open, before the answer: {notes:?}");
@@ -141,7 +154,7 @@ fn tabs_options_and_events_over_json_rpc() {
     read_until(&mut stream, "hello core");
     let read = c.ok("core.tabCall", json!([tab, "read", { "lines": 5 }]));
     assert!(read["text"].as_str().unwrap().contains("hello core"), "{read}");
-    c.ok("core.setBlocks", json!([[{ "id": "pumi_dev.hello.badge", "provider": "pumi_dev/hello" }]]));
+    c.ok("core.setBlocks", blocks(json!([{ "id": "pumi_dev.hello.badge", "provider": "pumi_dev/hello" }])));
     let badge =
         c.ok("core.openTab", json!(["pumi_dev.hello.badge", { "x": 1 }, {"kind": "session"}])).as_u64().unwrap();
     assert_eq!(c.ok("core.tabCall", json!([badge, "args"])), json!({ "x": 1 }));
@@ -178,8 +191,8 @@ fn calls_to_a_function_a_channel_provides_go_to_it() {
 fn a_restart_keeps_the_program_and_clients_resume() {
     let core = Core::start();
     let mut c = Conn::open(&core.socket);
-    let tab =
-        c.ok("core.openTab", json!(["terminal", { "command": ["/bin/cat"] }, { "kind": "session" }])).as_u64().unwrap();
+    term(&mut c);
+    let tab = c.ok("core.openTab", json!([TERM, { "command": ["/bin/cat"] }, { "kind": "session" }])).as_u64().unwrap();
     let pid = c.ok("core.getOptionValue", json!(["tab_pid", { "tab": tab }]));
     c.ok("core.tabCall", json!([tab, "input", { "text": "before\n" }]));
     let mut stream = attach(&core.grid(), tab, None);
@@ -209,13 +222,14 @@ fn agent_runs(c: &mut Conn, stream: &mut pumi_proto::client::AttachStream, tab: 
 fn a_restored_shell_runs_the_line_its_program_left() {
     let core = Core::start();
     let mut c = Conn::open(&core.socket);
+    term(&mut c);
     c.ok("core.setOptionValue", json!(["default_shell", "/bin/sh", {}]));
-    let tab = c.ok("core.openTab", json!(["terminal", {}, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "session" }])).as_u64().unwrap();
     let mut stream = attach(&core.grid(), tab, None);
     agent_runs(&mut c, &mut stream, tab, "echo restored-$((6*7))");
     let state = c.ok("tab.get", json!([tab_ref(tab), { "state": true }]))["state"].clone();
     assert_eq!(state["options"]["restore_command"], "echo restored-$((6*7))");
-    let again = c.ok("core.openTab", json!(["terminal", { "state": state }, { "kind": "session" }])).as_u64().unwrap();
+    let again = c.ok("core.openTab", json!([TERM, { "state": state }, { "kind": "session" }])).as_u64().unwrap();
     let mut restored = attach(&core.grid(), again, None);
     read_until(&mut restored, "restored-42");
     read_until(&mut restored, "$ ");
@@ -229,8 +243,9 @@ fn a_restored_shell_runs_the_line_its_program_left() {
 fn a_core_that_died_brings_the_agent_back_in_its_tab() {
     let core = Core::start_in(tempfile::tempdir().unwrap(), true);
     let mut c = Conn::open(&core.socket);
+    term(&mut c);
     c.ok("core.setOptionValue", json!(["default_shell", "/bin/sh", {}]));
-    let tab = c.ok("core.openTab", json!(["terminal", {}, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "session" }])).as_u64().unwrap();
     let mut stream = attach(&core.grid(), tab, None);
     agent_runs(&mut c, &mut stream, tab, "echo resumed-$((6*7))");
     let saved = core.dir.path().join("state.json");
@@ -249,7 +264,7 @@ fn a_package_tab_of_its_own_version_comes_back_before_its_package_is_told_again(
     let core = Core::start_in(tempfile::tempdir().unwrap(), true);
     let mut c = Conn::open(&core.socket);
     let page = json!({"id": "pumi_dev.browser.page", "version": 2, "methods": ["navigate"]});
-    c.ok("core.setBlocks", json!([[page]]));
+    c.ok("core.setBlocks", blocks(json!([page])));
     let args = json!({"url": "https://example.com/kept"});
     let tab = c.ok("core.openTab", json!(["pumi_dev.browser.page", args, { "kind": "session" }])).as_u64().unwrap();
     let saved = core.dir.path().join("state.json");
@@ -272,8 +287,9 @@ fn a_package_tab_of_its_own_version_comes_back_before_its_package_is_told_again(
 fn a_respawned_shell_stays_and_runs_its_restore_command() {
     let core = Core::start();
     let mut c = Conn::open(&core.socket);
+    term(&mut c);
     c.ok("core.setOptionValue", json!(["default_shell", "/bin/sh", {}]));
-    let tab = c.ok("core.openTab", json!(["terminal", {}, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "session" }])).as_u64().unwrap();
     let mut stream = attach(&core.grid(), tab, None);
     read_until(&mut stream, "$ ");
     c.ok("core.setOptionValue", json!(["restore_command", "echo back-$((6*7))", { "tab": tab }]));

@@ -190,7 +190,7 @@ fn tabs_of(k: &Kernel, view: ViewId) -> Vec<TabId> {
     name = "tab.list",
     effect = "read",
     example(args = "[{}]", result = r#"["%1"]"#, desc = "Every tab."),
-    example(args = r#"[{"block": "terminal"}]"#, result = r#"["%1"]"#, desc = "Only terminals."),
+    example(args = r#"[{"block": "pumi_dev.terminal.shell"}]"#, result = r#"["%1"]"#, desc = "Only the Terminal plugin's shells."),
     example(args = r#"[{"trait": "pumi_dev.files.file"}]"#, result = r#"["%3"]"#, desc = "Only files."),
     example(args = r#"[{"closed": true}]"#, result = "[]", desc = "The tabs closed lately, to reopen one.")
 )]
@@ -464,7 +464,7 @@ pub fn pumi_core_set_current_tab(cx: &mut Cx, tab: u64) -> Result<()> {
     Ok(())
 }
 /// `tab.open` as the core does it, with its place resolved (the host's `tab.open`).
-#[api(name = "core.openTab", internal, example(args = r#"["terminal", {}, {"kind": "session"}]"#, result = "2"))]
+#[api(name = "core.openTab", internal, example(args = r#"["pumi_dev.terminal.shell", {}, {"kind": "session"}]"#, result = "2"))]
 pub fn pumi_core_open_tab(cx: &mut Cx, block: String, args: Option<Value>, place: Option<PlaceSpec>) -> Result<u64> {
     ops::open_tab(cx, &block, args.unwrap_or(Value::Null), place.unwrap_or_default())
 }

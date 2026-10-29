@@ -68,6 +68,14 @@ pub fn builtin() -> Vec<Decl> {
             "The program a terminal runs when none is given; empty is $SHELL, as a login shell.",
         ),
         Decl::new(
+            "new_tab",
+            String,
+            json!(""),
+            Global,
+            "The block a new tab, split, view or session holds (`pumi_dev.terminal.shell`); empty is the launcher, which lists what can be opened.",
+        )
+        .label("New tabs open"),
+        Decl::new(
             "pane_tabs",
             Boolean,
             json!(true),
@@ -132,7 +140,7 @@ pub fn builtin() -> Vec<Decl> {
             Table,
             json!({}),
             Global,
-            "Which plugin draws each core block, by block: `{ terminal = \"me/term\" }`. Without one, the bundled plugin draws it (`pumi/terminal`); a tab's `@tab_renderer` picks one for that tab.",
+            "Which plugin draws each block another plugin declares, by block: `{ \"pumi_dev.terminal.shell\" = \"me/term\" }`. Without one, its own plugin draws it; a tab's `@tab_renderer` picks one for that tab.",
         ),
         Decl::new(
             "title",

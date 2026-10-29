@@ -62,7 +62,7 @@ pub struct EventOnOpts {
     example(args = r#"["tab.changed", {"match": "%3"}]"#, result = "8", desc = "Hear every change to tab 3."),
     example(args = r#"[["request.opened", "request.closed"], {}]"#, result = "9"),
     example(
-        args = r#"["tab.opened", {"match": "terminal", "once": true}]"#,
+        args = r#"["tab.opened", {"match": "pumi_dev.terminal.shell", "once": true}]"#,
         result = "10",
         desc = "The next terminal tab."
     )

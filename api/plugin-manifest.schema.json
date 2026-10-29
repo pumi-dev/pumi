@@ -174,12 +174,16 @@
                 "type": "array",
                 "uniqueItems": true,
                 "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$", "not": { "enum": ["read", "input", "selection", "resize", "args", "report"] } }
+              },
+              "engine": {
+                "description": "What the core runs its tabs on. `terminal`: a PTY and its program, opened with `{command, cwd, env, keep}`, relaunched when it comes back, and carried across a restart. Its renderer draws `<terminal tab>`; with none, the window does. Without an engine, the plugin draws and answers its tabs.",
+                "enum": ["terminal"]
               }
             }
           }
         },
         "renderers": {
-          "description": "The blocks it draws but did not define (`terminal`, the core's `file`, another plugin's `owner.name.id`), each with the src/ui.tsx export that draws them. A renderer of `file` may say which files it draws: `{\"export\": \"Editor\", \"match\": [\"*.md\"]}`; the one whose glob fits a file best draws it, unless the tab's `@tab_renderer` names another.",
+          "description": "The blocks it draws but did not define (the core's `file`, another plugin's `owner.name.id`), each with the src/ui.tsx export that draws them. A renderer of `file` may say which files it draws: `{\"export\": \"Editor\", \"match\": [\"*.md\"]}`; the one whose glob fits a file best draws it, unless the tab's `@tab_renderer` names another.",
           "type": "object",
           "additionalProperties": {
             "oneOf": [

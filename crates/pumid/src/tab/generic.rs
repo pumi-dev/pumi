@@ -7,8 +7,8 @@ use pumi_api::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::any::Any;
-/// A plugin's block, as its manifest declares it (`core.setBlocks`): the generic engine, with the
-/// block's own version, strategy and methods.
+/// A plugin's block, as its manifest declares it (`core.setBlocks`): the generic engine, or the
+/// core's terminals (`engine: "terminal"`), with the block's own version, strategy and methods.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GenericType {
@@ -26,6 +26,18 @@ pub struct GenericType {
     /// Its own methods: `tab.call` of one calls its plugin's function `<block>.<method>`.
     #[serde(default)]
     pub methods: Vec<String>,
+    /// What runs its tabs, when the core does: `terminal`, a PTY and its program.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<Engine>,
+}
+/// What the core can run a plugin's block on. Its tabs are the engine's: they open with its
+/// arguments, answer its methods, and are saved and brought back as it does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Engine {
+    /// A terminal: opened with `{command, cwd, env, keep}`, relaunched when it comes back, its
+    /// PTY carried across a restart.
+    Terminal,
 }
 fn first() -> u32 {
     1
@@ -45,7 +57,11 @@ impl GenericType {
         if self.version < 1 {
             return Some(format!("{}: `version` is 1 or more", self.id));
         }
-        let taken = |m: &str| pumi_api::manifest::BLOCK_PROTOCOL.contains(&m);
+        let terminal = self.engine == Some(Engine::Terminal);
+        let engine = |m: &str| {
+            terminal && (super::terminal::METHODS.contains(&m) || super::terminal::HOST_METHODS.contains(&m))
+        };
+        let taken = |m: &str| pumi_api::manifest::BLOCK_PROTOCOL.contains(&m) || engine(m);
         let refused = self.methods.iter().find(|m| m.is_empty() || taken(m));
         refused.map(|m| format!("{}: `{m}` is not a method of its own", self.id))
     }
@@ -117,10 +133,17 @@ impl TabType for GenericType {
         self.version
     }
     fn strategy(&self) -> Strategy {
-        self.strategy
+        match self.engine {
+            Some(Engine::Terminal) => Strategy::Relaunch,
+            None => self.strategy,
+        }
     }
     fn methods(&self) -> Vec<String> {
-        OWN.iter().map(|m| m.to_string()).chain(self.methods.iter().cloned()).collect()
+        let base: &[&str] = match self.engine {
+            Some(Engine::Terminal) => &super::terminal::METHODS,
+            None => &OWN,
+        };
+        base.iter().map(|m| m.to_string()).chain(self.methods.iter().cloned()).collect()
     }
     fn open(
         &self,
@@ -129,20 +152,34 @@ impl TabType for GenericType {
         args: &Value,
         restore: Option<Restore>,
     ) -> Result<Box<dyn Instance>> {
+        if self.engine == Some(Engine::Terminal) {
+            let args = self.own_options(kernel, tab, args, restore.is_none())?;
+            return super::terminal::open(kernel, tab, &args, restore);
+        }
         if let Some(restore) = restore {
             let data = serde_json::from_value(restore.data.clone())
                 .map_err(|err| Error::invalid_params(format!("{} state: {err}", self.id)))?;
             return Ok(Box::new(Generic(data)));
         }
-        if let Some(map) = args.as_object() {
-            for (name, value) in map {
-                let owned = kernel.model.options.decl(name).is_some_and(|d| d.blocks.iter().any(|t| t == &self.id));
-                if owned {
-                    kernel.set_option(name, Key::Tab(tab), value.clone(), &self.id, true)?;
-                }
+        self.own_options(kernel, tab, args, true)?;
+        Ok(Box::new(Generic(Data { args: args.clone(), ..Data::default() })))
+    }
+}
+impl GenericType {
+    /// Sets the options of its own that `args` names (`set`: when a tab opens), and answers the
+    /// rest: what its engine opens with.
+    fn own_options(&self, kernel: &mut Kernel, tab: TabId, args: &Value, set: bool) -> Result<Value> {
+        let Some(map) = args.as_object() else { return Ok(args.clone()) };
+        let mut rest = serde_json::Map::new();
+        for (name, value) in map {
+            let owned = kernel.model.options.decl(name).is_some_and(|d| d.blocks.iter().any(|t| t == &self.id));
+            if !owned {
+                rest.insert(name.clone(), value.clone());
+            } else if set {
+                kernel.set_option(name, Key::Tab(tab), value.clone(), &self.id, true)?;
             }
         }
-        Ok(Box::new(Generic(Data { args: args.clone(), ..Data::default() })))
+        Ok(Value::Object(rest))
     }
 }
 impl Instance for Generic {

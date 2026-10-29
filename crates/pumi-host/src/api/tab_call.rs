@@ -5,8 +5,9 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 /// Call a method of the block in a tab: the protocol every block answers (`read`, its text;
 /// `input`, `{text}`, `{paste}` or `{keys}`; `selection`; `report`, an OSC 7501 body), a
-/// terminal's `run`, `wait` and `attach`, and the block's own methods — a terminal's `respawn`, a
-/// plugin block's `<block>.<method>`, a file tab's `<viewer>.<method>`. `tab` is the caller's own
+/// terminal tab's `run`, `wait` and `attach` (a block on the terminal engine), and the block's own
+/// methods — a terminal's `respawn`, a plugin block's `<block>.<method>`, a file tab's
+/// `<viewer>.<method>`. `tab` is the caller's own
 /// when it is `null`.
 #[api(
     name = "tab.call",
@@ -55,10 +56,11 @@ pub fn pumi_tab_call(cx: &mut Cx, tab: Option<TabRef>, method: String, args: Opt
         "report" => report(cx, tab, &args),
         // Key names in pumi's syntax, to the bytes the program's modes ask for; every one is
         // checked before a byte is written. A block's own input is its plugin's function.
-        "input" if args.get("keys").is_some() && block == "terminal" => keys(cx, tab, &args),
-        "run" if block != "terminal" => {
-            Err(Error::invalid_params(format!("run is a terminal's method; %{tab} holds `{block}`")))
-        }
+        "input" if args.get("keys").is_some() => match cx.call("core.tabCall", json!([tab, "modes", Value::Null])) {
+            Ok(modes) => keys(cx, tab, &modes, &args),
+            Err(err) if err.kind == ErrorKind::NotFound => forward(cx, tab, &block, &viewer, &method, args, err),
+            Err(err) => Err(err),
+        },
         "wait" => wait(cx, tab, &args),
         _ => match cx.call("core.tabCall", json!([tab, &method, &args])) {
             Err(err) if err.kind == ErrorKind::NotFound => forward(cx, tab, &block, &viewer, &method, args, err),
@@ -88,16 +90,15 @@ fn report(cx: &mut Cx, tab: u64, args: &Value) -> Result<Value> {
     let changed = crate::program::report(k, tab, &body).map_err(Error::invalid_params)?;
     Ok(json!(changed))
 }
-/// `{keys: ["ctrl+c", "f1", "C-c"]}`: pumi's key names, encoded as the program's modes ask.
-/// Every name is parsed before anything is written to the terminal.
-fn keys(cx: &mut Cx, tab: u64, args: &Value) -> Result<Value> {
+/// `{keys: ["ctrl+c", "f1", "C-c"]}` to a tab on the terminal engine: pumi's key names, encoded
+/// as its program's `modes` ask. Every name is parsed before anything is written to the terminal.
+fn keys(cx: &mut Cx, tab: u64, modes: &Value, args: &Value) -> Result<Value> {
     let names: Option<Vec<String>> =
         args["keys"].as_array().into_iter().flatten().map(|name| name.as_str().map(str::to_string)).collect();
     let names = names.filter(|names| !names.is_empty()).ok_or_else(|| {
         Error::invalid_params("input: `keys` is a list of key names (`ctrl+c`, `enter`, `f1`, `C-c`)")
     })?;
-    let modes = cx.call("core.tabCall", json!([tab, "modes", Value::Null]))?;
-    let options = pumi_keys::options_from_modes(&modes);
+    let options = pumi_keys::options_from_modes(modes);
     let bytes = pumi_keys::encode_names_with(&names, &options)
         .map_err(|name| Error::invalid_params(format!("not a key: `{name}`")))?;
     cx.call("core.tabCall", json!([tab, "input", { "bytes": bytes }]))

@@ -125,7 +125,7 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
         let title = text("title").filter(|t| !t.trim().is_empty());
         let tab = model::Tab {
             tab_id: tab_id(id),
-            block: t.get("block").and_then(Value::as_str).unwrap_or("terminal").to_string(),
+            block: t.get("block").and_then(Value::as_str).unwrap_or_default().to_string(),
             traits: t
                 .get("traits")
                 .and_then(Value::as_array)

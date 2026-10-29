@@ -44,17 +44,17 @@ pub fn apply(calls: &dyn Calls, op: Op) -> Result<Made> {
     match op {
         Op::Split { target, axis, cwd, env } => {
             let place = json!({ "kind": "tiled", "split": wire::direction(axis), "beside": id("tab", &target)?, "focus": false });
-            let tab = calls.call("tab.open", json!(["terminal", terminal_args(cwd, env), place]))?;
+            let tab = calls.call("tab.open", json!([null, terminal_args(cwd, env), place]))?;
             Ok(made(calls, tab.as_str().unwrap_or_default()))
         }
         Op::NewView { workspace, cwd, env } => {
             let place = json!({ "kind": "view", "session": id("session", &workspace)?, "focus": false });
-            let tab = calls.call("tab.open", json!(["terminal", terminal_args(cwd, env), place]))?;
+            let tab = calls.call("tab.open", json!([null, terminal_args(cwd, env), place]))?;
             Ok(made(calls, tab.as_str().unwrap_or_default()))
         }
         Op::NewWorkspace { cwd, env, .. } => {
             let place = json!({ "kind": "session", "cwd": cwd, "focus": false });
-            let tab = calls.call("tab.open", json!(["terminal", terminal_args(cwd, env), place]))?;
+            let tab = calls.call("tab.open", json!([null, terminal_args(cwd, env), place]))?;
             Ok(made(calls, tab.as_str().unwrap_or_default()))
         }
         Op::OpenWorktree { path, .. } => apply(calls, Op::NewWorkspace { cwd: Some(path), env: None, server: None }),

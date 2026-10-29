@@ -4,6 +4,8 @@ use pumid::kernel::{Chan, Config, Kernel};
 use pumid::tab::terminal::{Grids, Notes};
 use serde_json::{Value, json};
 const PAGE: &str = "pumi_dev.browser.page";
+/// A block the core runs on its terminal engine, as the terminal plugin's manifest declares it.
+const TERM: &str = "test.term.shell";
 use std::sync::mpsc::channel;
 const CHAN: u64 = 7;
 const LISTEN: u64 = 8;
@@ -24,6 +26,12 @@ fn session(n: u64) -> Value {
 fn pane(n: u64) -> Value {
     json!(format!(":{n}"))
 }
+/// `core.setBlocks`' arguments: the terminal engine's block, and `extra`'s after it.
+fn blocks(extra: Value) -> Value {
+    let mut all = vec![json!({"id": TERM, "provider": "test/term", "engine": "terminal"})];
+    all.extend(extra.as_array().cloned().unwrap_or_default());
+    json!([all])
+}
 /// A layout's leaf, as `view.get` gives it: pane `n`, holding `tabs`, with the first in front.
 fn leaf(n: u64, tabs: &[u64]) -> Value {
     json!({"pane": pane(n), "tabs": tabs.iter().map(|t| tab(*t)).collect::<Vec<_>>(), "active": tab(tabs[0])})
@@ -37,7 +45,7 @@ impl Fixture {
     fn new() -> Fixture {
         let mut fixture = Fixture::empty();
         fixture.call("client.attach", json!([{"width": 80, "height": 24}]));
-        fixture.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"kind": "session", "name": "main"}]));
+        fixture.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "session", "name": "main"}]));
         fixture.call("event.on", json!(["tab.closed", {}]));
         fixture
     }
@@ -58,7 +66,10 @@ impl Fixture {
         for id in [CHAN, LISTEN] {
             kernel.model.chans.insert(id, Chan { id, ..Chan::default() });
         }
-        Fixture { registry: Registry::new(), kernel, caller: Caller { channel: CHAN, ..Caller::default() } }
+        let mut fixture =
+            Fixture { registry: Registry::new(), kernel, caller: Caller { channel: CHAN, ..Caller::default() } };
+        fixture.call("core.setBlocks", blocks(json!([])));
+        fixture
     }
     fn try_call(&mut self, name: &str, args: Value) -> pumi_api::Result<Value> {
         let result = self.registry.call(&mut self.kernel, &self.caller, name, args);
@@ -96,7 +107,7 @@ impl Fixture {
     }
     /// The browser plugin's page block, and its options.
     fn browser(&mut self) {
-        self.call("core.setBlocks", json!([[{"id": PAGE, "provider": "pumi_dev/browser"}]]));
+        self.call("core.setBlocks", blocks(json!([{"id": PAGE, "provider": "pumi_dev/browser"}])));
         for (name, ty, default) in [("url", "string", json!("about:blank")), ("zoom", "number", json!(1))] {
             let spec = json!({"type": ty, "default": default, "scope": "tab", "blocks": [PAGE], "desc": name});
             self.call("option.declare", json!([name, spec]));
@@ -151,7 +162,7 @@ fn a_session_without_a_name_is_named_for_its_folder() {
     let mut f = Fixture::empty();
     f.call("client.attach", json!([{"width": 80, "height": 24}]));
     let mut name = |place: Value| {
-        let tab = f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, place]));
+        let tab = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, place]));
         let session = f.kernel.model.session_of_tab(tab.as_u64().unwrap()).unwrap();
         f.kernel.model.sessions[&session].name.clone()
     };
@@ -171,30 +182,28 @@ fn a_terminal_given_no_folder_starts_in_its_sessions() {
     let mut f = Fixture::empty();
     f.call("client.attach", json!([{"width": 80, "height": 24}]));
     let dir = std::env::temp_dir().canonicalize().unwrap().display().to_string();
-    let session = f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"kind": "session", "cwd": dir}]));
+    let session = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "session", "cwd": dir}]));
     let session = f.kernel.model.session_of_tab(session.as_u64().unwrap()).unwrap();
     let path = |f: &mut Fixture, tab: Value| f.option("tab_current_path", tab);
-    let split = f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "right", "beside": 1}]));
+    let split = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 1}]));
     assert_eq!(path(&mut f, split), json!(dir), "a split starts in the session's folder");
-    let opened =
-        f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"kind": "view", "session": session}]));
+    let opened = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "view", "session": session}]));
     assert_eq!(path(&mut f, opened.clone()), json!(dir), "and so does a new view");
     let home = pumi_proto::paths::home_dir().display().to_string();
     let given =
-        f.call("core.openTab", json!(["terminal", {"command": ["cat"], "cwd": home}, {"split": "down", "beside": 1}]));
+        f.call("core.openTab", json!([TERM, {"command": ["cat"], "cwd": home}, {"split": "down", "beside": 1}]));
     assert_eq!(path(&mut f, given), json!(home), "a folder given wins");
     let in_view = f.kernel.model.tabs[&opened.as_u64().unwrap()].place.view().unwrap();
     f.call("core.setOptionValue", json!(["worktree", home, {"view": in_view}]));
-    let worked =
-        f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "right", "beside": opened}]));
+    let worked = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": opened}]));
     assert_eq!(path(&mut f, worked), json!(home), "a tab in a worktree keeps to it");
-    let split = f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "right", "beside": 1}]));
+    let split = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 1}]));
     assert_eq!(path(&mut f, split), json!(dir), "and the session's other views to its folder");
 }
 #[test]
 fn splitting_keeps_the_tree_and_whoever_shows_a_pane_sizes_it() {
     let mut f = Fixture::new();
-    let right = f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "right", "beside": 1}]));
+    let right = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 1}]));
     assert_eq!(right, 2);
     assert_eq!(f.call("tab.get", json!([]))["id"], tab(2), "a new tab is current, as tmux's are");
     assert_eq!(
@@ -204,7 +213,7 @@ fn splitting_keeps_the_tree_and_whoever_shows_a_pane_sizes_it() {
     let width = |f: &mut Fixture, tab| f.option("pane_width", tab);
     assert_eq!(width(&mut f, 2), json!(80), "`default_size` until someone sizes it: the core lays nothing out");
     // A tab's size is `tab.update {size}` (the host): not a method of `tab.call`.
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "down", "size": "25%", "beside": 2}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "down", "size": "25%", "beside": 2}]));
     let layout = f.call("view.get", json!([view(1)]))["layout"].clone();
     assert_eq!(layout["second"]["axis"], json!("column"), "{layout}");
     assert_eq!(layout["second"]["second"], leaf(3, &[3]), "{layout}");
@@ -213,8 +222,8 @@ fn splitting_keeps_the_tree_and_whoever_shows_a_pane_sizes_it() {
 #[test]
 fn closing_the_zoomed_panes_last_tab_gives_its_view_its_layout_back() {
     let mut f = Fixture::new();
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "right", "beside": 1}]));
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "down", "beside": 2}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 1}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "down", "beside": 2}]));
     f.call("core.viewSetZoom", json!([1, true]));
     assert_eq!(f.call("view.get", json!([view(1)]))["zoom"], pane(3));
     f.call("tab.close", json!([tab(3)]));
@@ -224,8 +233,8 @@ fn closing_the_zoomed_panes_last_tab_gives_its_view_its_layout_back() {
 fn a_tab_opened_into_a_pane_comes_to_its_front_after_the_tab_there() {
     let mut f = Fixture::new();
     let seen = f.listen(&["pane.opened", "pane.changed"]);
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"pane": 1}]));
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"pane": 1, "focus": false}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"pane": 1}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"pane": 1, "focus": false}]));
     assert_eq!(
         f.call("view.get", json!([view(1)]))["layout"],
         json!({"pane": pane(1), "tabs": [tab(1), tab(2), tab(3)], "active": tab(2)}),
@@ -242,8 +251,8 @@ fn a_tab_opened_into_a_pane_comes_to_its_front_after_the_tab_there() {
 #[test]
 fn closing_the_front_tab_brings_the_one_before_it_forward() {
     let mut f = Fixture::new();
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"pane": 1}]));
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"pane": 1}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"pane": 1}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"pane": 1}]));
     f.call("tab.close", json!([tab(3)]));
     let info = f.call("pane.get", json!([pane(1)]));
     assert_eq!((info["tabs"].clone(), info["activeTab"].clone()), (json!([tab(1), tab(2)]), tab(2)));
@@ -252,8 +261,8 @@ fn closing_the_front_tab_brings_the_one_before_it_forward() {
 #[test]
 fn a_tab_moves_along_its_strip_into_another_pane_and_out_into_its_own() {
     let mut f = Fixture::new();
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"pane": 1}]));
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "right", "beside": 2}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"pane": 1}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 2}]));
     f.call("core.tabSetPlace", json!([2, {"pane": 1, "index": 0}]));
     assert_eq!(f.call("pane.get", json!([pane(1)]))["tabs"], json!([tab(2), tab(1)]), "along its strip");
     f.call("core.tabSetPlace", json!([1, {"pane": 2}]));
@@ -267,7 +276,7 @@ fn a_tab_moves_along_its_strip_into_another_pane_and_out_into_its_own() {
 #[test]
 fn every_tab_of_a_pane_takes_its_size() {
     let mut f = Fixture::new();
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"pane": 1, "focus": false}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"pane": 1, "focus": false}]));
     f.call("core.tabCall", json!([1, "resize", {"width": 100, "height": 30}]));
     assert_eq!(f.option("pane_width", 2), json!(100), "the tab behind is the front tab's size");
     assert_eq!(f.option("pane_height", 2), json!(30));
@@ -281,10 +290,10 @@ fn closing_the_last_tab_closes_its_view_and_session_and_keeps_its_state() {
     assert_eq!(names, ["tab.closed", "view.closed", "session.closed"]);
     assert_eq!(f.call("session.list", json!([])), json!([]));
     let closed = f.call("tab.list", json!([{"closed": true}]));
-    assert_eq!(closed[0]["state"]["block"], "terminal");
+    assert_eq!(closed[0]["state"]["block"], TERM);
     assert_eq!(closed[0]["state"]["data"]["command"], json!(["cat"]));
     let state = closed[0]["state"].clone();
-    let tab = f.call("core.openTab", json!(["terminal", {"state": state}, {"kind": "session"}]));
+    let tab = f.call("core.openTab", json!([TERM, {"state": state}, {"kind": "session"}]));
     assert_eq!(tab, 2, "ids are never reused");
     assert_eq!(f.call("session.list", json!([])), json!([session(2)]));
 }
@@ -316,7 +325,7 @@ fn options_inherit_and_name_the_option_that_changed() {
 #[test]
 fn moving_swapping_and_floating() {
     let mut f = Fixture::new();
-    f.call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"split": "right", "beside": 1}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 1}]));
     f.call("core.tabSetPlace", json!([1, {"swap": 2}]));
     assert_eq!(
         f.call("view.get", json!([view(1)]))["layout"],
@@ -326,7 +335,7 @@ fn moving_swapping_and_floating() {
     assert_eq!(f.call("session.get", json!([session(1)]))["views"], json!([view(1), view(2)]));
     let float = f.call(
         "core.openTab",
-        json!(["terminal", {"command": ["cat"]}, {"kind": "float", "view": 1, "width": 40, "height": 10, "row": 7, "col": 20}]),
+        json!([TERM, {"command": ["cat"]}, {"kind": "float", "view": 1, "width": 40, "height": 10, "row": 7, "col": 20}]),
     );
     assert_eq!(f.call("tab.get", json!([tab(float.as_u64().unwrap())]))["place"]["kind"], "float");
     assert!(f.call("tab.list", json!([{"view": view(1)}])).as_array().unwrap().contains(&tab(3)), "a float is listed");
@@ -352,9 +361,9 @@ fn a_plugin_block_opens_and_is_listed() {
     let spec =
         json!({"type": "number", "default": 3, "scope": "tab", "blocks": ["pumi_dev.queue.board"], "desc": "Rows."});
     f.call("option.declare", json!(["pumi_dev.queue.rows", spec]));
-    let blocks =
+    let declared =
         json!([{"id": "pumi_dev.queue.board", "provider": "pumi_dev/queue"}, {"id": "1password.vault.itemList"}]);
-    f.call("core.setBlocks", json!([blocks]));
+    f.call("core.setBlocks", blocks(declared));
     let types = f.call("core.blocks", json!([]));
     let board = types.as_array().unwrap().iter().find(|t| t["id"] == "pumi_dev.queue.board").expect("listed");
     assert_eq!(board["options"], json!(["pumi_dev.queue.rows"]));
@@ -368,10 +377,14 @@ fn a_plugin_block_opens_and_is_listed() {
     let other = f.try_call("core.openTab", json!(["pumi_dev.hello.badge", {}, {"kind": "session"}]));
     assert!(other.is_err(), "a block no manifest named does not open");
     assert_eq!(board["provider"], "pumi_dev/queue");
-    f.call("core.setBlocks", json!([[]]));
-    assert!(!names(&mut f).iter().any(|n| n.contains('.')), "the plugins went, and their types");
+    f.call("core.setBlocks", blocks(json!([])));
+    let left = names(&mut f);
+    assert!(
+        !left.contains(&"pumi_dev.queue.board".to_string()) && !left.contains(&"1password.vault.itemList".to_string()),
+        "the plugins went, and their types: {left:?}"
+    );
     for bad in ["terminal", "hello.badge", "a.b.c.d", "Bad.a.view"] {
-        assert!(f.try_call("core.setBlocks", json!([[{"id": bad}]])).is_err(), "{bad}");
+        assert!(f.try_call("core.setBlocks", blocks(json!([{"id": bad}]))).is_err(), "{bad}");
     }
 }
 #[test]
@@ -403,7 +416,7 @@ fn a_tab_has_a_trait_while_its_option_is_set() {
 fn a_plugin_block_has_its_version_strategy_and_methods() {
     let mut f = Fixture::new();
     let page = json!({"id": "pumi_dev.browser.page", "version": 2, "strategy": "reference", "methods": ["navigate"]});
-    f.call("core.setBlocks", json!([[page]]));
+    f.call("core.setBlocks", blocks(json!([page])));
     let types = f.call("core.blocks", json!([]));
     let listed = types.as_array().unwrap().iter().find(|t| t["id"] == "pumi_dev.browser.page").expect("listed");
     assert_eq!((listed["version"].clone(), listed["strategy"].clone()), (json!(2), json!("reference")));
@@ -419,15 +432,44 @@ fn a_plugin_block_has_its_version_strategy_and_methods() {
     assert!(
         f.try_call("core.openTab", json!(["pumi_dev.browser.page", {"state": older}, {"kind": "session"}])).is_err()
     );
-    f.call("core.setBlocks", json!([[]]));
+    f.call("core.setBlocks", blocks(json!([])));
     assert!(f.try_call("core.tabCall", json!([tab, "navigate"])).is_err(), "the plugin went, and its methods");
     for bad in
         [json!({"version": 0}), json!({"methods": ["read"]}), json!({"methods": ["report"]}), json!({"strategy": "x"})]
     {
         let mut ty = bad.clone();
         ty["id"] = json!("pumi_dev.browser.page");
-        assert!(f.try_call("core.setBlocks", json!([[ty]])).is_err(), "{bad}");
+        assert!(f.try_call("core.setBlocks", blocks(json!([ty]))).is_err(), "{bad}");
     }
+}
+#[test]
+fn a_block_on_the_terminal_engine_opens_a_terminal() {
+    let mut f = Fixture::new();
+    let types = f.call("core.blocks", json!([]));
+    let listed = types.as_array().unwrap().iter().find(|t| t["id"] == TERM).expect("listed");
+    assert_eq!((listed["strategy"].clone(), listed["engine"].clone()), (json!("relaunch"), json!("terminal")));
+    assert_eq!(listed["methods"], json!(["respawn", "signal", "clear_history", "modes"]));
+    assert!(f.option("tab_pid", 1).as_u64().is_some(), "the core runs a program for its tab");
+    assert!(f.call("core.tabCall", json!([1, "modes"])).is_object(), "its methods are the terminal's");
+}
+#[test]
+fn a_block_on_the_terminal_engine_may_not_declare_an_engine_method() {
+    let mut f = Fixture::new();
+    for method in ["respawn", "run"] {
+        let block = json!({"id": "test.term.own", "provider": "test/term", "engine": "terminal", "methods": [method]});
+        let refused = f.try_call("core.setBlocks", blocks(json!([block]))).unwrap_err();
+        assert_eq!(refused.kind, pumi_api::ErrorKind::InvalidParams, "{method}: {refused:?}");
+        assert!(refused.message.contains(method) && refused.message.contains("not a method of its own"), "{refused:?}");
+    }
+}
+#[test]
+fn a_terminal_block_nobody_declared_is_not_found() {
+    let mut f = Fixture::empty();
+    f.call("core.setBlocks", json!([[]]));
+    let refused = f.try_call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"kind": "session"}]));
+    let refused = refused.unwrap_err();
+    assert_eq!(refused.kind, pumi_api::ErrorKind::NotFound, "{refused:?}");
+    assert!(refused.message.contains("terminal"), "{refused:?}");
 }
 #[test]
 fn a_file_tab_keeps_its_file_and_where_in_it_and_reads_it_without_a_renderer() {
@@ -493,7 +535,7 @@ fn an_older_state_is_refused() {
     let mut f = Fixture::new();
     let mut state = f.call("tab.get", json!([tab(1), {"state": true}]))["state"].clone();
     state["block_version"] = json!(0);
-    let err = f.try_call("core.openTab", json!(["terminal", {"state": state}, {"kind": "session"}])).unwrap_err();
+    let err = f.try_call("core.openTab", json!([TERM, {"state": state}, {"kind": "session"}])).unwrap_err();
     assert!(err.message.contains("version 0"), "{}", err.message);
 }
 #[test]

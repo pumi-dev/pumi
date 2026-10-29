@@ -6,16 +6,17 @@ use crate::kernel::options::Key;
 use pumi_api::{Cx, Error, Result, TabRef, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-/// Open a tab holding `block`, placed as `place` says: in a pane split from a tab's, into a pane
+/// Open a tab holding `block` (`null`: what a new tab holds, the `new_tab` option, else the
+/// launcher), placed as `place` says: in a pane split from a tab's, into a pane
 /// as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
 /// instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
 /// keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
-/// appears. `args` are the block's (a terminal's `command`, `cwd` and `env`; a file's `path`; a
-/// page's `url`), or `{"state": …}` to restore a saved state into the tab. Returns the tab's id.
+/// appears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;
+/// a page's `url`), or `{"state": …}` to restore a saved state into the tab. Returns the tab's id.
 #[api(
     name = "tab.open",
     example(
-        args = r#"["terminal", {"command": ["make", "test"]}, {"kind": "tiled", "split": "right"}]"#,
+        args = r#"["pumi_dev.terminal.shell", {"command": ["make", "test"]}, {"kind": "tiled", "split": "right"}]"#,
         result = r#""%3""#,
         desc = "A terminal running the tests, to the right of the caller's tab."
     ),
@@ -30,12 +31,12 @@ use serde_json::{Map, Value, json};
         desc = "A page in a new view."
     ),
     example(
-        args = r#"["terminal", {}, {"kind": "tiled", "session": "new", "name": "work", "cwd": "/src"}]"#,
+        args = r#"[null, {}, {"kind": "tiled", "session": "new", "name": "work", "cwd": "/src"}]"#,
         result = r#""%5""#,
-        desc = "A new session, with a shell in /src."
+        desc = "A new session in /src, holding what a new tab does."
     ),
     example(
-        args = r#"["terminal", {"command": ["vim"]}, {"kind": "float", "width": "80%", "height": "80%"}]"#,
+        args = r#"["pumi_dev.terminal.shell", {"command": ["vim"]}, {"kind": "float", "width": "80%", "height": "80%"}]"#,
         result = r#""%6""#,
         desc = "A floating terminal."
     ),
@@ -49,8 +50,14 @@ use serde_json::{Map, Value, json};
     note = "A float's `width` and `height` are cells, `\"480px\"` or a share of what it floats over (`\"50%\"`, the default), kept as given so a share stays one as the window changes size.",
     note = "A float is pinned by `anchor` (`NW` … `SE`, `center`), `row` and `col` in from it; without an anchor it is centred on each axis it was given no offset for."
 )]
-pub fn pumi_tab_open(cx: &mut Cx, block: String, args: Option<Value>, place: Option<TabPlace>) -> Result<TabRef> {
+pub fn pumi_tab_open(
+    cx: &mut Cx,
+    block: Option<String>,
+    args: Option<Value>,
+    place: Option<TabPlace>,
+) -> Result<TabRef> {
     let (caller, k) = kernel(cx)?;
+    let block = block.unwrap_or_else(|| new_tab(k));
     let place = match place {
         Some(place) => place.spec()?,
         None => PlaceSpec::default(),
@@ -61,6 +68,13 @@ pub fn pumi_tab_open(cx: &mut Cx, block: String, args: Option<Value>, place: Opt
     };
     let tab = k.call_core(&caller, "core.openTab", json!([block, args, place]))?;
     tab.as_u64().map(TabRef).ok_or_else(|| Error::exception(format!("the core opened {tab}, not a tab")))
+}
+/// The launcher's block: what a new tab holds while `new_tab` names none.
+pub const LAUNCHER: &str = "pumi.launcher.new";
+/// The block a new tab holds: the `new_tab` option's, else the launcher.
+pub fn new_tab(k: &crate::kernel::Kernel) -> String {
+    let named = k.global_option("new_tab");
+    named.as_str().filter(|b| !b.is_empty()).unwrap_or(LAUNCHER).to_string()
 }
 /// How far a tab's border moves (`tab.update`'s `size`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]

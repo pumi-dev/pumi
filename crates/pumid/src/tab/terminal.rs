@@ -1,8 +1,8 @@
 use crate::kernel::TabId;
 use crate::kernel::events::About;
 use crate::kernel::options::Key;
-use crate::kernel::state::{Need, Strategy};
-use crate::kernel::types::{Instance, Restore, SaveOpts, Serialized, TabType};
+use crate::kernel::state::Need;
+use crate::kernel::types::{Instance, Restore, SaveOpts, Serialized};
 use crate::kernel::{Kernel, Place};
 use crate::term::{Note, Spawn, Term};
 use pumi_api::{Error, Result, TabRef};
@@ -30,7 +30,6 @@ impl Grids {
 }
 #[derive(Clone)]
 pub struct Notes(pub Sender<Note>);
-pub struct TerminalType;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Launch {
@@ -54,58 +53,46 @@ impl Launch {
         serde_json::from_value(Value::Object(args)).map_err(|err| Error::invalid_params(format!("terminal: {err}")))
     }
 }
-impl TabType for TerminalType {
-    fn name(&self) -> &str {
-        "terminal"
-    }
-    fn version(&self) -> u32 {
-        1
-    }
-    fn strategy(&self) -> Strategy {
-        Strategy::Relaunch
-    }
-    fn methods(&self) -> Vec<String> {
-        ["respawn", "signal", "clear_history", "modes"].map(String::from).to_vec()
-    }
-    fn open(
-        &self,
-        kernel: &mut Kernel,
-        tab: TabId,
-        args: &Value,
-        restore: Option<Restore>,
-    ) -> Result<Box<dyn Instance>> {
-        let (launch, history) = match restore {
-            Some(restore) => {
-                let launch: Launch = serde_json::from_value(restore.data.clone())
-                    .map_err(|err| Error::invalid_params(format!("terminal state: {err}")))?;
-                let carried = kernel.ext.get_mut::<crate::handoff::Adoptable>().and_then(|a| a.0.remove(&tab));
-                if let Some((carried, handle, ring)) = carried {
-                    let notes = kernel.ext.get::<Notes>().ok_or_else(|| Error::exception("no inbox"))?.0.clone();
-                    let term = Term::adopt(&carried, handle, &ring, notes)
-                        .map_err(|err| Error::exception(format!("adopting %{tab}: {err}")))?;
-                    let cwd = carried.cwd.clone().or(launch.cwd.clone()).unwrap_or_default();
-                    started(kernel, tab, &term, &launch, &cwd);
-                    return Ok(Box::new(Terminal { term, launch }));
-                }
-                (launch, restore.blobs.get("scrollback").cloned())
+/// What a tab on the terminal engine answers beside the protocol and its block's own methods;
+/// `run`, `wait` and `attach` are the host's, over these.
+pub const METHODS: [&str; 4] = ["respawn", "signal", "clear_history", "modes"];
+/// What the host answers for a tab on the terminal engine: a block's own method may not be one.
+pub const HOST_METHODS: [&str; 3] = ["run", "wait", "attach"];
+/// A tab of a block on the terminal engine (`engine: "terminal"`), opened with its launch
+/// (`command`, `cwd`, `env`, `keep`), or brought back: its PTY adopted when the last server handed
+/// it over, else its program started again with its scrollback.
+pub fn open(kernel: &mut Kernel, tab: TabId, args: &Value, restore: Option<Restore>) -> Result<Box<dyn Instance>> {
+    let (launch, history) = match restore {
+        Some(restore) => {
+            let launch: Launch = serde_json::from_value(restore.data.clone())
+                .map_err(|err| Error::invalid_params(format!("terminal state: {err}")))?;
+            let carried = kernel.ext.get_mut::<crate::handoff::Adoptable>().and_then(|a| a.0.remove(&tab));
+            if let Some((carried, handle, ring)) = carried {
+                let notes = kernel.ext.get::<Notes>().ok_or_else(|| Error::exception("no inbox"))?.0.clone();
+                let term = Term::adopt(&carried, handle, &ring, notes)
+                    .map_err(|err| Error::exception(format!("adopting %{tab}: {err}")))?;
+                let cwd = carried.cwd.clone().or(launch.cwd.clone()).unwrap_or_default();
+                started(kernel, tab, &term, &launch, &cwd);
+                return Ok(Box::new(Terminal { term, launch }));
             }
-            None => {
-                let mut args = args.clone();
-                if let Some(keep) = args.as_object_mut().and_then(|m| m.remove("keep")) {
-                    let keep =
-                        keep.as_bool().ok_or_else(|| Error::invalid_params("terminal: `keep` is true or false"))?;
-                    kernel.model.options.set("remain_on_exit", Key::Tab(tab), json!(keep), "tab.open", true)?;
-                }
-                let mut launch = Launch::from_args(&args)?;
-                if launch.cwd.is_none() {
-                    launch.cwd = crate::kernel::ops::default_cwd(kernel, tab);
-                }
-                (launch, None)
+            (launch, restore.blobs.get("scrollback").cloned())
+        }
+        None => {
+            let mut args = args.clone();
+            if let Some(keep) = args.as_object_mut().and_then(|m| m.remove("keep")) {
+                let keep =
+                    keep.as_bool().ok_or_else(|| Error::invalid_params("terminal: `keep` is true or false"))?;
+                kernel.model.options.set("remain_on_exit", Key::Tab(tab), json!(keep), "tab.open", true)?;
             }
-        };
-        let term = spawn(kernel, tab, &launch, history.as_deref())?;
-        Ok(Box::new(Terminal { term, launch }))
-    }
+            let mut launch = Launch::from_args(&args)?;
+            if launch.cwd.is_none() {
+                launch.cwd = crate::kernel::ops::default_cwd(kernel, tab);
+            }
+            (launch, None)
+        }
+    };
+    let term = spawn(kernel, tab, &launch, history.as_deref())?;
+    Ok(Box::new(Terminal { term, launch }))
 }
 const RESTORE_COMMAND: &str = "restore_command";
 pub struct Terminal {

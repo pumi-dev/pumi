@@ -1,5 +1,6 @@
-//! Blocks: what a tab holds. One registry for the core's (`terminal`) and the enabled plugins'
-//! (`owner.name.id`): `registry.list("block")` lists both, and `tab.open` opens either.
+//! Blocks: what a tab holds. One registry for the core's (`file`) and the enabled plugins'
+//! (`owner.name.id`): `registry.list("block")` lists both, and `tab.open` opens either. A plugin's
+//! block may run on the core's terminals (`engine: "terminal"`).
 use super::kernel;
 use crate::kernel::events::About;
 use crate::kernel::types::TabType;
@@ -12,7 +13,7 @@ use std::rc::Rc;
 /// A block, as `registry.list("block")` describes it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct BlockInfo {
-    /// `terminal`, or a plugin's `owner.name.id`.
+    /// `file`, or a plugin's `owner.name.id`.
     pub id: String,
     /// Who declares it: `core`, or the plugin (`owner/name`).
     pub provider: String,
@@ -23,6 +24,9 @@ pub struct BlockInfo {
     pub methods: Vec<String>,
     /// The options it owns.
     pub options: Vec<String>,
+    /// What the core runs its tabs on: `terminal`, or none (its plugin draws and answers it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<crate::tab::generic::Engine>,
 }
 /// Every block there is: the core's, and the enabled plugins' (their manifests' `blocks`), each
 /// with the version, strategy, methods and capabilities it has.
@@ -32,20 +36,20 @@ pub struct BlockInfo {
     effect = "read",
     example(
         args = "[]",
-        result = r#"[{"id": "file", "provider": "core", "version": 1, "strategy": "reference", "methods": ["at", "reveal", "report", "save"], "options": ["path"]}, {"id": "terminal", "provider": "core", "version": 1, "strategy": "relaunch", "methods": ["respawn", "signal", "clear_history", "modes"], "options": []}]"#
+        result = r#"[{"id": "file", "provider": "core", "version": 1, "strategy": "reference", "methods": ["at", "reveal", "report", "save"], "options": ["path"]}, {"id": "pumi_dev.terminal.shell", "provider": "pumi_dev/terminal", "version": 1, "strategy": "relaunch", "methods": ["respawn", "signal", "clear_history", "modes"], "options": [], "engine": "terminal"}]"#
     )
 )]
 pub fn pumi_block_list(cx: &mut Cx) -> Result<Vec<BlockInfo>> {
     let (_, k) = kernel(cx)?;
-    let core = k.blocks.values().map(|b| (b.clone(), "core".to_string()));
+    let core = k.blocks.values().map(|b| (b.clone(), "core".to_string(), None));
     let plugins = k
         .plugin_blocks
         .values()
         .filter(|b| !k.blocks.contains_key(&b.id))
-        .map(|b| (b.clone() as Rc<dyn TabType>, b.provider.clone()));
+        .map(|b| (b.clone() as Rc<dyn TabType>, b.provider.clone(), b.engine));
     Ok(core
         .chain(plugins)
-        .map(|(block, provider)| BlockInfo {
+        .map(|(block, provider, engine)| BlockInfo {
             id: block.name().to_string(),
             provider,
             version: block.version(),
@@ -58,6 +62,7 @@ pub fn pumi_block_list(cx: &mut Cx) -> Result<Vec<BlockInfo>> {
                 .filter(|d| d.blocks.iter().any(|b| b == block.name()))
                 .map(|d| d.name.clone())
                 .collect(),
+            engine,
         })
         .collect())
 }
@@ -68,7 +73,7 @@ pub fn pumi_block_list(cx: &mut Cx) -> Result<Vec<BlockInfo>> {
     name = "core.setBlocks",
     internal,
     example(
-        args = r#"[[{"id": "pumi_dev.browser.page", "provider": "pumi_dev/browser", "version": 1, "strategy": "exact", "methods": ["navigate"]}]]"#,
+        args = r#"[[{"id": "pumi_dev.browser.page", "provider": "pumi_dev/browser", "version": 1, "strategy": "exact", "methods": ["navigate"]}, {"id": "pumi_dev.terminal.shell", "provider": "pumi_dev/terminal", "engine": "terminal"}]]"#,
         result = "null"
     )
 )]

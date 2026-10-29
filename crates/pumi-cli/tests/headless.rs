@@ -1,10 +1,22 @@
 //! `pumi` against a server of its own: `--headless --clean` reads and writes none of your
 //! directories, and the commands it answers itself — `call`, the API's words (`tab list`),
 //! `open`, `wait` — work on whatever server it is pointed at.
+use pumi_sys::ipc::Stream;
 use serde_json::{Value, json};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+
+/// A block the core runs on its terminal engine, as the terminal plugin's manifest declares it.
+const TERM: &str = "test.term.shell";
+
+/// `core.setBlocks`' arguments: the terminal engine's block, and `extra`'s after it.
+fn blocks(extra: Value) -> Value {
+    let mut all = vec![json!({"id": TERM, "provider": "test/term", "engine": "terminal"})];
+    all.extend(extra.as_array().cloned().unwrap_or_default());
+    json!([all])
+}
 
 /// pumid and pumi-host, built beside this crate's binary (the CLI finds them there).
 fn binaries() -> PathBuf {
@@ -38,6 +50,28 @@ fn files(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// One call on a connection of its own: its answer, or why it did not come.
+fn rpc(socket: &Path, id: u64, method: &str, params: Value) -> Option<Result<Value, Value>> {
+    let stream = Stream::connect(socket).ok()?;
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok()?;
+    let mut writer = stream.try_clone().ok()?;
+    let mut lines = BufReader::new(stream);
+    writeln!(writer, "{}", json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params})).ok()?;
+    loop {
+        let mut line = String::new();
+        if lines.read_line(&mut line).ok()? == 0 {
+            return None;
+        }
+        let message: Value = serde_json::from_str(&line).ok()?;
+        if message["id"] == id && message.get("method").is_none() {
+            return Some(match message.get("error") {
+                Some(error) => Err(error.clone()),
+                None => Ok(message["result"].clone()),
+            });
+        }
+    }
+}
+
 /// A server of its own, in a directory of its own, that several `pumi` runs talk to.
 struct Core {
     child: Child,
@@ -60,6 +94,13 @@ impl Core {
             assert!(Instant::now() < deadline, "the core did not start");
             std::thread::sleep(Duration::from_millis(20));
         }
+        // The host declares the blocks its plugins have: wait for it, then add the terminal's.
+        while rpc(&socket, 1, "registry.list", json!(["fn"])).is_none_or(|answer| answer.is_err()) {
+            assert!(Instant::now() < deadline, "the host did not start");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let declared = rpc(&socket, 2, "core.setBlocks", blocks(json!([]))).expect("the core did not answer");
+        declared.expect("the core declares the terminal's block");
         Core { child, socket, dir }
     }
 }
@@ -101,7 +142,7 @@ fn said(cli: &Path, core: &Core, args: &[&str]) -> String {
 /// A terminal tab running `command`, in a session of its own: its id, as the API spells it.
 fn terminal(cli: &Path, core: &Core, command: &[&str]) -> String {
     let args = json!({ "command": command }).to_string();
-    let opened = said(cli, core, &["call", "tab.open", "terminal", args.as_str(), r#"{"kind":"session"}"#]);
+    let opened = said(cli, core, &["call", "tab.open", TERM, args.as_str(), r#"{"kind":"session"}"#]);
     opened.trim().to_string()
 }
 
@@ -146,7 +187,7 @@ fn a_call_is_any_function_and_the_api_is_also_its_words() {
     let got = said(&cli, &core, &["tab", "get", tab.as_str()]);
     let got: Value = serde_json::from_str(got.trim()).unwrap();
     assert_eq!(got["id"], json!(tab), "an id is as the API spells it: `%3`");
-    assert_eq!(got["block"], json!("terminal"));
+    assert_eq!(got["block"], json!(TERM));
 }
 
 #[test]
@@ -235,7 +276,7 @@ fn a_program_after_dashes_runs_and_its_screen_reads_as_rows() {
     let core = Core::start(&cli.with_file_name(pumi_sys::paths::exe("pumid")));
     // What a full-screen program writes: rows placed by cursor moves, no newline between them.
     let draw = r"printf '\033[2J\033[1;1Hfirst row\033[2;1Hsecond row\033[3;1Hthird row'; sleep 30";
-    let tab = said(&cli, &core, &["tab", "open", "terminal", "--kind", "session", "--", "/bin/sh", "-c", draw]);
+    let tab = said(&cli, &core, &["tab", "open", TERM, "--kind", "session", "--", "/bin/sh", "-c", draw]);
     let tab = tab.trim();
     assert!(tab.starts_with('%'), "a tab's id: {tab}");
     let text = read_until(&cli, &core, &["tab", "read", tab, "--source", "visible"], "third row");
@@ -255,18 +296,18 @@ fn a_place_says_its_kind_from_its_flags_and_says_how_when_it_cannot() {
     let beside = terminal(&cli, &core, &["sleep", "30"]);
     // `--split` and `--beside` are a tiled place's: no `--kind tiled` needed.
     let opened =
-        said(&cli, &core, &["tab", "open", "terminal", "--split", "right", "--beside", &beside, "--", "sleep", "30"]);
+        said(&cli, &core, &["tab", "open", TERM, "--split", "right", "--beside", &beside, "--", "sleep", "30"]);
     let opened = opened.trim();
     let got: Value = serde_json::from_str(said(&cli, &core, &["tab", "get", opened]).trim()).unwrap();
     assert_eq!(got["place"]["kind"], "tiled", "{got}");
     let theirs: Value = serde_json::from_str(said(&cli, &core, &["tab", "get", &beside]).trim()).unwrap();
     assert_eq!(got["place"]["view"], theirs["place"]["view"], "beside it, in its view");
     // Both kinds' flags: which is it?
-    let (status, _, err) = pumi(&cli, &core, &["tab", "open", "terminal", "--split", "right", "--anchor", "NE"]);
+    let (status, _, err) = pumi(&cli, &core, &["tab", "open", TERM, "--split", "right", "--anchor", "NE"]);
     assert_eq!(status, 2);
     assert!(err.contains("add --kind tiled or --kind float"), "{err}");
     // Neither: the server's error, and how to fix it.
-    let (status, _, err) = pumi(&cli, &core, &["tab", "open", "terminal", "--no-focus"]);
+    let (status, _, err) = pumi(&cli, &core, &["tab", "open", TERM, "--no-focus"]);
     assert_eq!(status, 1);
     assert!(err.contains("missing field") && err.contains("add --kind tiled"), "{err}");
 }
@@ -280,7 +321,7 @@ fn tab_list_is_a_table_and_its_json_the_ids() {
     let mut lines = table.lines();
     let header = lines.next().unwrap_or_default();
     assert!(header.starts_with("TAB") && header.contains("BLOCK") && header.contains("CWD"), "{table}");
-    assert!(lines.any(|line| line.starts_with(&format!("{tab} ")) && line.contains("terminal")), "{table}");
+    assert!(lines.any(|line| line.starts_with(&format!("{tab} ")) && line.contains(TERM)), "{table}");
     let ids: Value = serde_json::from_str(said(&cli, &core, &["tab", "list", "--json"]).trim()).unwrap();
     assert_eq!(ids, json!([tab]));
     said(&cli, &core, &["call", "option.set", "@status", "working", &json!({ "id": tab }).to_string()]);

@@ -589,6 +589,8 @@ mod tests {
     use crate::term::TerminalSession;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+    /// A block the core runs on its terminal engine, as the terminal plugin's manifest declares it.
+    const TERM: &str = "test.term.shell";
     struct Server {
         bin: std::path::PathBuf,
         dir: std::path::PathBuf,
@@ -625,6 +627,13 @@ mod tests {
             self.child = Some(child);
             let runtime = self.runtime();
             until("the server", || runtime.reachable());
+            // The host declares the blocks its plugins have: wait for it, then add the terminal's.
+            let deadline = Instant::now() + pumi_proto::server::WITHIN;
+            while runtime.request("registry.list", json!(["fn"])).is_err() {
+                assert!(Instant::now() < deadline, "the host did not start");
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            declare_term(&runtime);
         }
         fn exited(&mut self) {
             if let Some(mut child) = self.child.take() {
@@ -650,6 +659,27 @@ mod tests {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
             std::thread::sleep(Duration::from_millis(20));
         }
+    }
+    /// Declares the terminal engine's block, and what a new tab holds, once the host has declared
+    /// its own: a host that starts or reconnects replaces the whole list, so this goes after it.
+    fn declare_term(runtime: &Pumid) {
+        let deadline = Instant::now() + pumi_proto::server::WITHIN;
+        let listed = |runtime: &Pumid| {
+            runtime
+                .request("core.blocks", json!([]))
+                .ok()
+                .and_then(|list| list.as_array().map(|list| list.iter().any(|b| b["id"] == TERM)))
+                .unwrap_or(false)
+        };
+        while listed(runtime) {
+            assert!(Instant::now() < deadline, "the host never declared its own blocks again");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let block = json!({"id": TERM, "provider": "test/term", "engine": "terminal"});
+        runtime.request("core.setBlocks", json!([[block]])).expect("the core declares the terminal's block");
+        runtime
+            .request("core.setOptionValue", json!(["new_tab", TERM, {"scope": "global"}]))
+            .expect("a new tab holds the terminal's block");
     }
     #[test]
     fn keys_reach_the_program_in_its_keyboard_mode() {
@@ -724,7 +754,7 @@ mod tests {
         assert!(again.trees.is_empty(), "unchanged trees are not sent again");
         let args = json!({ "command": ["/usr/bin/printf", "\u{1b}]777;notify;done;it built\u{7}"] });
         let place = json!({ "kind": "view", "session": made.workspace, "focus": false });
-        let tab = runtime.request("tab.open", json!(["terminal", args, place])).unwrap();
+        let tab = runtime.request("tab.open", json!([TERM, args, place])).unwrap();
         let tab = tab.as_str().unwrap().to_string();
         let mut notice = None;
         until("the notice", || {
@@ -749,6 +779,7 @@ mod tests {
         session.send_input(b"echo one-$((1+1))\r");
         until("the first echo", || screen().contains("one-2"));
         runtime.restart().unwrap();
+        declare_term(&runtime);
         session.send_input(b"echo two-$((1+2))\r");
         until("the echo after the restart", || screen().contains("two-3"));
         assert!(screen().contains("one-2"), "the same program and screen: {}", screen());
@@ -833,6 +864,7 @@ mod tests {
         until("the restarted core", || {
             restarted.reachable() && restarted.read(&BTreeMap::new()).is_ok_and(|r| r.snapshot.workspaces.len() == 2)
         });
+        declare_term(&restarted);
         assert_eq!(picture(&restarted), before, "the same after the core restarted in place");
         restarted.request("server.kill", json!([])).unwrap_or_default();
         drop(restarted);

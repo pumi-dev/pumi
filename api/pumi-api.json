@@ -456,7 +456,7 @@
           "args": [
             "tab.opened",
             {
-              "match": "terminal",
+              "match": "pumi_dev.terminal.shell",
               "once": true
             }
           ],
@@ -5429,7 +5429,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "forward",
-      "desc": "Call a method of the block in a tab: the protocol every block answers (`read`, its text;\n`input`, `{text}`, `{paste}` or `{keys}`; `selection`; `report`, an OSC 7501 body), a\nterminal's `run`, `wait` and `attach`, and the block's own methods — a terminal's `respawn`, a\nplugin block's `<block>.<method>`, a file tab's `<viewer>.<method>`. `tab` is the caller's own\nwhen it is `null`.",
+      "desc": "Call a method of the block in a tab: the protocol every block answers (`read`, its text;\n`input`, `{text}`, `{paste}` or `{keys}`; `selection`; `report`, an OSC 7501 body), a\nterminal tab's `run`, `wait` and `attach` (a block on the terminal engine), and the block's own\nmethods — a terminal's `respawn`, a plugin block's `<block>.<method>`, a file tab's\n`<viewer>.<method>`. `tab` is the caller's own\nwhen it is `null`.",
       "parameters": [
         [
           "String",
@@ -6910,13 +6910,13 @@
         {
           "args": [
             {
-              "block": "terminal"
+              "block": "pumi_dev.terminal.shell"
             }
           ],
           "result": [
             "%1"
           ],
-          "desc": "Only terminals."
+          "desc": "Only the Terminal plugin's shells."
         },
         {
           "args": [
@@ -6947,7 +6947,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Open a tab holding `block`, placed as `place` says: in a pane split from a tab's, into a pane\nas one of its tabs (`{\"pane\": \":2\"}`), in a new view or session, floating; or in an open tab\ninstead of its block (`{\"kind\": \"tiled\", \"replace\": \"%1\"}`), which\nkeeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything\nappears. `args` are the block's (a terminal's `command`, `cwd` and `env`; a file's `path`; a\npage's `url`), or `{\"state\": …}` to restore a saved state into the tab. Returns the tab's id.",
+      "desc": "Open a tab holding `block` (`null`: what a new tab holds, the `new_tab` option, else the\nlauncher), placed as `place` says: in a pane split from a tab's, into a pane\nas one of its tabs (`{\"pane\": \":2\"}`), in a new view or session, floating; or in an open tab\ninstead of its block (`{\"kind\": \"tiled\", \"replace\": \"%1\"}`), which\nkeeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything\nappears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;\na page's `url`), or `{\"state\": …}` to restore a saved state into the tab. Returns the tab's id.",
       "parameters": [
         [
           "String",
@@ -6966,7 +6966,10 @@
         "type": "object",
         "properties": {
           "block": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "args": true,
           "place": {
@@ -7301,9 +7304,7 @@
             ]
           }
         },
-        "required": [
-          "block"
-        ],
+        "required": [],
         "additionalProperties": false
       },
       "returns": "String",
@@ -7314,7 +7315,7 @@
       "examples": [
         {
           "args": [
-            "terminal",
+            "pumi_dev.terminal.shell",
             {
               "command": [
                 "make",
@@ -7358,7 +7359,7 @@
         },
         {
           "args": [
-            "terminal",
+            null,
             {},
             {
               "kind": "tiled",
@@ -7368,11 +7369,11 @@
             }
           ],
           "result": "%5",
-          "desc": "A new session, with a shell in /src."
+          "desc": "A new session in /src, holding what a new tab does."
         },
         {
           "args": [
-            "terminal",
+            "pumi_dev.terminal.shell",
             {
               "command": [
                 "vim"

@@ -294,6 +294,10 @@ pub struct BlockSpec {
     /// Its tabs' own methods: `tab.call` of one fires `tab.called` for its renderer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub methods: Vec<String>,
+    /// What the core runs its tabs on: `terminal`, a PTY and its program, opened with
+    /// `{command, cwd, env, keep}`. Without one, the plugin draws and answers its tabs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
 }
 /// An option's declaration: `option.declare`'s fields, and `secret`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -471,6 +475,9 @@ impl Plugin {
         }
         if let Some(strategy) = &block.strategy {
             spec["strategy"] = strategy.clone().into();
+        }
+        if let Some(engine) = &block.engine {
+            spec["engine"] = engine.clone().into();
         }
         spec
     }
@@ -681,6 +688,9 @@ pub fn validate(m: &Manifest) -> Result<(), String> {
         }
         if let Some(s) = block.strategy.as_deref().filter(|s| !["exact", "relaunch", "reference"].contains(s)) {
             return Err(format!("block {:?}: `strategy` {s:?} is `exact`, `relaunch` or `reference`", block.id));
+        }
+        if let Some(e) = block.engine.as_deref().filter(|e| *e != "terminal") {
+            return Err(format!("block {:?}: `engine` {e:?} is `terminal`", block.id));
         }
         for (i, method) in block.methods.iter().enumerate() {
             if !word(method, lower, |ch| ch.is_ascii_alphanumeric() || ch == '_') || block.methods[..i].contains(method)
@@ -901,7 +911,7 @@ mod tests {
         let text = r#"{ "pumi": { "name": "browser", "owner": "pumi_dev", "api": 1, "contributes": {
             "options": { "url": { "type": "string", "scope": "tab", "blocks": ["page", "terminal"], "desc": "" } },
             "blocks": [{ "id": "page", "version": 2, "strategy": "reference", "methods": ["navigate", "back"] },
-                      { "id": "plain" }] } } }"#;
+                      { "id": "plain" }, { "id": "term", "engine": "terminal" }] } } }"#;
         let p = parse(text, Path::new("/p"), None).unwrap();
         let blocks = &p.manifest.contributes.blocks;
         let page = serde_json::json!({ "id": "pumi_dev.browser.page", "provider": "pumi_dev/browser",
@@ -910,6 +920,10 @@ mod tests {
         assert_eq!(
             p.block_spec(&blocks[1]),
             serde_json::json!({ "id": "pumi_dev.browser.plain", "provider": "pumi_dev/browser", "methods": [] })
+        );
+        assert_eq!(
+            p.block_spec(&blocks[2]),
+            serde_json::json!({ "id": "pumi_dev.browser.term", "provider": "pumi_dev/browser", "methods": [], "engine": "terminal" })
         );
         let declared = p.declaration(&p.manifest.contributes.options["url"]).unwrap();
         assert_eq!(declared["blocks"], serde_json::json!(["pumi_dev.browser.page", "terminal"]), "its own block by id");
@@ -927,6 +941,8 @@ mod tests {
         assert!(component(r#""methods": ["go", "go"]"#).unwrap_err().contains("once"));
         assert!(component(r#""methods": ["Go"]"#).is_err());
         assert!(component(r#""methods": ["goBack"], "strategy": "relaunch""#).is_ok());
+        assert!(component(r#""engine": "other""#).unwrap_err().contains("engine"));
+        assert!(component(r#""engine": "terminal", "strategy": "exact""#).is_ok(), "the engine decides the strategy");
     }
     #[test]
     fn a_trait_is_named_with_its_fields() {

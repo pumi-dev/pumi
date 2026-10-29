@@ -962,8 +962,9 @@ export interface Functions {
   /**
    * Call a method of the block in a tab: the protocol every block answers (`read`, its text;
    * `input`, `{text}`, `{paste}` or `{keys}`; `selection`; `report`, an OSC 7501 body), a
-   * terminal's `run`, `wait` and `attach`, and the block's own methods — a terminal's `respawn`, a
-   * plugin block's `<block>.<method>`, a file tab's `<viewer>.<method>`. `tab` is the caller's own
+   * terminal tab's `run`, `wait` and `attach` (a block on the terminal engine), and the block's own
+   * methods — a terminal's `respawn`, a plugin block's `<block>.<method>`, a file tab's
+   * `<viewer>.<method>`. `tab` is the caller's own
    * when it is `null`.
    */
   "tab.call": { args: [tab: TabId | null | undefined, method: string, args?: unknown]; returns: unknown };
@@ -1238,14 +1239,15 @@ export interface Functions {
     at: string;
   })[] };
   /**
-   * Open a tab holding `block`, placed as `place` says: in a pane split from a tab's, into a pane
+   * Open a tab holding `block` (`null`: what a new tab holds, the `new_tab` option, else the
+   * launcher), placed as `place` says: in a pane split from a tab's, into a pane
    * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
    * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
    * keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
-   * appears. `args` are the block's (a terminal's `command`, `cwd` and `env`; a file's `path`; a
-   * page's `url`), or `{"state": …}` to restore a saved state into the tab. Returns the tab's id.
+   * appears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;
+   * a page's `url`), or `{"state": …}` to restore a saved state into the tab. Returns the tab's id.
    */
-  "tab.open": { args: [block: string, args?: unknown, place?: {
+  "tab.open": { args: [block?: string | null, args?: unknown, place?: {
     /**
      * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
      * tiled in a new view or a new session.
@@ -2572,8 +2574,9 @@ export interface Nouns {
     /**
      * Call a method of the block in a tab: the protocol every block answers (`read`, its text;
      * `input`, `{text}`, `{paste}` or `{keys}`; `selection`; `report`, an OSC 7501 body), a
-     * terminal's `run`, `wait` and `attach`, and the block's own methods — a terminal's `respawn`, a
-     * plugin block's `<block>.<method>`, a file tab's `<viewer>.<method>`. `tab` is the caller's own
+     * terminal tab's `run`, `wait` and `attach` (a block on the terminal engine), and the block's own
+     * methods — a terminal's `respawn`, a plugin block's `<block>.<method>`, a file tab's
+     * `<viewer>.<method>`. `tab` is the caller's own
      * when it is `null`.
      *
      * @example
@@ -2863,17 +2866,18 @@ export interface Nouns {
     at: string;
   })[]>;
     /**
-     * Open a tab holding `block`, placed as `place` says: in a pane split from a tab's, into a pane
+     * Open a tab holding `block` (`null`: what a new tab holds, the `new_tab` option, else the
+     * launcher), placed as `place` says: in a pane split from a tab's, into a pane
      * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
      * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
      * keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
-     * appears. `args` are the block's (a terminal's `command`, `cwd` and `env`; a file's `path`; a
-     * page's `url`), or `{"state": …}` to restore a saved state into the tab. Returns the tab's id.
+     * appears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;
+     * a page's `url`), or `{"state": …}` to restore a saved state into the tab. Returns the tab's id.
      *
      * @example
-     * await tab.open("terminal", { command: ["make", "test"] }, { kind: "tiled", split: "right" }) // "%3"
+     * await tab.open("pumi_dev.terminal.shell", { command: ["make", "test"] }, { kind: "tiled", split: "right" }) // "%3"
      */
-    open(block: string, args?: unknown, place?: {
+    open(block?: string | null, args?: unknown, place?: {
     /**
      * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
      * tiled in a new view or a new session.
