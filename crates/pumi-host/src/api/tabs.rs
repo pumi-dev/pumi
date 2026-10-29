@@ -6,8 +6,10 @@ use crate::kernel::options::Key;
 use pumi_api::{Cx, Error, Result, TabRef, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-/// Open a tab holding `block` (`null`: what a new tab holds, the block the `new_tab` option names;
-/// refused while it names none, as pumi has no block of its own for one), placed as `place` says:
+/// Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a
+/// block or a plugin's `tab.new` action; while it names nothing installed, the Launcher's list, a
+/// shell or the first thing installed that starts one; refused while nothing is, as pumi has no
+/// block of its own for one), placed as `place` says:
 /// in a pane split from a tab's, into a pane
 /// as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
 /// instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
@@ -60,7 +62,10 @@ pub fn pumi_tab_open(
     let (caller, k) = kernel(cx)?;
     let block = match block {
         Some(block) => block,
-        None => new_tab(k)?,
+        None => match new_tab(k, &caller)? {
+            NewTab::Block(block) => block,
+            NewTab::Action(function) => return start_action(k, &caller, &function, args, place),
+        },
     };
     let place = match place {
         Some(place) => place.spec()?,
@@ -73,17 +78,107 @@ pub fn pumi_tab_open(
     let tab = k.call_core(&caller, "core.openTab", json!([block, args, place]))?;
     tab.as_u64().map(TabRef).ok_or_else(|| Error::exception(format!("the core opened {tab}, not a tab")))
 }
-/// What a refusal to open a new tab says while `new_tab` names no block: the app knows it by this.
+/// What a refusal to open a new tab says while nothing installed can start one: the app knows it by this.
 pub const NO_NEW_TAB: &str = "no plugin opens new tabs";
-/// The block a new tab holds: the `new_tab` option's. Nothing is opened while it names none.
-pub fn new_tab(k: &crate::kernel::Kernel) -> Result<String> {
-    let named = k.global_option("new_tab");
-    match named.as_str().filter(|b| !b.is_empty()) {
-        Some(block) => Ok(block.to_string()),
-        None => Err(Error::invalid_params(format!(
-            "{NO_NEW_TAB}: install one (Terminal, Launcher, Browser, Agents: `pumi plugin add pumi-dev/plugins/terminal`) and pick it in Settings ▸ General ▸ New tabs open (the `new_tab` option)"
-        ))),
+/// The blocks a new tab holds, in this order, while `new_tab` names nothing installed: the
+/// Launcher's list, then a shell.
+const PREFERRED: [&str; 2] = ["pumi_dev.launcher.new", "pumi_dev.terminal.shell"];
+/// What a new tab starts: a block, or a plugin's `tab.new` action, by the function it calls.
+#[derive(Debug, PartialEq)]
+pub enum NewTab {
+    Block(String),
+    Action(String),
+}
+/// One thing a new tab can start, as the `+` menu lists them (the app's `startable.ts`): each
+/// enabled plugin's `tab.new` actions, or, for a plugin with none, each block it declares.
+fn startables() -> Vec<NewTab> {
+    let mut out = Vec::new();
+    for p in crate::contributions::plugins() {
+        let c = &p.manifest.contributes;
+        let actions = c.slots.get("tab.new").map(|s| s.actions.as_slice()).unwrap_or_default();
+        if actions.is_empty() {
+            out.extend(c.blocks.iter().map(|b| NewTab::Block(p.prefixed(&b.id))));
+        } else {
+            // One that asks for files first can't start on its own.
+            out.extend(actions.iter().filter(|a| a.pick.is_none()).map(|a| NewTab::Action(p.prefixed(&a.command))));
+        }
     }
+    out
+}
+/// What `named` (the `new_tab` option) starts, of `startables` and the blocks the core has: an
+/// action it names, else a block it names, else the first of `PREFERRED` there is, else the
+/// first startable. `None` while nothing is installed that starts one.
+pub fn resolve_new_tab(named: &str, startables: Vec<NewTab>, blocks: &[String]) -> Option<NewTab> {
+    let has = |id: &str| blocks.iter().any(|b| b == id);
+    if !named.is_empty() {
+        if startables.iter().any(|s| matches!(s, NewTab::Action(f) if f == named)) {
+            return Some(NewTab::Action(named.to_string()));
+        }
+        if has(named) {
+            return Some(NewTab::Block(named.to_string()));
+        }
+    }
+    if let Some(block) = PREFERRED.iter().find(|b| has(b)) {
+        return Some(NewTab::Block(block.to_string()));
+    }
+    startables.into_iter().find(|s| match s {
+        NewTab::Block(b) => has(b),
+        NewTab::Action(_) => true,
+    })
+}
+/// What a new tab starts: what the `new_tab` option names, while it is installed; else the
+/// Launcher's list, a shell, or the first thing installed that starts one. Refused while nothing does.
+pub fn new_tab(k: &mut crate::kernel::Kernel, caller: &pumi_api::Caller) -> Result<NewTab> {
+    let named = k.global_option("new_tab");
+    let listed = k.call_core(caller, "core.blocks", json!([]))?;
+    let blocks: Vec<String> =
+        listed.as_array().into_iter().flatten().filter_map(|b| b.get("id")?.as_str().map(str::to_string)).collect();
+    resolve_new_tab(named.as_str().unwrap_or(""), startables(), &blocks).ok_or_else(|| {
+        Error::invalid_params(format!(
+            "{NO_NEW_TAB}: install one (Terminal, Launcher, Browser, Agents: `pumi plugin add pumi-dev/plugins/terminal`); Settings ▸ General ▸ New tabs open (the `new_tab` option) picks among them"
+        ))
+    })
+}
+/// Starts a new tab with a plugin's `tab.new` action: its `function`, given what the `+` menu
+/// gives it (`{tab, place}`, the tab it goes beside and where) and `args`. The place is made
+/// concrete first (`current` is the caller's pane, none is below the caller's tab), as the plugin
+/// opens the tab as itself. Answers the tab the function opened.
+fn start_action(
+    k: &mut crate::kernel::Kernel,
+    caller: &pumi_api::Caller,
+    function: &str,
+    args: Option<Value>,
+    place: Option<TabPlace>,
+) -> Result<TabRef> {
+    let tab = k.model.current(caller).map(|c| TabRef(c.tab));
+    let place = match place {
+        Some(place) => {
+            let mut place = serde_json::to_value(&place).map_err(|e| Error::exception(e.to_string()))?;
+            if place.get("pane").and_then(Value::as_str) == Some("current") {
+                let (_, pane) = k.model.pane_id(caller, 0)?;
+                place["pane"] = json!(pumi_api::PaneRef(pane));
+            }
+            place
+        }
+        None => match tab {
+            Some(tab) => json!({ "kind": "tiled", "beside": tab }),
+            None => json!({ "kind": "tiled" }),
+        },
+    };
+    let mut given = match args {
+        Some(Value::Object(args)) => args,
+        _ => Map::new(),
+    };
+    if let Some(tab) = tab {
+        given.insert("tab".into(), json!(tab));
+    }
+    given.insert("place".into(), place);
+    let opened = k.call_core(caller, function, json!([given]))?;
+    match &opened {
+        Value::Number(n) => n.as_u64().map(TabRef),
+        _ => serde_json::from_value::<TabRef>(opened.clone()).ok(),
+    }
+    .ok_or_else(|| Error::exception(format!("{function} opened {opened}, not a tab")))
 }
 /// How far a tab's border moves (`tab.update`'s `size`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -168,4 +263,49 @@ pub fn pumi_tab_update(cx: &mut Cx, tab: Option<TabRef>, patch: TabPatch) -> Res
         super::select::set_zoom(cx, tab, zoom)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn block(id: &str) -> NewTab {
+        NewTab::Block(id.into())
+    }
+    fn action(f: &str) -> NewTab {
+        NewTab::Action(f.into())
+    }
+    fn list() -> Vec<NewTab> {
+        vec![
+            action("pumi_dev.agents.new_pi"),
+            action("pumi_dev.agents.new_claude"),
+            block("amresyd.film.editor"),
+            action("pumi_dev.terminal.open"),
+        ]
+    }
+    fn blocks(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+    #[test]
+    fn a_new_tab_starts_what_new_tab_names_while_it_is_installed() {
+        let all = blocks(&["amresyd.film.editor", "pumi_dev.terminal.shell", "pumi_dev.agents.term"]);
+        assert_eq!(
+            resolve_new_tab("pumi_dev.agents.new_claude", list(), &all),
+            Some(action("pumi_dev.agents.new_claude"))
+        );
+        assert_eq!(resolve_new_tab("pumi_dev.agents.term", list(), &all), Some(block("pumi_dev.agents.term")));
+        assert_eq!(resolve_new_tab("amresyd.film.editor", list(), &all), Some(block("amresyd.film.editor")));
+    }
+    #[test]
+    fn with_nothing_named_a_new_tab_is_the_launcher_then_a_shell_then_the_first() {
+        let with_launcher = blocks(&["pumi_dev.launcher.new", "pumi_dev.terminal.shell"]);
+        assert_eq!(resolve_new_tab("", list(), &with_launcher), Some(block("pumi_dev.launcher.new")));
+        let shell = blocks(&["pumi_dev.terminal.shell"]);
+        assert_eq!(resolve_new_tab("gone.plugin.block", list(), &shell), Some(block("pumi_dev.terminal.shell")));
+        assert_eq!(resolve_new_tab("", list(), &[]), Some(action("pumi_dev.agents.new_pi")));
+        assert_eq!(
+            resolve_new_tab("", vec![block("amresyd.film.editor")], &blocks(&["amresyd.film.editor"])),
+            Some(block("amresyd.film.editor"))
+        );
+        assert_eq!(resolve_new_tab("", vec![], &blocks(&["test.term.shell"])), None);
+    }
 }

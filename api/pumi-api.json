@@ -6968,7 +6968,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Open a tab holding `block` (`null`: what a new tab holds, the block the `new_tab` option names;\nrefused while it names none, as pumi has no block of its own for one), placed as `place` says:\nin a pane split from a tab's, into a pane\nas one of its tabs (`{\"pane\": \":2\"}`), in a new view or session, floating; or in an open tab\ninstead of its block (`{\"kind\": \"tiled\", \"replace\": \"%1\"}`), which\nkeeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything\nappears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;\na page's `url`), or `{\"state\": …}` to restore a saved state into the tab. Returns the tab's id.",
+      "desc": "Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a\nblock or a plugin's `tab.new` action; while it names nothing installed, the Launcher's list, a\nshell or the first thing installed that starts one; refused while nothing is, as pumi has no\nblock of its own for one), placed as `place` says:\nin a pane split from a tab's, into a pane\nas one of its tabs (`{\"pane\": \":2\"}`), in a new view or session, floating; or in an open tab\ninstead of its block (`{\"kind\": \"tiled\", \"replace\": \"%1\"}`), which\nkeeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything\nappears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;\na page's `url`), or `{\"state\": …}` to restore a saved state into the tab. Returns the tab's id.",
       "parameters": [
         [
           "String",
