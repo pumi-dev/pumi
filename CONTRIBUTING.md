@@ -20,7 +20,9 @@ bun runtime/app/app/main.ts                       # the debug app
 The debug app runs as `pumi-dev`, with its own server and its own files (`~/.config/pumi-dev`,
 …), so it never touches an installed pumi. For a release build, `scripts/release/build.sh` builds
 one for this machine, and on macOS `./scripts/install.sh` builds `pumi.app` and puts it in
-`/Applications`.
+`/Applications`. `./scripts/install.sh --dev` installs `pumi Dev.app` beside it instead: a release
+build with a blue icon that runs as `pumi-dev`, like the debug app, so you can work on pumi from
+pumi while trying your changes in pumi Dev.
 
 ## Test
 

@@ -17,7 +17,9 @@
 #   A "Developer ID Application" identity gets the hardened runtime and a secure timestamp
 #   as well, so the result can be notarized.
 #
-# BUNDLE_ID defaults to the release id; scripts/pack-friend.sh passes the dev one.
+# BUNDLE_ID defaults to the release id; scripts/pack-friend.sh has its own (`local.pumi.friend`),
+# never the installed app's: an id two differently signed copies share is an id whose permissions
+# are granted to one build of it.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

@@ -88,13 +88,18 @@ done
 # `pack-macos.sh` is the release's own assembler: the binaries, the runtime, the assets, the icon,
 # Info.plist, the signature (ad-hoc here). It reads them from one directory, which for a release
 # is cargo's per-target one and for this build is `target/` plus `target/release/`.
+#
+# The id is this build's own, not the installed `local.pumi`: an ad-hoc signature is the hash of
+# one build, so a copy sharing the installed app's id is a different app for the same name, and
+# the permissions granted to either stop matching the other's (`scripts/install.sh` signs the
+# installed app with a certificate, whose requirement does not change).
 BUILT="$STAGE/built"
 mkdir -p "$BUILT"
 ADDON="$(addon_name aarch64-apple-darwin)"
 cp "$REPO/target/pumi" "$REPO/target/$ADDON" "$BUILT/"
 cp "$REPO/target/release/pumid" "$REPO/target/release/pumi-host" "$REPO/target/release/pumi-cli" "$BUILT/"
 
-BUNDLE_ID="${BUNDLE_ID:-local.pumi}"
+BUNDLE_ID="${BUNDLE_ID:-local.pumi.friend}"
 BUILT_DIR="$BUILT" BUNDLE_ID="$BUNDLE_ID" OUT="$STAGE/pack" NO_ZIP=1 \
   "$REPO/scripts/release/pack-macos.sh" aarch64
 BUNDLE="$STAGE/pack/macos-aarch64/$APP_NAME.app"

@@ -14,6 +14,14 @@ pub fn export_appname() {
         unsafe { std::env::set_var(APPNAME_ENV, appname()) };
     }
 }
+/// The name people see (the menu bar's "About", "Hide", "Quit"): `pumi Dev` for `pumi-dev`, so it
+/// and pumi can run side by side, as Zed Dev does beside Zed.
+pub fn display_name() -> String {
+    match appname().as_str() {
+        "pumi-dev" => "pumi Dev".into(),
+        name => name.into(),
+    }
+}
 pub fn config_dir() -> PathBuf {
     pumi_sys::paths::dir(Dir::Config, &appname())
 }

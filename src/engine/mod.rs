@@ -98,6 +98,7 @@ impl Engine {
         if SHARED.get().is_some() {
             return Err(Error::from_reason("The engine is already running"));
         }
+        crate::bins::adopt_bundled_appname();
         pumi_proto::paths::export_appname();
         crate::bins::hydrate_path();
         crate::set_safe_mode(options.as_ref().and_then(|o| o.safe).unwrap_or(false));
@@ -131,7 +132,7 @@ impl Engine {
                 eprintln!("pumi: providing the app's functions: {err}");
             }
         }
-        pumi_gpuix::app::ensure("pumi")?;
+        pumi_gpuix::app::ensure(&pumi_proto::paths::display_name())?;
         pumi_gpuix::app::update(|cx| {
             cx.set_global(crate::settings::Settings::default());
             crate::system::start_desktop(cx);

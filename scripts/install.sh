@@ -4,11 +4,26 @@ set -euo pipefail
 # pumi.app, from this checkout: the app (a Bun executable), its addon, the server and the CLI,
 # signed, zipped for sending, and put in /Applications. It always builds first: what is installed
 # is what this checkout says, never a build older than it.
+#
+# `--dev` installs `pumi Dev.app` beside it, as Zed has Zed Dev beside Zed: the same binaries, but
+# its own bundle id, a blue icon and `PUMI_APPNAME=pumi-dev`, so its own server, settings and
+# files (`~/.config/pumi-dev`, ...), the ones the debug app (`bun runtime/app/app/main.ts`) uses.
+# It is not zipped, and it leaves `pumi://` links to pumi.
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # copy_runtime and zip_bundle: what goes in the bundle is the release's.
 source "$REPO/scripts/release/common.sh"
-APP=pumi
-BUNDLE_ID=local.pumi
+CHANNEL=stable
+for arg in "$@"; do
+  case "$arg" in
+    --dev) CHANNEL=dev ;;
+    *) echo "usage: $0 [--dev]" >&2; exit 2 ;;
+  esac
+done
+if [[ "$CHANNEL" == dev ]]; then
+  APP="pumi Dev"; BUNDLE_ID=local.pumi.dev; APPNAME=pumi-dev; ICON="$REPO/assets/brand/app-icon-dev.png"
+else
+  APP=pumi; BUNDLE_ID=local.pumi; APPNAME=pumi; ICON="$REPO/assets/brand/app-icon.png"
+fi
 DEST="${DEST:-/Applications}"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml" | head -1)"
 ZIP="$REPO/dist/$APP-$VERSION.zip"
@@ -23,13 +38,21 @@ identity() { security find-identity -v -p codesigning 2>/dev/null | sed -n "s/.*
 IDENTITY="${CODESIGN_IDENTITY:-$(identity 'Developer ID Application: ')}"
 [[ -z "$IDENTITY" ]] && IDENTITY="$(identity 'Apple Development: ')"
 [[ -z "$IDENTITY" ]] && IDENTITY="$(identity 'pumi local signing')"
+# Never ad-hoc, unless asked: macOS keys the permissions it keeps (screen recording, files) to
+# the bundle id *and* the signature that was granted, and an ad-hoc signature is the hash of one
+# build — the next install is a different app to it, and every grant before it stops matching.
+# A certificate is what makes the requirement "local.pumi, signed by this certificate", true of
+# every install.
+if [[ -z "$IDENTITY" && "${ALLOW_ADHOC:-}" != 1 ]]; then
+  fail "no code-signing certificate in the keychain (./scripts/make-signing-cert.sh makes one): ad-hoc would lose screen recording and file permissions on the next install — ALLOW_ADHOC=1 installs anyway"
+fi
 SIGN_IDENTITY="${IDENTITY:--}"
 if [[ "$IDENTITY" == Developer\ ID* ]]; then
   SIGN_KIND="Developer ID: $IDENTITY"; SIGN_FLAGS="--options runtime --timestamp"
 elif [[ -n "$IDENTITY" ]]; then
   SIGN_KIND="local certificate: $IDENTITY"; SIGN_FLAGS="--options runtime"
 else
-  SIGN_KIND="ad-hoc (no certificate in the keychain; ./scripts/make-signing-cert.sh makes one)"; SIGN_FLAGS=""
+  SIGN_KIND="ad-hoc (ALLOW_ADHOC=1: every install asks for the same permissions again)"; SIGN_FLAGS=""
 fi
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 
@@ -81,17 +104,34 @@ ln -s pumi-cli "$BUNDLE/Contents/Resources/bin/pumi"
 
 copy_assets "$BUNDLE/Contents/Resources"
 copy_runtime "$BUNDLE/Contents/Resources"
+# Which pumi this is: its server, settings and files are named for it (src/bins.rs).
+echo "$APPNAME" > "$BUNDLE/Contents/Resources/appname"
+# The start screen's mark is the app's icon, so pumi Dev's is blue too.
+if [[ "$CHANNEL" == dev ]]; then
+  sips -z 256 256 "$ICON" --out "$BUNDLE/Contents/Resources/assets/brand/app-icon-256.png" >/dev/null
+fi
 
 say "rendering the app icon"
 ICONSET="$STAGE/AppIcon.iconset"
 mkdir -p "$ICONSET"
 for size in 16 32 128 256 512; do
-  sips -z "$size" "$size" "$REPO/assets/brand/app-icon.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-  sips -z "$((size * 2))" "$((size * 2))" "$REPO/assets/brand/app-icon.png" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+  sips -z "$size" "$size" "$ICON" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  sips -z "$((size * 2))" "$((size * 2))" "$ICON" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$BUNDLE/Contents/Resources/AppIcon.icns"
 
 say "writing Info.plist"
+# pumi://settings/<path>: a setting's link, copied from its row in Settings. Only pumi takes them.
+URL_TYPES=""
+if [[ "$CHANNEL" == stable ]]; then
+  URL_TYPES="<key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>$BUNDLE_ID</string>
+      <key>CFBundleURLSchemes</key><array><string>pumi</string></array>
+    </dict>
+  </array>"
+fi
 cat > "$BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -120,14 +160,7 @@ cat > "$BUNDLE/Contents/Info.plist" <<PLIST
       <key>LSItemContentTypes</key><array><string>public.item</string></array>
     </dict>
   </array>
-  <!-- pumi://settings/<path>: a setting's link, copied from its row in Settings. -->
-  <key>CFBundleURLTypes</key>
-  <array>
-    <dict>
-      <key>CFBundleURLName</key><string>$BUNDLE_ID</string>
-      <key>CFBundleURLSchemes</key><array><string>pumi</string></array>
-    </dict>
-  </array>
+  $URL_TYPES
 </dict>
 </plist>
 PLIST
@@ -181,6 +214,8 @@ codesign --force $SIGN_FLAGS --entitlements "$APP_ENTITLEMENTS" --sign "$SIGN_ID
   || echo "   (codesign failed; the app still runs locally)"
 
 # ── The zip, and the note that goes with it ──────────────────────────
+# Only pumi is sent: pumi Dev is this Mac's.
+if [[ "$CHANNEL" == stable ]]; then
 mkdir -p "$REPO/dist"
 make_zip() { zip_bundle "$BUNDLE" "$ZIP"; }
 if [[ -n "$NOTARY_PROFILE" && "$SIGN_KIND" == Developer\ ID* ]]; then
@@ -237,6 +272,7 @@ if [[ "$SIGN_KIND" == ad-hoc* ]]; then
        NOTARY_PROFILE=notary-profile ./scripts/install.sh
 SEND
 fi
+fi
 
 # ── Installing ───────────────────────────────────────────────────────
 PROCESS="^$DEST/$APP.app/Contents/MacOS/pumi( |\$)"
@@ -281,6 +317,23 @@ rm -rf "$OLD"
 mv "$STAGED" "$DEST/$APP.app"
 rm -rf "$OLD"
 
+# Every grant macOS keeps (screen recording, files) is keyed to the bundle id and the signature
+# that was granted. A second copy of the same id — a build left in a worktree's dist/, a test
+# install — signed differently is a different app for the same id, and the grant it made is one
+# the installed app never matches. Only the installed copy stays registered.
+say "unregistering other copies of $BUNDLE_ID"
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+if [[ -x "$LSREGISTER" ]]; then
+  "$LSREGISTER" -f "$DEST/$APP.app" >/dev/null 2>&1 || true
+  while IFS= read -r other; do
+    [[ -z "$other" || "$other" == "$DEST/$APP.app" ]] && continue
+    [[ -e "$other" ]] || continue
+    "$LSREGISTER" -u "$other" >/dev/null 2>&1 || true
+    echo "    not this one: $other"
+  done < <("$LSREGISTER" -dump 2>/dev/null \
+    | awk -v id="$BUNDLE_ID" '/^path:/{p=$2} /^identifier:/{if ($2 == id) print p}' | sort -u)
+fi
+
 if spctl -a --type execute "$DEST/$APP.app" >/dev/null 2>&1; then
   echo "    gatekeeper:  accepted"
 else
@@ -294,7 +347,8 @@ fi
 # (the same process image, so nothing is lost), and the app opens again: an update that leaves
 # the old app or the old server running is what "it did not update" means.
 say "restarting the server on the new binaries"
-if "$DEST/$APP.app/Contents/MacOS/pumid" --restart >/dev/null 2>&1; then
+# This app's server, named as the app names it: not whichever pumi this shell runs in.
+if env -u PUMI_DATA_DIR PUMI_APPNAME="$APPNAME" "$DEST/$APP.app/Contents/MacOS/pumid" --restart >/dev/null 2>&1; then
   echo "    server:      restarted (terminals kept)"
 else
   echo "    server:      not running (the app starts one)"
@@ -307,4 +361,4 @@ if [[ -n "$RUNNING" ]]; then echo "    running:     $RUNNING"; else echo "    ru
 
 say "done — pumi $VERSION at $DEST/$APP.app"
 echo "    app built:   $(date -r "$(stat -f %m "$BUNDLE/Contents/MacOS/pumi")" '+%Y-%m-%d %H:%M:%S')"
-echo "    settings:    ~/.config/pumi/settings.json (shared with the dev build)"
+echo "    settings:    ~/.config/$APPNAME/settings.json"

@@ -21,6 +21,21 @@ pub fn pumid_bin() -> PathBuf {
     let beside = std::env::current_exe().ok().and_then(|app| app.parent().map(|dir| dir.join(&name)));
     beside.filter(|path| is_executable(path)).or_else(|| find(&name)).unwrap_or_else(|| PathBuf::from(name))
 }
+/// The name an installed bundle runs as (`Contents/Resources/appname`, which scripts/install.sh
+/// writes: `pumi`, or `pumi-dev` for pumi Dev). It wins over an inherited `$PUMI_APPNAME`: `open`
+/// from a tab of the other pumi passes that tab's, and pumi Dev would use pumi's server and files.
+pub fn adopt_bundled_appname() {
+    let Some(file) =
+        std::env::current_exe().ok().and_then(|exe| Some(exe.parent()?.parent()?.join("Resources/appname")))
+    else {
+        return;
+    };
+    if let Ok(name) = std::fs::read_to_string(file)
+        && !name.trim().is_empty()
+    {
+        unsafe { std::env::set_var(pumi_proto::paths::APPNAME_ENV, name.trim()) };
+    }
+}
 pub fn hydrate_path() {
     let mut dirs: Vec<PathBuf> = candidate_dirs().into_iter().filter(|dir| dir.is_dir()).collect();
     let inherited = std::env::var_os("PATH").unwrap_or_default();
