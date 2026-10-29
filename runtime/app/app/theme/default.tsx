@@ -51,6 +51,7 @@ import { AtTop, TileMotion, Tiling } from "./tiles.tsx"
 import * as worktreeViews from "../worktree-views.ts"
 import { nameOf, shortName } from "../worktrees.ts"
 import { runsTerminal } from "../terminals.ts"
+import { useStarters } from "../starters.ts"
 
 const swallow = (err: unknown) => console.error(String(err))
 
@@ -896,7 +897,8 @@ const START_RECENT = 5
 
 /**
  * What the panes' room shows while there are none: pumi's mark, what starts something (a view of
- * the session shown, a session, a folder), the sessions shown last, and the settings.
+ * the session shown, a session, a folder), the plugins it offers to install (a terminal, the
+ * agents, a browser) until they are, the sessions shown last, and the settings.
  */
 function StartScreen() {
   const ts = useTextSize()
@@ -914,6 +916,7 @@ function StartScreen() {
     return ids.slice(0, START_RECENT).map((id) => byId.get(id)!)
   }, [sessions, recent, window.session])
   const command = (name: string) => () => runCommand(name, window.id)
+  const { offered, busy, error, install } = useStarters()
   const appIcon = assets.appIcon()
   return (
     <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0, alignItems: "center", justifyContent: "center", overflowY: "scroll" }}>
@@ -941,6 +944,14 @@ function StartScreen() {
           <StartRow icon={shown ? "square_plus" : "terminal"} title="New Session" command="new_workspace" onClick={command("new_workspace")} />
           <StartRow icon="folder_open" title="Open Folder…" onClick={() => openFolder(window).catch(swallow)} />
         </StartSection>
+        {offered?.length ? (
+          <StartSection title="Install">
+            {offered.map((p) => (
+              <StartRow key={p.name} icon={p.icon} title={busy === p.name ? `Installing ${p.title}…` : p.title} detail={p.detail} onClick={() => install(p)} />
+            ))}
+            {error ? <text style={{ fontSize: ts(12), color: t.error, paddingLeft: 10, paddingTop: 4 }}>{error}</text> : null}
+          </StartSection>
+        ) : null}
         {others.length ? (
           <StartSection title="Recent">
             {others.map((s) => (
