@@ -2148,7 +2148,7 @@ function usePanel(point: string) {
   // Whether the group shown is put away: its button clicked again.
   const [closed, setClosed] = useLocal(`default.${point}.closed`, false)
   const sections: Section[] = [
-    ...(point === TREE_POINT ? [{ key: sidebar.TREE, title: "Agents", icon: AGENTS_ICON, body: <C.Sessions /> }] : []),
+    ...(point === TREE_POINT ? [{ key: sidebar.TREE, title: "Sessions", icon: TREE_ICON, body: <C.Sessions /> }] : []),
     ...components.map((v) => ({ key: `${v.plugin}/${v.id}`, title: v.title ?? v.id, icon: v.icon ?? "blocks", body: renderComponent(v) })),
   ]
   const keys = sections.map((s) => s.key)
@@ -2545,13 +2545,13 @@ function GroupButton({
 }
 
 /** Whether the side bar's tree lists each view's tabs under it (`true`), or only the views. */
-const AGENTS_EXPANDED = "default.agents.expanded"
+const TREE_EXPANDED = "default.tree.expanded"
 
 /** The side bar foot's first button: the tree as views only, or with each view's tabs under it. */
 function TreeModeButton() {
   const t = useTheme()
   const m = useMetrics()
-  const [expanded, setExpanded] = useLocal(AGENTS_EXPANDED, false)
+  const [expanded, setExpanded] = useLocal(TREE_EXPANDED, false)
   const title = expanded ? "Show Views Only" : "Show Tabs by View"
   return (
     <div
@@ -2579,7 +2579,7 @@ function TreeModeButton() {
 }
 
 /** The tree's icon, on the button of the group it heads. */
-const AGENTS_ICON = "sparkle"
+const TREE_ICON = "list_tree"
 
 /** A side bar button's size, and its icon's: as the panes' title bar buttons are, small and square. */
 const BAR_BUTTON = 22
@@ -2972,13 +2972,13 @@ function Sessions() {
   const t = useTheme()
   const sessions = useSessions()
   const views = useApp((s) => s.snapshot?.views ?? NO_VIEWS)
-  const [folded, setFolded] = useLocal<string[]>("default.agents.folded", [])
+  const [folded, setFolded] = useLocal<string[]>("default.tree.folded", [])
   // Sessions in the order they were dragged into; views by their index.
   const [order] = useLocal<string[]>(SESSION_ORDER, NONE)
   // One function for every row (it is given the row's id), so a memoized row keeps its props.
   const toggle = useCallback((id: string) => setFolded((now) => (now.includes(id) ? now.filter((k) => k !== id) : [...now, id])), [setFolded])
   const [query, setQuery] = useState("")
-  const [expanded] = useLocal(AGENTS_EXPANDED, false)
+  const [expanded] = useLocal(TREE_EXPANDED, false)
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
   const layouts = useApp((s) => s.trees)
   if (!sessions.length) {

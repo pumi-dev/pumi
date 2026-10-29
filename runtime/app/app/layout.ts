@@ -238,7 +238,7 @@ export interface LayoutEdit {
 }
 
 /** The order the side bar keeps its sessions in (theirs on the server is the order they were made in). */
-export const SESSION_ORDER = "default.agents.order"
+export const SESSION_ORDER = "default.tree.order"
 const NONE: string[] = []
 
 /** Does what a drag dropped: its calls to the server one after another, or a sort of the side bar's own. */
