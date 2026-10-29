@@ -37,6 +37,8 @@ The environment variables `PUMI_INSTALL_VERSION`, `PUMI_DIR`, `PUMI_NO_BIN` and 
 
 Automatic updates are off by default. Set `autoupdate` to `true` to download new versions in the background and apply them on restart.
 
+The first time pumi opens, its start screen sets it up: the plugins to install, whether agents open in a chat or in their own terminal, whether the window is transparent, and the color scheme. It shows once; Settings changes any of them later.
+
 ## From source
 
 You need Rust (the version in `rust-toolchain.toml`), Zig 0.16 and Bun. On macOS you also need the Xcode command line tools. On Debian or Ubuntu, `sudo -E scripts/release/linux-deps.sh` installs what the build links. On Windows you need the MSVC build tools.

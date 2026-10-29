@@ -1,15 +1,16 @@
 // The plugins the start screen offers on the first run: pumi itself runs terminals, pages and
 // agents' sessions, but every tab is a plugin's block (`pumi-dev/plugins`), so a fresh install has
 // nothing to open until some are installed. Each is ticked to start with; the user unticks what
-// they don't want. Once they install or say "not now", the start screen doesn't offer them again
-// (`OFFERED`, kept in window.json: the window's own, not a setting).
+// they don't want. They are offered on the first run only: once shown, a later run doesn't offer
+// them again, answered or not (`OFFERED`, kept in window.json: the window's own, not a setting).
+// In the run that shows them, installing them puts them away.
 //
 // After installing, new tabs open the first of them that is installed, in this order: what a new
 // tab holds is the `new_tab` option, which pumi leaves empty.
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import { subscribeEvent } from "../sdk/events.ts"
 import { call } from "./engine.ts"
-import { getLocal, setLocal, useLocal } from "./local.ts"
+import { getLocal, setLocal } from "./local.ts"
 import { setOption } from "./settings/store.ts"
 
 export interface Starter {
@@ -32,8 +33,34 @@ export const STARTERS: Starter[] = [
   { name: "browser", title: "Browser", detail: "a web page in a tab", icon: "globe", source: "pumi-dev/plugins/browser", block: "pumi_dev.browser.page" },
 ]
 
-/** window.json's key: whether the start screen has offered the starters and been answered. */
+/** How Agents opens them, as its `prefer` option says: in their terminal, or in a chat tab (its GUI over the SDK, else ACP). */
+export type AgentsMode = "terminal" | "sdk"
+/** Agents' option that sets every agent at once. */
+export const AGENTS_PREFER = "pumi_dev.agents.prefer"
+
+/** window.json's key: whether a run's start screen has shown the starters. */
 export const OFFERED = "start.offered"
+
+/** Whether an earlier run showed them, read as this one starts: marking them shown now doesn't put them away. */
+const offeredBefore = getLocal(OFFERED, false)
+
+/** Installed in this run: every window's start screen stops offering them. */
+let answered = false
+const answeredListeners = new Set<() => void>()
+function answer() {
+  if (answered) return
+  answered = true
+  for (const l of answeredListeners) l()
+}
+function useAnswered(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      answeredListeners.add(l)
+      return () => answeredListeners.delete(l)
+    },
+    () => answered,
+  )
+}
 
 type Installed = { spec?: { name?: unknown } }[]
 
@@ -52,7 +79,7 @@ export function newTabBlock(installed: Installed, starters = STARTERS): string |
 }
 
 export interface Starters {
-  /** What to offer: the starters not installed, while the first run hasn't been answered. `undefined` until read. */
+  /** What to offer: the starters not installed, on the first run until answered. `undefined` until read. */
   offered?: Starter[]
   /** The names ticked. */
   picked: Set<string>
@@ -62,16 +89,18 @@ export interface Starters {
   error?: string
   /** Installs the ticked ones, in order, then points `new_tab` at the first installed. */
   install(): void
-  /** Not now: the start screen stops offering them. */
-  dismiss(): void
+  /** How agents open, set as Agents installs: the chat until picked. */
+  agents: AgentsMode
+  setAgents(mode: AgentsMode): void
 }
 
 export function useStarters(): Starters {
-  const [answered] = useLocal(OFFERED, false)
+  const done = useAnswered() || offeredBefore
   const [missing, setMissing] = useState<Starter[]>()
   const [unticked, setUnticked] = useState<Set<string>>(() => new Set())
   const [busy, setBusy] = useState<string>()
   const [error, setError] = useState<string>()
+  const [agents, setAgents] = useState<AgentsMode>("sdk")
   const reload = useCallback(
     () =>
       call("registry.list", "plugin", {}).then(
@@ -88,11 +117,16 @@ export function useStarters(): Starters {
     [],
   )
   useEffect(() => {
-    if (answered) return
+    if (done) return
     reload()
     return subscribeEvent("registry.changed", undefined, () => void reload())
-  }, [answered, reload])
-  const offered = answered ? [] : missing
+  }, [done, reload])
+  const offered = done ? [] : missing
+  // Shown once: from the next run on, the start screen doesn't offer them.
+  const showing = !!offered?.length
+  useEffect(() => {
+    if (showing && !getLocal(OFFERED, false)) setLocal(OFFERED, true)
+  }, [showing])
   const picked = new Set((offered ?? []).map((s) => s.name).filter((n) => !unticked.has(n)))
   const toggle = useCallback((name: string) => {
     setUnticked((was) => {
@@ -115,14 +149,16 @@ export function useStarters(): Starters {
           await call("plugin.add", s.source, {})
         } catch (err) {
           failed.push(`${s.title}: ${String((err as Error)?.message ?? err)}`)
+          continue
         }
+        // Its option is declared once it is installed. The terminal is its default already.
+        if (s.name === "agents" && agents !== "terminal") await setOption(AGENTS_PREFER, agents).catch((err) => failed.push(`Open agents in: ${String(err?.message ?? err)}`))
       }
       const block = newTabBlock(await reload())
       if (block) await setOption("new_tab", block).catch((err) => failed.push(`New tabs: ${String(err?.message ?? err)}`))
       if (failed.length) setError(failed.join("\n"))
-      else if (!getLocal(OFFERED, false)) setLocal(OFFERED, true)
+      else answer()
     })().finally(() => setBusy(undefined))
-  }, [busy, offered, picked, reload])
-  const dismiss = useCallback(() => setLocal(OFFERED, true), [])
-  return { offered, picked, toggle, busy, error, install, dismiss }
+  }, [busy, offered, picked, reload, agents])
+  return { offered, picked, toggle, busy, error, install, agents, setAgents }
 }
