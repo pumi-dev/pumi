@@ -5293,7 +5293,7 @@ checksum = "1d8f70e07b9c3962945a74e59ca1c511bba65b6419468acc217c457d93f3c740"
 
 [[package]]
 name = "pumi"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "block2 0.6.2",
  "core-foundation-sys",
@@ -5333,7 +5333,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-api"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "divan",
  "linkme",
@@ -5346,7 +5346,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-api-macros"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5355,7 +5355,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-cli"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "pumi-api",
  "pumi-proto",
@@ -5366,7 +5366,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-gpuix"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -5401,7 +5401,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-host"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "base64 0.23.1",
  "pumi-api",
@@ -5421,7 +5421,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-keys"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "libghostty-vt",
  "serde_json",
@@ -5429,14 +5429,14 @@ dependencies = [
 
 [[package]]
 name = "pumi-lang"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "pumi-layout"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "pumi-api",
  "schemars",
@@ -5446,7 +5446,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-mirror"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "base64 0.23.1",
  "pumi-api",
@@ -5463,7 +5463,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-model"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "base64 0.23.1",
  "pumi-api",
@@ -5477,7 +5477,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-os"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "block2 0.6.2",
  "libc",
@@ -5495,7 +5495,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-proto"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "postcard",
  "pumi-sys",
@@ -5505,7 +5505,7 @@ dependencies = [
 
 [[package]]
 name = "pumi-sys"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "interprocess",
  "libc",
@@ -5515,14 +5515,14 @@ dependencies = [
 
 [[package]]
 name = "pumi-ui"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "gpui",
 ]
 
 [[package]]
 name = "pumi-ui-proto"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "schemars",
  "serde",
@@ -5531,7 +5531,7 @@ dependencies = [
 
 [[package]]
 name = "pumid"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "base64 0.23.1",
  "pumi-api",
@@ -8695,7 +8695,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "pumi-api",
  "pumi-host",
