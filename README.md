@@ -11,8 +11,8 @@
   <a href="https://discord.gg/p8RYkZU86">Discord</a>
 </p>
 
-![pumi in three themes](assets/brand/hero.png)
-
+<video src="https://github.com/user-attachments/assets/c1717980-296c-43fd-904a-eb885b93896a" controls></video>
+  
 pumi is a minimal, highly extensible workspace for agents that you can make your own.
 
 Run Claude Code, Codex, pi and your other agents side by side; see which are working, blocked or
