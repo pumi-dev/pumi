@@ -1,6 +1,6 @@
 [package]
 name = "pumi-gpuix"
-version = "0.43.0"
+version = "0.44.0"
 edition = "2021"
 publish = false
 description = "pumi's renderer: a retained tree fed by a UI's ops (pumi-ui-proto), drawn by GPUI; the napi feature adds the JS addon. Forked from gpuix (Apache-2.0)."
