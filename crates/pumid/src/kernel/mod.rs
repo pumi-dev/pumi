@@ -65,7 +65,7 @@ pub struct Kernel {
     /// Sessions, views, tabs, channels and options: what every replica holds.
     pub model: Model,
     instances: HashMap<TabId, Box<dyn Instance>>,
-    /// The core's blocks (`terminal`), each with its own engine. One registry with
+    /// The core's blocks (`file`), each with its own engine. One registry with
     /// `plugin_blocks`: `block.list` lists both, and `tab.open` opens either.
     pub blocks: BTreeMap<String, Rc<dyn TabType>>,
     /// The enabled plugins' blocks (`owner.name.id`), from their manifests (`core.setBlocks`):

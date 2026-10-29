@@ -3640,7 +3640,7 @@
                       },
                       "block": {
                         "type": "string",
-                        "description": "The block it holds (`terminal`, `owner.name.page`)."
+                        "description": "The block it holds (`file`, `owner.name.page`)."
                       },
                       "traits": {
                         "type": "object",
@@ -4572,7 +4572,7 @@
               },
               "block": {
                 "type": "string",
-                "description": "The block it holds (`terminal`, `owner.name.page`)."
+                "description": "The block it holds (`file`, `owner.name.page`)."
               },
               "traits": {
                 "type": "object",
@@ -5859,7 +5859,7 @@
           },
           "block": {
             "type": "string",
-            "description": "The block it holds (`terminal`, `owner.name.page`)."
+            "description": "The block it holds (`file`, `owner.name.page`)."
           },
           "traits": {
             "type": "object",
@@ -8951,7 +8951,7 @@
         {
           "args": {
             "tab": "%3",
-            "block": "terminal",
+            "block": "pumi_dev.terminal.shell",
             "restored": false
           }
         }
@@ -8987,7 +8987,7 @@
         {
           "args": {
             "tab": "%3",
-            "block": "terminal"
+            "block": "pumi_dev.terminal.shell"
           }
         }
       ]

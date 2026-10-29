@@ -86,14 +86,14 @@ Everything a plugin owns is prefixed with its id, `owner.name.`: options, functi
 | `commands` | Palette entries, `{id, title}`. A command is a function `owner.name.<id>`; a key and a slot action run one. |
 | `keys` | Default keys, `{key, command}`. |
 | `slots` | What it adds to the window: a `component` (an export of `ui.tsx`) and `actions` (each runs a command). |
-| `blocks` | Tabs it can hold: `{id, title, icon, version, strategy, methods}`. |
+| `blocks` | Tabs it can hold: `{id, title, icon, version, strategy, methods, engine}`. |
 | `renderers` | Blocks it draws but did not define, by block, with the `ui.tsx` export that draws them. |
 | `traits` | What a tab is beside its block: `{id, title, desc, fields}`. |
 | `settings` | Its pages in Settings and its sections on one, each a `ui.tsx` export: see [Settings](#settings). |
 
 Beside `contributes`, the `pumi` key takes `themes` (theme directories, see [Themes](themes.md)), `activation`, `uses`, `minPumi`, `isolate`, `icon` and `images`.
 
-Its name as people read it, `Chat UI` for `chat-ui`, is package.json's `displayName`, beside `pumi`: Settings and the store show it in place of `name`.
+Its name as people read it, `Pixel Office` for `pixel-office`, is package.json's `displayName`, beside `pumi`: Settings and the store show it in place of `name`.
 
 `activation` says when the worker starts: `onStartup`, `onBlock:<id>`, `onCommand:<id>` or `onEvent:<name>`; with none, when one of its blocks opens or one of its commands runs. `uses` (`network`, `processes`, `files`, `addons`) is what it needs, for whoever installs it.
 
@@ -145,16 +145,16 @@ A slot is a place in the window. Give it a `component`, an export of `ui.tsx`, o
 | `view.actions` `view.badge` `view.menu` | `view` |
 | `tab.toolbar` `tab.strip` `tab.overlay` `tab.menu` | `tab` |
 | `tab.new` | actions only, run with `{tab, place}`: the pane or tab it opens beside, and where (`tab.open`'s place) |
-| `agent.controls` `agent.footer` `agent.menu` | `tab` |
+| `tab.row.controls` `tab.row.footer` `tab.row.menu` | `tab`: a tab's row in the side bar, for each tab with a `@status` |
 | `sidebar.footer` | `point` (the dock's name) |
 
 A theme draws them with `useSlot(slot, args)`, from `pumi/theme`.
 
-`tab.new` is what a new tab can be: the pane's `+` menu, and the list a split opens with. pumi has Terminal and File; each plugin's actions come after them, a group of their own.
+`tab.new` is what a new tab can be: the pane's `+` menu, and the list a split opens with. pumi has File; each plugin's actions come after it, a group of their own (the Terminal plugin's shell among them).
 
 ## Blocks
 
-A block is what a tab holds: a terminal, a file, or one of a plugin's own. The `ui.tsx` export named for the block draws it, and its methods are how others drive it.
+A block is what a tab holds: the core's `file`, or one of a plugin's own (a shell, a page, a board). The `ui.tsx` export named for the block draws it, and its methods are how others drive it.
 
 ```json
 "blocks": [{ "id": "page", "title": "Page", "methods": ["navigate"] }]
@@ -171,11 +171,23 @@ const page = await workspace.openTab("me.hello.page", {}, { kind: "tiled", split
 await call("tab.call", page.id, "navigate", { url });
 ```
 
+A block with `"engine": "terminal"` runs on the core's terminals. pumi opens its tabs with `{command, cwd, env, keep}`, starts the program again when a tab comes back, carries it across a restart, and answers the terminal's methods (`run`, `wait`, `attach`, `respawn`, `signal`, `clear_history`, `modes`); the plugin's own methods go to its functions, as for any block. Its renderer draws `<terminal tab>`, and while nothing draws it (its plugin is off, or not loaded yet after a restart) the window draws a plain terminal. Without an engine, the plugin draws and answers its tabs. The [Terminal plugin](https://github.com/pumi-dev/plugins/tree/main/terminal)'s `pumi_dev.terminal.shell` is one:
+
+```json
+"blocks": [{ "id": "shell", "title": "Terminal", "icon": "terminal", "engine": "terminal" }]
+```
+
+```tsx
+export function Shell({ tab, focused }: RendererProps) {
+  return <terminal tab={tab.id} autoFocus={focused} style={{ flexGrow: 1, minWidth: 0, minHeight: 0 }} />;
+}
+```
+
 Keep what a block shows where every window reads it: the tab's options (`option.set("@page.url", url, { scope: "tab", id: tab.id })`), what it was opened with, or `main.ts`. A component's own state is that window's alone; another window drawing the same tab starts from nothing.
 
 `tab.call(tab, method, args)` is what a tab's block answers: `read`, `input`, `run`, `wait`, `selection`, `report` and `attach`, and the block's own methods. The block's own live in the plugin's functions, so `navigate` above is `me.hello.page.navigate`: the tab's id first, then the args. A renderer says what its tab shows with `describe`, and reads what it was opened with by `args`.
 
-A tab's icon is its `@icon` option while it is set, else its agent's mark, else its block's `icon`, else the core block's. Both take an icon of the app's by name (`list`), a `data:image/…` URI (an SVG, PNG, JPEG, WebP or GIF, at most 16 KB), or `plugin:<path>`, a file in the plugin that defines the tab's block. An SVG is tinted to fit the theme; `@icon` set to `{"src": …, "tint": false}` keeps its own colours. Nothing is fetched: a page's favicon goes in as a `data:` URI.
+A tab's icon is its `@icon` option while it is set, else its block's `icon`, else the core block's. Both take an icon of the app's by name (`list`), a `data:image/…` URI (an SVG, PNG, JPEG, WebP or GIF, at most 16 KB), or `plugin:<path>`, a file in the plugin that defines the tab's block. An SVG is tinted to fit the theme; `@icon` set to `{"src": …, "tint": false}` keeps its own colours. Nothing is fetched: a page's favicon goes in as a `data:` URI.
 
 ```ts
 await call("option.set", "@icon", { src: favicon, tint: false }, { scope: "tab", id: tab });
@@ -185,12 +197,12 @@ await call("option.set", "@icon", { src: favicon, tint: false }, { scope: "tab",
 pumi option set @icon sparkle --scope tab --id %3
 ```
 
-`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `session`, and leaving the place out puts the tab below the caller's.
+`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `session`, and leaving the place out puts the tab below the caller's. A `null` block is what a new tab holds: the block the `new_tab` option names (the Terminal plugin sets it to its shell), else the launcher.
 
 ```ts
-await call("tab.open", "terminal", { command: ["make", "test"] }, { kind: "tiled", split: "right", size: "30%" });
-await call("tab.open", "terminal", {}, { kind: "view" });
-await call("tab.open", "terminal", {}, { kind: "float", width: 80, height: 24 });
+await call("tab.open", "pumi_dev.terminal.shell", { command: ["make", "test"] }, { kind: "tiled", split: "right", size: "30%" });
+await call("tab.open", null, {}, { kind: "view" });
+await call("tab.open", "pumi_dev.terminal.shell", {}, { kind: "float", width: 80, height: 24 });
 ```
 
 A file is the core's `file` block, `{path, line, column}`: `call("tab.open", "file", { path })`, or `pumi open PATH`.
@@ -200,7 +212,7 @@ A file is the core's `file` block, `{path, line, column}`: `call("tab.open", "fi
 `renderers` draws a block that isn't yours. For files, `match` picks which files the renderer draws:
 
 ```json
-"renderers": { "terminal": "Terminal", "file": { "export": "Editor", "match": ["*.md"] } }
+"renderers": { "pumi_dev.terminal.shell": "Terminal", "file": { "export": "Editor", "match": ["*.md"] } }
 ```
 
 The renderer whose glob fits a file best draws it. For one tab alone, set its `@tab_renderer` option to the plugin's id; the `renderers` option (`{"file": "me/hello"}`) picks per block. A file tab's own methods go to the plugin that draws it, the tab's `@viewer` option, which the app keeps equal to the renderer it chose.
@@ -214,7 +226,7 @@ import { workspace } from "pumi";
 
 await workspace.ready;                                  // the cache is filled: reads are sync
 const view = workspace.currentSession?.activeView;
-const tests = await workspace.openTab("terminal", { command: ["make", "test"] }, { kind: "tiled", split: "right" });
+const tests = await workspace.openTab("pumi_dev.terminal.shell", { command: ["make", "test"] }, { kind: "tiled", split: "right" });
 await tests.update({ title: "tests" });
 const { exitCode } = await tests.wait({ exit: true, timeout: 60 });
 tests.watch(["title", "cwd"], () => console.log(tests.title));
@@ -241,7 +253,7 @@ The focus is the server's, and every client showing a session shares it: a view'
 
 ## Tab methods
 
-Every tab answers these; `tab.call(tab, method, args)` runs one, and the SDK has each as a method on `Tab`. `run` and `attach` are a terminal's alone, and a block has its own besides (see [Blocks](#blocks)).
+Every tab answers these; `tab.call(tab, method, args)` runs one, and the SDK has each as a method on `Tab`. `run` and `attach` are a terminal's alone (a tab whose block runs on the terminal engine), and a block has its own besides (see [Blocks](#blocks)).
 
 | Method | |
 | --- | --- |
@@ -257,13 +269,13 @@ A terminal opens with `{command, cwd, env}` and, with `keep: true`, stays open a
 
 ## Requests
 
-A request is something shown to the user: a notification, a permission, or a question.
+A request is something shown to the user: a notification, a permission, or a question. A permission is asked for a tab, the one whose program wants it: give its `tab`.
 
 ```ts
 import { on, request, workspace } from "pumi";
 
 await request.open({ kind: "notification", title: "Build finished", notification: { sound: "default", actions: [{ id: "logs", label: "Logs" }] } });
-const ask = await workspace.openRequest({ kind: "permission", title: "Run `make deploy`?", tool: "Bash", options: [{ id: "allow", label: "Allow" }, { id: "deny", label: "Deny" }] });
+const ask = await workspace.openRequest({ kind: "permission", title: "Run `make deploy`?", tool: "Bash", options: [{ id: "allow", label: "Allow" }, { id: "deny", label: "Deny" }] }, { tab: "%3" });
 on("request.closed", { match: ask.id }, (e) => console.log(e.data.answer));
 ```
 
@@ -353,7 +365,7 @@ One call describes everything that is registered: `registry.list(kind, opts)`, w
 
 ## Events
 
-Each session, view, pane and tab has `opened`, `closed` and `changed {keys, patch}`; a model's `watch` is a filter over `changed`. What else fires: `tab.alerted {kind, message}`, `request.opened` and `request.closed {answer, reason}`, `agent.sending` and `agent.turned`, `option.changed`, `registry.changed {kind, names}`, and `app.changed {client, keys, patch}` (whether one of a client's app's windows has the focus, `isFocused`; its `match` is the client's id).
+Each session, view, pane and tab has `opened`, `closed` and `changed {keys, patch}`; a model's `watch` is a filter over `changed`. What else fires: `tab.alerted {kind, message}`, `request.opened` and `request.closed {answer, reason}`, `option.changed`, `registry.changed {kind, names}`, and `app.changed {client, keys, patch}` (whether one of a client's app's windows has the focus, `isFocused`; its `match` is the client's id).
 
 `on(event, opts, fn)` runs `fn` with each one and returns its disposer; `opts.match` is a glob or a list of globs tested against the event's `match` (an object's id, a tab's block, a request's kind). `opts.once` hears one.
 
@@ -367,21 +379,15 @@ off();
 
 `event.wait(event, opts)` is the next one, or `null` after its timeout. A plugin's own events are `owner.name.<name>`; `emit` prefixes them for you. `e.session`, `e.view` and `e.tab` say which objects the event is about.
 
-## Agents
+## Status and agents
 
-A tab is an agent while its `@agent` option is set; `@agent.name`, `@agent.status`, `@agent.session`, `@agent.model`, `@agent.transcript`, `@agent.conversation` and `@agent.accepts` describe it, and `tab.traits.agent` has them with its `queue`.
-
-A plugin can tell agents things without typing into them: hidden context when they are sent a message, or a message queued until their turn ends.
+A tab's `@status` option says how what runs in it is doing: `working`, `blocked`, `error`, `done`, `idle` or `unknown`. pumi sets a terminal's from what its program reports ([Status](cli.md#status)), and a block may set its own tabs'. The side bar shows a row for each tab with a status, and the `tab.row.*` slots add to it.
 
 ```ts
-import { agent, call } from "pumi";
-
-agent.onSend((turn) => (turn.event === "prompt" ? "Context for the agent" : null));
-agent.onTurn((turn) => console.log(turn.event));       // stop, compact
-await call("agent.queue", tab.id, "run the tests again");
+await call("option.set", "@status", "working", { scope: "tab", id: tab.id });
 ```
 
-An agent transport builds a tab up from `agent.turn` and takes its queue with `agent.take(tab, {wait, session})`, then `agent.unqueue(id)`.
+pumi has no agents of its own: they are the [Agents plugin](https://github.com/pumi-dev/plugins/tree/main/agents). An agent's tab has that plugin's trait, `@pumi_dev.agents.agent` (the agent's id, with `.session`, `.model`, `.transcript`, `.accepts` and `.conversation`), and the plugin serves its conversation as `pumi_dev.agents.conversation.read` and `.send`, with the `pumi_dev.agents.conversation.changed` event. Its README says what they take.
 
 ## Worker and components
 
@@ -392,7 +398,7 @@ More than one app can show the same server. Each draws the plugins' components, 
 ```ts
 ui.post("delta", { text });                                                // main.ts
 const text = useChannel("delta", "", (all, d) => all + d.text);            // ui.tsx
-useEvent("option.changed", (e) => {}, { match: "@agent.status" });         // ui.tsx
+useEvent("option.changed", (e) => {}, { match: "@status" });               // ui.tsx
 ```
 
 ## Web pages
@@ -442,7 +448,6 @@ Both files import from `"pumi"`. The app provides it at run time; for type-check
 | --- | --- |
 | objects | `workspace` `call` `fn` `option` `registry` `request` `menu` `event` `plugin` `fs` `clipboard` `process` |
 | own | `on` `emit` `self` `paths` `layout` `stop` `ui.post` |
-| agent | `agent` (`onSend`, `onTurn`, `turn`, `queue`, `take`, `unqueue`) |
 | models | `Session` `View` `Pane` `Tab` `Request` `Plugin`, and their data types |
 
 | `ui.tsx` | |

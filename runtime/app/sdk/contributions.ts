@@ -23,7 +23,7 @@ export interface ComponentItem {
 interface Registry {
   components: Map<string, ComponentItem[]>
   actions: Map<string, ActionItem[]>
-  /** What can draw each block (`terminal`, `owner.name.board`): every plugin's renderer of it. */
+  /** What can draw each block (`file`, `owner.name.board`): every plugin's renderer of it. */
   renderers: Map<string, ComponentItem[]>
 }
 

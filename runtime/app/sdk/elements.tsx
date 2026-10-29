@@ -27,7 +27,7 @@ export function IconImage({ icon, size = 14, color }: { icon: IconSource; size?:
   return <img src={icon.src} objectFit="contain" style={{ width: size, height: size, flexShrink: 0 }} />
 }
 
-/** A tab's icon, as the theme's `TabIcon` part draws it: its own, its agent's or its block's, or its status. */
+/** A tab's icon, as the theme's `TabIcon` part draws it: its own or its block's, or its status. */
 export function TabIcon(props: TabIconProps) {
   const C = useComponents()
   return <C.TabIcon {...props} />

@@ -1824,8 +1824,6 @@ function usePaneHoverPart(part: string): { onMouseEnter(): void; onMouseLeave():
   return useMemo(() => ({ onMouseEnter: () => hover?.(part, true), onMouseLeave: () => hover?.(part, false) }), [hover, part])
 }
 
-/** The core's terminal block. */
-
 /**
  * The `TabBody` part: what plugins put at `tab.strip`, then the tab's block as its renderer
  * draws it (`useRenderer`), with the `tab.overlay` components over it. A file no renderer fits says

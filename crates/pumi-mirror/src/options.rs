@@ -197,14 +197,8 @@ pub fn builtin() -> Vec<Decl> {
             "The main pane's width in the `main-vertical` layout, in cells or a percentage (`60%`).",
         ),
         Decl::new("synchronize_tabs", Boolean, json!(false), Tab, "Typing goes to every tab of the view at once."),
-        Decl::new(
-            "tab_block",
-            String,
-            json!(""),
-            Tab,
-            "The block it holds: `terminal`, or a plugin's (`owner.name.id`)",
-        )
-        .readonly(),
+        Decl::new("tab_block", String, json!(""), Tab, "The block it holds: `file`, or a plugin's (`owner.name.id`)")
+            .readonly(),
         Decl::new("pane_width", Number, json!(0), Tab, "Its width in cells, as whoever shows it sized it.").readonly(),
         Decl::new("pane_height", Number, json!(0), Tab, "Its height in cells, as whoever shows it sized it.")
             .readonly(),

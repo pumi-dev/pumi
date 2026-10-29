@@ -85,7 +85,7 @@ pub struct View {
 #[serde(default)]
 pub struct Tab {
     pub tab_id: String,
-    /// The block it holds: `terminal`, or a plugin's (`owner.name.id`).
+    /// The block it holds: `file`, or a plugin's (`owner.name.id`).
     pub block: String,
     /// What it is beside that (`owner.name.x`): each trait whose option `@<trait>` it has set.
     #[serde(skip_serializing_if = "Vec::is_empty")]

@@ -7,7 +7,7 @@ use crate::nouns::{self, Command};
 use pumi_api::{Error, ErrorKind};
 use serde_json::{Value, json};
 
-const USAGE: &str = "usage: pumi help [NAME]   a function (`tab.open`), an event (`tab.changed`), a block (`terminal`), a model (`session`), or a noun (`tab`)";
+const USAGE: &str = "usage: pumi help [NAME]   a function (`tab.open`), an event (`tab.changed`), a block (`file`), a model (`session`), or a noun (`tab`)";
 
 /// `pumi help [NAME]`, with `--json` for the entry as the server describes it.
 pub fn main(address: &Address, args: &[String]) -> Result<i32, Error> {

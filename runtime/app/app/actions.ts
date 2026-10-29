@@ -1,5 +1,5 @@
 // The app's own actions, as data in the slots that hold them: a tab's menu (Open With, Move To,
-// Split, Zoom, Close), an agent's (the same), a view's (Rename, Close) and a session's (Rename,
+// Split, Zoom, Close), a tab row's (the same), a view's (Rename, Close) and a session's (Rename,
 // New View, New Worktree, Open in New Window, Close). Whatever theme draws a menu gets them out of
 // `useSlot(slot, args)`, after the plugins' items, and draws them as it likes.
 import { call, via } from "./engine.ts"
@@ -24,7 +24,7 @@ function sub(id: string, title: string, items: Action[], more: Partial<Action> =
   return { id, title, plugin: PUMI, items, run: () => {}, ...more }
 }
 
-/** A tab's own items: in its menu, and in its agent's. */
+/** A tab's own items: in its menu, and in its row's in the side bar (`tab.row.menu`). */
 function tabActions(args: Record<string, unknown>, { state }: ActionContext): Action[] {
   const id = typeof args.tab === "string" ? args.tab : undefined
   const tab = id ? state.snapshot?.tabs.find((x) => x.tab_id === id) : undefined

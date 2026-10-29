@@ -310,7 +310,8 @@ fn given(command: &Command, rest: &[String], json: bool) -> Result<Given, Error>
     while let Some(word) = words.next() {
         if !literal && word == "--" {
             // What follows is a program and its words, for a command that runs one: a
-            // terminal's `command` (`pumi tab open terminal -- pi "hi"`, `pumi tab run %3 -- ls`).
+            // terminal's `command` (`pumi tab open pumi_dev.terminal.shell -- pi "hi"`,
+            // `pumi tab run %3 -- ls`).
             if runs_a_program(command) {
                 program = Some(words.by_ref().map(|word| Value::String(word.clone())).collect());
                 break;

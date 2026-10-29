@@ -1734,7 +1734,7 @@
         {
           "args": {
             "tab": "%3",
-            "block": "terminal",
+            "block": "pumi_dev.terminal.shell",
             "restored": false
           }
         }
@@ -1770,7 +1770,7 @@
         {
           "args": {
             "tab": "%3",
-            "block": "terminal"
+            "block": "pumi_dev.terminal.shell"
           }
         }
       ]

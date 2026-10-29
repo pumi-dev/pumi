@@ -22,12 +22,15 @@ async functions.
 - `contributes.blocks`: what a tab can hold, drawn by the `ui.tsx` export named for the id
   (`board` → `Board`, given `{ tab, block, focused }`). Its own methods are the plugin's
   functions `<block>.<method>`, so `tab.call("%3", "back")` on a `owner.name.browser` tab calls
-  `owner.name.browser.back` with the tab's id and then the args. `contributes.renderers` draws a
-  block it did not define (`{ "terminal": "MyTerminal" }`); the core's `file` block (a file in a
-  tab, `tab.open("file", {path})`) is drawn by the renderer whose globs fit the file best
-  (`{ "file": { "export": "Viewer", "match": ["*.md"] } }`). A block's `icon` is what its tabs
-  show: an app icon's name, a `data:image/…` URI, or `plugin:icons/x.svg`, a file of the plugin's.
-  One tab shows its own while its `@icon` option is set (a page's favicon), to the same forms.
+  `owner.name.browser.back` with the tab's id and then the args. A block with
+  `"engine": "terminal"` runs on pumi's terminals: opened with `{command, cwd, env, keep}`, kept
+  across a restart, and drawn with `<terminal tab={tab.id} />`. `contributes.renderers` draws a
+  block it did not define (`{ "pumi_dev.terminal.shell": "MyTerminal" }`); the core's `file`
+  block (a file in a tab, `tab.open("file", {path})`) is drawn by the renderer whose globs fit
+  the file best (`{ "file": { "export": "Viewer", "match": ["*.md"] } }`). A block's `icon` is
+  what its tabs show: an app icon's name, a `data:image/…` URI, or `plugin:icons/x.svg`, a file
+  of the plugin's. One tab shows its own while its `@icon` option is set (a page's favicon), to
+  the same forms.
 - `contributes.traits`: what a tab is beside its block. A tab has trait `x` while its option
   `@owner.name.x` is set; its fields are `@owner.name.x.<field>`.
 - Everything of its own is prefixed `owner.name.`.

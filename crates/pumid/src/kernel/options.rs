@@ -76,14 +76,8 @@ pub fn builtin() -> Vec<Decl> {
             Tab,
             "The tab's title: what its program said (OSC 2), its page's title, or what `select-tab -T` set.",
         ),
-        Decl::new(
-            "tab_block",
-            String,
-            json!(""),
-            Tab,
-            "The block it holds: `terminal`, or a plugin's (`owner.name.id`)",
-        )
-        .readonly(),
+        Decl::new("tab_block", String, json!(""), Tab, "The block it holds: `file`, or a plugin's (`owner.name.id`)")
+            .readonly(),
         Decl::new("pane_width", Number, json!(0), Tab, "Its width in cells, as whoever shows it sized it.").readonly(),
         Decl::new("pane_height", Number, json!(0), Tab, "Its height in cells, as whoever shows it sized it.")
             .readonly(),

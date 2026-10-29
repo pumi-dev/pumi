@@ -16,17 +16,20 @@
 pumi is a minimal, highly extensible workspace for agents that you can make your own.
 
 Run Claude Code, Codex, pi and your other agents side by side; see which are working, blocked or
-done; and tell them things without typing into their terminals. A server, `pumid`, owns the
-terminals, so they keep running when the window closes.
+done; and queue prompts for them while they work. A server, `pumid`, owns the terminals, so they
+keep running when the window closes.
 
 Bend pumi to your workflow, not the other way around. Everything you see is drawn by plugins —
-TypeScript on Bun, React in the window — and the plugins pumi ships with can be turned off or
-replaced, down to the terminal renderer. A theme can restyle the whole window or redraw any part of
-it. Share plugins and themes on GitHub; `pumi plugin add owner/repo` installs one.
+TypeScript on Bun, React in the window — and any of them can be turned off or replaced, down to
+the shell in a tab. A theme can restyle the whole window or redraw any part of it. Share plugins
+and themes on GitHub; `pumi plugin add owner/repo` installs one.
 
-pumi's core is small on purpose: tabs, terminals, agents, options, keys and a plugin loader. It
-skips remote machines, automations, a git panel, a file browser and keymap presets. Build what you
-want with the same API pumi uses, from a plugin or from any shell with the `pumi` command.
+pumi's core is small on purpose: tabs, terminals, options, keys and a plugin loader. A shell in a
+tab is the [Terminal](https://github.com/pumi-dev/plugins/tree/main/terminal) plugin, and agents
+are the [Agents](https://github.com/pumi-dev/plugins/tree/main/agents) plugin; the start screen
+offers both, and Browser, until they are installed. The core skips remote machines, automations, a
+git panel, a file browser and keymap presets. Build what you want with the same API pumi uses,
+from a plugin or from any shell with the `pumi` command.
 
 ## Install
 
@@ -50,12 +53,13 @@ macOS 14+, Linux with glibc 2.35+, or Windows 10 1809+.
 `pumi` is on the `PATH` of every tab.
 
 ```sh
-pumi tab open terminal --split right -- claude   # an agent beside this tab
-pumi skill add                                   # status hooks for every agent on PATH
-pumi agent queue %3 'run the tests again'        # delivered when its turn ends
-pumi plugin new hello && pumi plugin dev hello   # your own plugin, reloaded on save
-pumi plugin new mytheme --theme default          # your own theme, from the default's
-pumi help                                        # every command
+pumi plugin add pumi-dev/plugins/terminal                    # a shell in every new tab
+pumi plugin add pumi-dev/plugins/agents                      # agents' hooks, and a chat for each
+pumi call pumi_dev.agents.open claude                        # Claude Code, its status hook on
+pumi tab open pumi_dev.terminal.shell --split right -- htop  # a program beside this tab
+pumi plugin new hello && pumi plugin dev hello               # your own plugin, reloaded on save
+pumi plugin new mytheme --theme default                      # your own theme, from the default's
+pumi help                                                    # every command
 ```
 
 ## Docs

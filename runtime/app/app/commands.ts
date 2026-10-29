@@ -21,7 +21,7 @@ export interface Context {
   session?: string
   view?: string
   tab?: string
-  /** What a contribution's action passes (the agent's tab, a file). */
+  /** What a contribution's action passes (a tab row's tab, a file). */
   args?: unknown
 }
 

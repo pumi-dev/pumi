@@ -441,7 +441,7 @@ pub struct TabInfo {
     pub id: TabRef,
     pub session: SessionRef,
     pub view: Option<ViewRef>,
-    /// The block it holds (`terminal`, `owner.name.page`).
+    /// The block it holds (`file`, `owner.name.page`).
     pub block: String,
     /// Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`.
     pub traits: BTreeMap<String, Value>,

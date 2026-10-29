@@ -251,7 +251,7 @@ impl Place {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Tab {
     pub id: TabId,
-    /// What it holds: `terminal`, or a plugin's block (`owner.name.id`).
+    /// What it holds: `file`, or a plugin's block (`owner.name.id`).
     #[serde(alias = "type")]
     pub block: String,
     pub place: Place,

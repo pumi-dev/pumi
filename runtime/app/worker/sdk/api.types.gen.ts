@@ -793,7 +793,7 @@ export interface Functions {
         id: TabId;
         session: SessionId;
         view?: ViewId | null;
-        /** The block it holds (`terminal`, `owner.name.page`). */
+        /** The block it holds (`file`, `owner.name.page`). */
         block: string;
         /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
         traits: {
@@ -1009,7 +1009,7 @@ export interface Functions {
     id: TabId;
     session: SessionId;
     view?: ViewId | null;
-    /** The block it holds (`terminal`, `owner.name.page`). */
+    /** The block it holds (`file`, `owner.name.page`). */
     block: string;
     /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
     traits: {
@@ -2395,7 +2395,7 @@ export interface Nouns {
         id: TabId;
         session: SessionId;
         view?: ViewId | null;
-        /** The block it holds (`terminal`, `owner.name.page`). */
+        /** The block it holds (`file`, `owner.name.page`). */
         block: string;
         /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
         traits: {
@@ -2633,7 +2633,7 @@ export interface Nouns {
     id: TabId;
     session: SessionId;
     view?: ViewId | null;
-    /** The block it holds (`terminal`, `owner.name.page`). */
+    /** The block it holds (`file`, `owner.name.page`). */
     block: string;
     /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
     traits: {

@@ -2,14 +2,14 @@
 title: Command line
 group: Get started
 order: 2
-description: Tabs, agents, settings, keys and every API function, from a shell.
+description: Tabs, their status, settings, keys and every API function, from a shell.
 ---
 
 `pumi` is on the `PATH` of every tab. It talks to the server, so it works with the window closed, and every function is a command: its name in words, its id first.
 
 ```sh
-pumi tab open terminal --split right -- pi --model opus "fix the tests"
-pumi tab list --block terminal
+pumi tab open pumi_dev.terminal.shell --split right -- pi --model opus "fix the tests"
+pumi tab list --block pumi_dev.terminal.shell
 pumi tab read %3 --lines 80
 pumi open README.md
 pumi event on 'tab.*'
@@ -21,7 +21,7 @@ pumi event on 'tab.*'
 
 There are no tmux verbs. `pumi NOUN VERB [ID] [ARGS…] [--flags]` is a function: `pumi tab get %3` is `tab.get("%3")`, and `pumi tab read` is `tab.call`'s `read` method. The flags are the options of the function's last argument, in kebab case: `--title x` is `{title: "x"}`, `--no-focus` is `false`, and `--state` is `true`.
 
-An argument is JSON when it reads as JSON (`3`, `true`, `{"a":1}`) and text when it does not. A function whose one argument is an object takes its required fields first, as words: `pumi tab cells %3 --lines 5` is `tab.cells({tab: "%3", lines: 5})`. After `--` come a program and its words, for a command that runs one: `pumi tab open terminal -- htop` is `{command: ["htop"]}`, and `pumi tab run %3 -- npm test`. `get` prints the model; `tab read` prints the text; `list` prints a table on a terminal and JSON when it is piped. `pumi tab list` and `pumi agent list` are tables either way, and `--json` says JSON (`tab list --json` is the ids).
+An argument is JSON when it reads as JSON (`3`, `true`, `{"a":1}`) and text when it does not. A function whose one argument is an object takes its required fields first, as words: `pumi tab cells %3 --lines 5` is `tab.cells({tab: "%3", lines: 5})`. After `--` come a program and its words, for a command that runs one: `pumi tab open pumi_dev.terminal.shell -- htop` is `{command: ["htop"]}`, and `pumi tab run %3 -- npm test`. `pumi_dev.terminal.shell` is the [Terminal plugin](https://github.com/pumi-dev/plugins/tree/main/terminal)'s block, a shell in a tab. `get` prints the model; `tab read` prints the text; `list` prints a table on a terminal and JSON when it is piped. `pumi tab list` is a table either way, and `--json` says JSON (`tab list --json` is the ids).
 
 A tab is an id, `%3` (`3` will do, where a tab is what is asked for); a pane `:4`, a view `@2`, a session `$1`, a request `+4`. `$PUMI_TAB`, `$PUMI_VIEW` and `$PUMI_SESSION` are yours, and a command that leaves its session or view out means them; one that leaves its pane out means your tab's.
 
@@ -32,8 +32,7 @@ Where a tab opens is its place, and its kind follows from its flags: `--split`, 
 | `pumi NOUN VERB [ID] [ARGS…] [--flags]` | every function: `pumi registry list fn` lists them |
 | `pumi call NAME [args…]` | a function by name, when spelling it is easier |
 | `pumi tab read\|input\|run\|wait\|selection\|report\|attach [TAB] [--flags]` | what a tab's block answers (`tab.call`) |
-| `pumi tab list`, `pumi agent list` | what runs where: tab, view, pane, block, agent, status, model, title, directory |
-| `pumi agent status\|wait\|ask\|reply` | where an agent is, until it is done, and asking it something ([Agents](#agents)) |
+| `pumi tab list` | what runs where: tab, view, pane, block, status, title, directory |
 | `pumi open PATH [--line N]` | a file in a tab: `tab open file '{"path": "PATH"}'` |
 | `pumi wait [TAB]` | until the tab's program ends, with its status: `tab wait --exit` |
 | `pumi event on EVENT` | events as they fire; `--match`, `--once` |
@@ -42,7 +41,6 @@ Where a tab opens is its place, and its kind follows from its flags: `--split`, 
 | `pumi registry list KIND --names` | each function's (block's, option's, …) name and what it is, one a line |
 | `pumi completion zsh\|bash\|fish` | what your shell completes for pumi |
 | `pumi plugin new\|dev\|logs` | [Plugins](plugins.md): make one, run it as you edit it, read its log |
-| `pumi skill add\|remove\|list\|hook` | agents' hooks: install them, remove them, what one runs |
 | `pumi server list\|stop` | the server processes themselves |
 
 Installing, updating and removing a plugin are functions: `pumi plugin add SOURCE`, `pumi plugin update PLUGIN --enabled`, `pumi plugin remove PLUGIN`, and `pumi registry list plugin` shows what there is.
@@ -51,26 +49,19 @@ An error is one object on stderr, `{"kind": "not_found", "message": "no tab %7"}
 
 Global flags: `--json`, `--server NAME` (or a socket's path), `--socket PATH`, `--headless`, `--clean`, `--version`, `--help`.
 
-## Agents
+## Status
 
-A tab is an agent while its `@agent` option is set. The agent reports whether it is working, blocked or done with an escape sequence (OSC 7501), and pumi shows that in the sidebar. For agents that don't report themselves, `pumi skill add` installs a hook that does. Any tab's program can report, agent or not, and until one sends OSC 7501 pumi reads what it says otherwise: OSC 9;4 progress is `working` (or `error`), a braille spinner at the start of its title (OSC 0/2) is `working` until it stops, and a desktop notification (OSC 9, 99, 777) is `done` until you look at the tab.
+A tab's `@status` says how what runs in it is doing: `working`, `blocked`, `error`, `done`, `idle` or `unknown`. The side bar shows a row for each tab that has one. A terminal's program reports it with an escape sequence (OSC 7501), and until one does pumi reads what it says otherwise: OSC 9;4 progress is `working` (or `error`), a braille spinner at the start of its title (OSC 0/2) is `working` until it stops, and a desktop notification (OSC 9, 99, 777) is `done` until you look at the tab. A plugin's block may set its own tabs' `@status`.
 
-To tell an agent something, queue it: the message waits until the agent's turn ends, then goes to it as a real message. Nothing is typed into its terminal. An agent that only takes messages at a turn's end (Claude Code, Codex, Cursor) gets one sent while it sits idle when its next turn ends; pi takes it at once.
-
-Agents can ask each other things. `pumi agent ask %7 'Will you edit src/x.rs?'` queues a message that says who asks (the agent, its tab, its directory) and how to answer, `pumi agent reply %4 'No, only tests/'`. With `--wait` the asker waits for the answer and prints it (`--for 5m`, exit 124 when it runs out); an answer nobody waits for comes to the asker as a message when its turn ends. A reply fires `cli.agent.replied`, matched by the asker's tab.
+pumi has no agents of its own: they are the [Agents plugin](https://github.com/pumi-dev/plugins/tree/main/agents). It opens Claude Code, Codex and pi in terminals with their hooks on, which set the tab's status, and can show each as a chat of the same session, which queues prompts while the agent works.
 
 ```sh
-pumi skill add                             # hooks for every agent on PATH
-pumi agent queue %3 'run the tests again'  # delivered when its turn ends
-pumi agent list                            # every agent: status, model, messages waiting
-pumi agent wait %3 --for 10m               # until it is idle, done, blocked or error
-pumi tab read %3                           # its screen's last 50 lines, as text
-pumi agent ask %3 'which files are you editing?' --wait --for 5m
-pumi skill hook claude prompt --full       # a prompt hook here that tells everything again, not only what changed
-printf '\e]7501;state=working\e\\'         # working | blocked | done | idle | error
+pumi plugin add pumi-dev/plugins/agents     # the Agents plugin
+pumi call pumi_dev.agents.open claude       # Claude Code in a terminal, its hook on
+pumi tab list                               # every tab: its block, status, title and directory
+pumi tab read %3                            # its screen's last 50 lines, as text
+printf '\e]7501;state=working\e\\'          # working | blocked | done | idle | error
 ```
-
-{{agents}}
 
 ## When the app is slow
 

@@ -75,9 +75,10 @@ pub struct Contributes {
     /// export named for it (`Diagram`).
     #[serde(default)]
     pub blocks: Vec<BlockSpec>,
-    /// The blocks it draws but did not define, by block (`terminal`, `pumi_dev.marmaide.diagram`):
-    /// the `src/ui.tsx` export that draws them. The core's `file` block is drawn by the plugin
-    /// whose renderer's `match` fits its file best (`{"export": "Editor", "match": ["*"]}`).
+    /// The blocks it draws but did not define, by block (`pumi_dev.terminal.shell`,
+    /// `pumi_dev.marmaide.diagram`): the `src/ui.tsx` export that draws them. The core's `file` block
+    /// is drawn by the plugin whose renderer's `match` fits its file best
+    /// (`{"export": "Editor", "match": ["*"]}`).
     #[serde(default)]
     pub renderers: BTreeMap<String, Renderer>,
     /// What it adds to the window's slots (`panel`, `status`, …), by slot.
@@ -330,7 +331,7 @@ pub struct OptionSpec {
     pub placeholder: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control: Option<Control>,
-    /// The blocks it belongs to: one of its own by id (`page`), or another's (`terminal`).
+    /// The blocks it belongs to: one of its own by id (`page`), or another's (`file`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<String>,
 }
@@ -731,7 +732,7 @@ pub fn validate(m: &Manifest) -> Result<(), String> {
                 )
             });
         if !core && !plugin {
-            return Err(format!("renderers: {block:?} is a block's id: `terminal`, or `owner.name.id`"));
+            return Err(format!("renderers: {block:?} is a block's id: `file`, or `owner.name.id`"));
         }
         if !export(renderer.export()) {
             return Err(format!(
