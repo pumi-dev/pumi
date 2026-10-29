@@ -5407,6 +5407,12 @@ impl Window {
                 InputModality::Keyboard
             }
             PlatformInput::MouseMove(_) | PlatformInput::MouseDown(_) => InputModality::Mouse,
+            // Files dragged in from the OS are the pointer too: the platform sends no mouse moves
+            // while they are dragged, and in keyboard modality nothing is hovered, so typing and
+            // then dropping a file would leave the drop to no one.
+            PlatformInput::FileDrop(
+                FileDropEvent::Entered { .. } | FileDropEvent::Pending { .. } | FileDropEvent::Submit { .. },
+            ) => InputModality::Mouse,
             PlatformInput::Touch(_) => InputModality::Touch,
             _ => self.last_input_modality,
         };
