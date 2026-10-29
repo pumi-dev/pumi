@@ -97,6 +97,16 @@ Its name as people read it, `Chat UI` for `chat-ui`, is package.json's `displayN
 
 `activation` says when the worker starts: `onStartup`, `onBlock:<id>`, `onCommand:<id>` or `onEvent:<name>`; with none, when one of its blocks opens or one of its commands runs. `uses` (`network`, `processes`, `files`, `addons`) is what it needs, for whoever installs it.
 
+While it runs, a plugin can change what it contributes with `plugin.contribute(id, patch)`: `patch` is a JSON merge patch over `contributes` as it is now (objects merge, `null` takes a key away, a list is replaced whole), checked as the manifest is. Settings, the palette, keys, blocks and slots follow at once, and the worker keeps running. Nothing is written to `package.json`: `null` gives back what it says, and so does the plugin stopping, so a plugin sets what it wants each time it starts.
+
+```ts
+import { plugin, self } from "pumi";
+
+// The `+` menu lists the agents installed here.
+const actions = installed.map((a) => ({ id: a.id, title: a.name, icon: "sparkle", command: `open_${a.id}` }));
+await plugin.contribute(self.plugin.id, { commands: actions.map((a) => ({ id: a.command, title: `New ${a.title}` })), slots: { "tab.new": { actions } } });
+```
+
 ## Functions
 
 A function is the one thing everything else calls: `fn.set(name, spec, impl)` registers one under the plugin's prefix, and `call(name, args)` runs any function, its own or the API's.
@@ -134,10 +144,13 @@ A slot is a place in the window. Give it a `component`, an export of `ui.tsx`, o
 | `session.header` `session.menu` | `session` |
 | `view.actions` `view.badge` `view.menu` | `view` |
 | `tab.toolbar` `tab.strip` `tab.overlay` `tab.menu` | `tab` |
+| `tab.new` | actions only, run with `{tab, place}`: the pane or tab it opens beside, and where (`tab.open`'s place) |
 | `agent.controls` `agent.footer` `agent.menu` | `tab` |
 | `sidebar.footer` | `point` (the dock's name) |
 
 A theme draws them with `useSlot(slot, args)`, from `pumi/theme`.
+
+`tab.new` is what a new tab can be: the pane's `+` menu, and the list a split opens with. pumi has Terminal and File; each plugin's actions come after them, a group of their own.
 
 ## Blocks
 

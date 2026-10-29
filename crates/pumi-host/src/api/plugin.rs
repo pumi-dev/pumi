@@ -2,7 +2,7 @@ use super::kernel;
 use crate::kernel::Kernel;
 use crate::kernel::events::About;
 use crate::plugins::{Entry, checkout_of, dir_of, installed_at, lock_read, lock_write, root};
-use pumi_api::{Cx, Error, Optional, Result, api};
+use pumi_api::{Cx, Error, Nullable, Optional, Result, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -476,6 +476,8 @@ pub fn pumi_plugin_update(cx: &mut Cx, plugin: PluginId, patch: Optional<UpdateP
     let patch = patch.into_option().unwrap_or_default();
     let mut lock = lock_read();
     let name = lock_name(&lock, &plugin)?;
+    // Read again, it starts again: what it contributed while it ran is its manifest's again.
+    crate::contributions::set_live(&plugin.0, None);
     let entry = lock.plugins[&name].clone();
     if let Some(on) = patch.enabled.0 {
         lock.plugins.get_mut(&name).expect("listed").disabled = !on;
@@ -539,6 +541,7 @@ pub fn pumi_plugin_remove(cx: &mut Cx, plugin: PluginId, opts: Optional<RemoveOp
     let data = opts.into_option().unwrap_or_default().data.0.unwrap_or(false);
     let mut lock = lock_read();
     let name = lock_name(&lock, &plugin)?;
+    crate::contributions::set_live(&plugin.0, None);
     let entry = lock.plugins[&name].clone();
     if entry.kind.as_deref() == Some("bundled") {
         return Err(Error::invalid_params(format!(
@@ -566,6 +569,44 @@ pub fn pumi_plugin_remove(cx: &mut Cx, plugin: PluginId, opts: Optional<RemoveOp
     save(&lock)?;
     follow_plugins(cx)?;
     registry_changed(cx, &name)?;
+    Ok(())
+}
+/// Change what a running plugin contributes, without starting it again: `patch` is a JSON merge
+/// patch (RFC 7396) over its `contributes` as they are now (an object merges into an object, `null`
+/// takes a key away, anything else replaces what was there, a list as a whole), checked as its
+/// manifest is. Settings, the palette, keys, blocks and the window's slots follow at once. `null`
+/// gives back what its manifest says, as the plugin stopping does; nothing is written to it.
+#[api(
+    name = "plugin.contribute",
+    example(
+        args = r#"["owner/name", {"slots": {"tab.new": {"actions": [{"id": "claude", "title": "Claude Code", "icon": "sparkle", "command": "open"}]}}}]"#,
+        result = "null"
+    ),
+    example(args = r#"["owner/name", null]"#, result = "null", desc = "As its manifest says again.")
+)]
+pub fn pumi_plugin_contribute(cx: &mut Cx, plugin: PluginId, patch: Nullable<Value>) -> Result<()> {
+    let Some(found) = crate::contributions::plugins().into_iter().find(|p| p.id == plugin.0) else {
+        return Err(Error::not_found(format!("no plugin `{}` is on", plugin.0)));
+    };
+    match patch.into_option() {
+        None => crate::contributions::set_live(&plugin.0, None),
+        Some(patch) => {
+            let mut now =
+                serde_json::to_value(&found.manifest.contributes).map_err(|e| Error::exception(e.to_string()))?;
+            crate::contributions::merge_patch(&mut now, &patch);
+            let mut manifest = found.manifest.clone();
+            manifest.contributes = serde_json::from_value(now)
+                .map_err(|e| Error::invalid_params(format!("{}'s contributes: {e}", plugin.0)))?;
+            pumi_api::manifest::validate(&manifest)
+                .map_err(|e| Error::invalid_params(format!("{}'s contributes: {e}", plugin.0)))?;
+            crate::contributions::set_live(&plugin.0, Some(manifest.contributes));
+        }
+    }
+    follow_plugins(cx)?;
+    // The app registers what it now contributes, and leaves its worker running.
+    let k = cx.host::<Kernel>()?;
+    let data = json!({ "kind": "plugin", "names": [plugin.0], "live": true });
+    k.emit("registry.changed", "plugin", About::default(), data);
     Ok(())
 }
 /// What `plugin` kept: its directories (its storage is in its `state` one) and its secrets.
@@ -635,12 +676,14 @@ pub(crate) fn installed(names: Vec<String>) -> Result<Vec<Value>> {
         let dir = dir_of(&name);
         let installed = dir.exists();
         let bundled = entry.kind.as_deref() == Some("bundled");
-        let plugin = pumi_api::manifest::read(&dir, entry.src.as_deref()).and_then(|p| {
-            if p.owner == crate::plugins::BUNDLED_OWNER && !bundled {
-                return Err(format!("the owner `{}` is pumi's own plugins'", p.owner));
-            }
-            Ok(p)
-        });
+        let plugin = pumi_api::manifest::read(&dir, entry.src.as_deref())
+            .and_then(|p| {
+                if p.owner == crate::plugins::BUNDLED_OWNER && !bundled {
+                    return Err(format!("the owner `{}` is pumi's own plugins'", p.owner));
+                }
+                Ok(p)
+            })
+            .map(crate::contributions::live);
         let found = plugin.as_ref().ok();
         out.push(json!({
             "spec": { "name": name, "src": entry.src, "version": entry.version },

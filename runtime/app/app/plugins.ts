@@ -78,6 +78,10 @@ class Made {
       case "event.on": if (typeof result === "number") this.undo.push(["event.off", [result]]); break
       case "fn.set": if (typeof args[0] === "string" && args[1]) this.undo.push(["fn.set", [args[0], null]]); break
       case "menu.set": if (args[1]) this.undo.push(["menu.set", [args[0], null]]); break
+      // What it contributes while it runs: its manifest's again when it stops.
+      case "plugin.contribute":
+        if (args[1] !== null && !this.undo.some(([n, a]) => n === name && a[0] === args[0])) this.undo.push([name, [args[0], null]])
+        break
     }
   }
   take(): [string, unknown[]][] {
@@ -399,9 +403,11 @@ export function onReload(listener: (id: string) => void) {
   return () => reloads.delete(listener)
 }
 
-/** A plugin installed, removed or changed (`registry.changed`): its worker starts again. */
+/** A plugin installed, removed or changed (`registry.changed`): its worker starts again. One that
+ *  changed what it contributes while it runs (`live`, `plugin.contribute`) keeps running. */
 async function reload(event: any) {
   await catalog()
+  if (event?.live === true) return
   const names: string[] = Array.isArray(event?.names) ? event.names.map(String) : []
   for (const entry of entries.values()) {
     if (names.length && !names.some((name) => entry.id === name || entry.manifest.name === name)) continue

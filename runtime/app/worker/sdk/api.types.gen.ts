@@ -678,6 +678,14 @@ export interface Functions {
     enabled?: boolean;
   }]; returns: string };
   /**
+   * Change what a running plugin contributes, without starting it again: `patch` is a JSON merge
+   * patch (RFC 7396) over its `contributes` as they are now (an object merges into an object, `null`
+   * takes a key away, anything else replaces what was there, a list as a whole), checked as its
+   * manifest is. Settings, the palette, keys, blocks and the window's slots follow at once. `null`
+   * gives back what its manifest says, as the plugin stopping does; nothing is written to it.
+   */
+  "plugin.contribute": { args: [plugin: PluginId, patch: unknown]; returns: null };
+  /**
    * Uninstall a plugin. A linked one's directory stays: only the link goes. What it kept stays
    * too, unless `data` says.
    */
@@ -2366,6 +2374,17 @@ export interface Nouns {
     /** Start it once installed (`true`, the default); `false` installs it turned off. */
     enabled?: boolean;
   }): Promise<string>;
+    /**
+     * Change what a running plugin contributes, without starting it again: `patch` is a JSON merge
+     * patch (RFC 7396) over its `contributes` as they are now (an object merges into an object, `null`
+     * takes a key away, anything else replaces what was there, a list as a whole), checked as its
+     * manifest is. Settings, the palette, keys, blocks and the window's slots follow at once. `null`
+     * gives back what its manifest says, as the plugin stopping does; nothing is written to it.
+     *
+     * @example
+     * await plugin.contribute("owner/name", { slots: { "tab.new": { actions: [{ id: "claude", title: "Claude Code", icon: "sparkle", command: "open" }] } } })
+     */
+    contribute(plugin: PluginId, patch: unknown): Promise<null>;
     /**
      * Uninstall a plugin. A linked one's directory stays: only the link goes. What it kept stays
      * too, unless `data` says.

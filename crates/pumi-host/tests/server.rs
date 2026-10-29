@@ -861,6 +861,48 @@ fn a_linked_plugin_s_settings_pages_and_sections_are_listed() {
     let one = client.call("registry.list", json!(["settings", {"name": "me.remote.tailscale"}]));
     assert_eq!(one.as_array().unwrap().len(), 1);
 }
+/// A running plugin changes what it contributes: the listing and its commands follow, a patch
+/// that does not fit the manifest is refused, and `null` gives back the manifest's.
+#[test]
+fn a_plugin_changes_what_it_contributes_while_it_runs() {
+    let dir = Server::dir();
+    let root = dir.path();
+    let pkg = root.join("chat");
+    std::fs::create_dir_all(&pkg).unwrap();
+    let manifest = r#"{ "name": "chat", "pumi": { "name": "chat", "owner": "me", "api": 1, "contributes": {
+        "commands": [{ "id": "open", "title": "Open" }],
+        "slots": { "tab.toolbar": { "component": "Toolbar" } } } } }"#;
+    std::fs::write(pkg.join("package.json"), manifest).unwrap();
+    let server = Server::start_home(root);
+    let mut client = server.client();
+    client.call("plugin.add", json!([pkg.to_str().unwrap(), {}]));
+    let contributes = |client: &mut Client| {
+        let list = client.call("registry.list", json!(["plugin", {"name": "chat"}]));
+        list[0]["manifest"]["contributes"].clone()
+    };
+    let action = json!({ "id": "pi", "title": "Pi", "icon": "sparkle", "command": "open" });
+    client.call("plugin.contribute", json!(["me/chat", { "slots": { "tab.new": { "actions": [action] } } }]));
+    let now = contributes(&mut client);
+    assert_eq!(now["slots"]["tab.new"]["actions"][0]["title"], "Pi");
+    assert_eq!(now["slots"]["tab.toolbar"]["component"], "Toolbar", "the rest is kept");
+    let patch =
+        json!(["me/chat", { "commands": [{ "id": "open", "title": "Open" }, { "id": "more", "title": "More" }] }]);
+    client.call("plugin.contribute", patch);
+    let palette = client.call("registry.list", json!(["fn", {"palette": true, "name": "me.chat.*"}]));
+    assert_eq!(palette.as_array().unwrap().len(), 2, "the palette lists the new command: {palette}");
+    let err = client.try_call("plugin.contribute", json!(["me/chat", { "slots": { "nowhere": {} } }])).unwrap_err();
+    assert!(err["message"].as_str().unwrap().contains("nowhere"), "{err}");
+    assert_eq!(
+        contributes(&mut client)["slots"]["tab.new"]["actions"][0]["id"],
+        "pi",
+        "a refused patch changes nothing"
+    );
+    client.call("plugin.contribute", json!(["me/chat", null]));
+    let back = contributes(&mut client);
+    assert!(back["slots"].get("tab.new").is_none(), "the manifest's again: {back}");
+    let err = client.try_call("plugin.contribute", json!(["me/nothing", null])).unwrap_err();
+    assert!(err["message"].as_str().unwrap().contains("me/nothing"), "{err}");
+}
 /// A lockfile under the earlier name (`pack-lock.json`) is read where the current one is missing,
 /// and moved over: its plugins stay installed.
 #[test]

@@ -217,7 +217,9 @@ pub struct TraitSpec {
 /// The window's slots a plugin contributes to: a fixed set, which the window's parts draw (the
 /// default theme's, or a UI theme's own). `sidebar.footer` is the bar at the side bar's foot: an
 /// action there is a button beside the panel buttons, for a component that opens elsewhere (a
-/// float, a view) rather than filling the side bar.
+/// float, a view) rather than filling the side bar. `tab.new` is what a new tab can be (a pane's
+/// `+` menu, a split's list): each action is run with `{tab, place}`, the tab it goes beside and
+/// where it opens, as `tab.open` takes it.
 pub const SLOTS: &[&str] = &[
     "window.overlay",
     "session.header",
@@ -229,6 +231,7 @@ pub const SLOTS: &[&str] = &[
     "tab.strip",
     "tab.overlay",
     "tab.menu",
+    "tab.new",
     "agent.controls",
     "agent.footer",
     "agent.menu",

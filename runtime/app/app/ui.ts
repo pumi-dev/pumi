@@ -128,6 +128,8 @@ function register(entry: plugins.Entry) {
         title: action.title,
         icon: action.icon,
         plugin: entry.id,
+        // The function it calls: the keys the server binds to it are its own.
+        command: `${entry.prefix}${action.command}`,
         run: (args) => {
           plugins.command(entry.id, action.command, args).catch((err) => console.error(`pumi: ${entry.id}: ${action.title}:`, err?.message ?? err))
         },

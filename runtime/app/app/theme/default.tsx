@@ -44,8 +44,7 @@ import { METRICS, useComponents, useMetrics, useTheme, withOpacity, type Compone
 import { IconImage, TabIcon } from "../../sdk/elements.tsx"
 import { showsStatus, useTabIcon, useTabStatus } from "../../sdk/icons.ts"
 import { useHover } from "../../sdk/kit.tsx"
-import { useOption, useRegistry, useTab as useTabModel } from "../../sdk/state.ts"
-import { serverOf } from "../ids.ts"
+import { useTab as useTabModel } from "../../sdk/state.ts"
 import { fromServer } from "../serverkeys.ts"
 import { NEW_TAB } from "../names.ts"
 import { useLocal } from "../local.ts"
@@ -1373,31 +1372,10 @@ interface NewKind {
   letter: string
   /** The keys that open one elsewhere, when they are bound: the app's command, or the server's. */
   keys?: string
-  /** A menu draws a rule between groups. */
-  group: "open" | "agents"
+  /** A menu draws a rule between groups: the app's own, then each plugin's (`tab.new`). */
+  group: string
   open(at: string, place: NewPlace): Promise<unknown>
 }
-
-const BROWSER = "pumi_dev.browser.page"
-const SIMULATOR = "amresyd.simulator.device"
-
-/** The agents a new tab can run, as `pumi skill` knows them: their program, and their name. */
-const AGENTS: { command: string; title: string }[] = [
-  { command: "pi", title: "Pi" },
-  { command: "claude", title: "Claude Code" },
-  { command: "codex", title: "Codex" },
-  { command: "gemini", title: "Gemini" },
-  { command: "opencode", title: "OpenCode" },
-  { command: "cursor-agent", title: "Cursor Agent" },
-  { command: "amp", title: "Amp" },
-  { command: "droid", title: "Droid" },
-  { command: "copilot", title: "Copilot" },
-  { command: "kiro-cli", title: "Kiro" },
-]
-
-/** The agents on this machine's `PATH`, looked for once. */
-let installed: typeof AGENTS | undefined
-const installedAgents = () => (installed ??= AGENTS.filter((a) => !!Bun.which(a.command)))
 
 /** The keys the server's tables (`keys`) bind to `fn`, as the OS writes them (`⇧ ⌘ E`). */
 function serverShortcut(tables: unknown, fn: string): string | undefined {
@@ -1413,47 +1391,44 @@ function serverShortcut(tables: unknown, fn: string): string | undefined {
 }
 
 /**
- * What a new tab can be, for the pane or tab `at`: a terminal and a file always; a page and a
- * simulator while their plugins are on (their blocks are listed); and the agents installed here
- * (not for a remote server's pane, whose machine's programs are not these). Each shows the keys
- * that open one elsewhere when there are any.
+ * What a new tab can be: a terminal and a file always, then what the
+ * plugins add to `tab.new` (a page, a simulator, the agents), each plugin's a group of its own,
+ * numbered for a new pane's list. A plugin's action is run with `{tab, place}`: the pane or tab it
+ * opens beside (it names the server), and where. Each shows
+ * the keys that open one elsewhere when there are any.
  */
-function useNewKinds(at: string): NewKind[] {
-  const blocks = useRegistry<{ id: string }>("block")
-  const [home] = useOption<string>("pumi_dev.browser.home_url")
+function useNewKinds(): NewKind[] {
+  const { actions } = useSlot("tab.new")
   const tables = useApp((s) => s.options.keys)
-  const local = !serverOf(at)
   return useMemo(() => {
-    const has = new Set(blocks.map((b) => b.id))
-    const opening = (block: string, args: Record<string, unknown>) => (on: string, place: NewPlace) => call(via(on, "tab.open"), block, args, place)
-    const out: NewKind[] = [{ id: "terminal", title: "Terminal", icon: "terminal", letter: "T", keys: shortcut("new_tab"), group: "open", open: opening("terminal", {}) }]
-    if (has.has(BROWSER)) {
-      // The block's option, set as it opens: the page it starts on (empty: the address bar).
-      out.push({ id: "browser", title: "Browser", icon: "tool_web", letter: "B", keys: serverShortcut(tables, "pumi_dev.browser.open"), group: "open", open: opening(BROWSER, { "pumi_dev.browser.url": home ?? "" }) })
-    }
-    out.push({
-      id: "file",
-      title: "File…",
-      icon: "file",
-      letter: "F",
-      group: "open",
-      open: async (on, place) => {
-        const picked = await call(via(on, "fs.pick"), { kind: "file" })
-        const path = Array.isArray(picked) ? picked[0] : picked
-        if (typeof path === "string" && path) await call(via(on, "tab.open"), "file", { path }, place)
+    const out: NewKind[] = [
+      { id: "terminal", title: "Terminal", icon: "terminal", letter: "T", keys: shortcut("new_tab"), group: "pumi", open: (on, place) => call(via(on, "tab.open"), "terminal", {}, place) },
+      {
+        id: "file",
+        title: "File…",
+        icon: "file",
+        letter: "F",
+        group: "pumi",
+        open: async (on, place) => {
+          const picked = await call(via(on, "fs.pick"), { kind: "file" })
+          const path = Array.isArray(picked) ? picked[0] : picked
+          if (typeof path === "string" && path) await call(via(on, "tab.open"), "file", { path }, place)
+        },
       },
-    })
-    if (has.has(SIMULATOR)) {
-      // No device named: the one booted.
-      out.push({ id: "simulator", title: "Simulator", icon: "smartphone", letter: "S", keys: serverShortcut(tables, "amresyd.simulator.open"), group: "open", open: opening(SIMULATOR, {}) })
-    }
-    if (local) {
-      installedAgents().slice(0, 9).forEach((a, i) => {
-        out.push({ id: `agent.${a.command}`, title: a.title, icon: "sparkle", letter: String(i + 1), group: "agents", open: opening("terminal", { command: [a.command] }) })
+    ]
+    actions.forEach((a, i) => {
+      out.push({
+        id: `${a.plugin}/${a.id}`,
+        title: a.title,
+        icon: a.icon ?? "plus",
+        letter: i < 9 ? String(i + 1) : "",
+        keys: a.keys ?? (a.command ? serverShortcut(tables, a.command) : undefined),
+        group: a.plugin,
+        open: async (on, place) => a.run({ tab: on, place }),
       })
-    }
+    })
     return out
-  }, [blocks, home, tables, local])
+  }, [actions, tables])
 }
 
 /**
@@ -1481,7 +1456,7 @@ function NewTabButton({ pane, color, onOpen }: { pane: string; color?: string; o
 function NewTabMenu({ pane, close, onButton }: { pane: string; close(): void; onButton: { current: boolean } }) {
   const t = useTheme()
   const m = useMetrics()
-  const kinds = useNewKinds(pane)
+  const kinds = useNewKinds()
   return (
     <anchored side="bottom" align="end" gap={4} fit="snap" snapMargin={8} deferred occlude priority={1} style={{ backgroundColor: "transparent" }}>
       <div onMouseDownOutside={() => onButton.current || close()} style={menuCard(t, m)}>
@@ -1513,7 +1488,7 @@ function NewTabPane({ tab, focused }: { tab: string; focused: boolean }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
-  const kinds = useNewKinds(tab)
+  const kinds = useNewKinds()
   const [chosen, setChosen] = useState(0)
   const opening = useRef(false)
   const pick = (k: NewKind | undefined) => {

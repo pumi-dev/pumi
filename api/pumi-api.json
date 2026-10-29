@@ -2580,6 +2580,81 @@
       "source": "core"
     },
     {
+      "name": "plugin.contribute",
+      "since": 1,
+      "provider": "host",
+      "runs_on": "server",
+      "effect": "write",
+      "desc": "Change what a running plugin contributes, without starting it again: `patch` is a JSON merge\npatch (RFC 7396) over its `contributes` as they are now (an object merges into an object, `null`\ntakes a key away, anything else replaces what was there, a list as a whole), checked as its\nmanifest is. Settings, the palette, keys, blocks and the window's slots follow at once. `null`\ngives back what its manifest says, as the plugin stopping does; nothing is written to it.",
+      "parameters": [
+        [
+          "String",
+          "plugin"
+        ],
+        [
+          "Object",
+          "patch"
+        ]
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$"
+          },
+          "patch": {
+            "anyOf": [
+              true,
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "plugin",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "returns": "nil",
+      "returns_schema": {
+        "type": "null"
+      },
+      "examples": [
+        {
+          "args": [
+            "owner/name",
+            {
+              "slots": {
+                "tab.new": {
+                  "actions": [
+                    {
+                      "id": "claude",
+                      "title": "Claude Code",
+                      "icon": "sparkle",
+                      "command": "open"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "owner/name",
+            null
+          ],
+          "result": null,
+          "desc": "As its manifest says again."
+        }
+      ],
+      "source": "core"
+    },
+    {
       "name": "plugin.remove",
       "since": 1,
       "provider": "host",
