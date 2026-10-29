@@ -53,6 +53,7 @@ export function useAgentStatus(status: string | undefined): { color: string; ico
  * reads them off the module (`import * as pumi from "pumi"`, `pumi.features?.inlineText`), since a
  * name an older app lacks fails the import.
  * - `inlineText`: `<text inline>`, a paragraph of styled runs.
- * - `textChips`: a text field's `chips` and `caret`, and the selection on its `change` and `select`.
+ * - `textInlines`: a text field's `inlines` (nodes its children draw) and `caret`, and the selection
+ *   on its `change` and `select`.
  */
-export const features = { inlineText: true, textChips: true } as const
+export const features = { inlineText: true, textInlines: true } as const

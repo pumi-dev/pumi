@@ -15,8 +15,8 @@ use crate::renderer::EventCallback;
 use pumi_ui_proto::{EventKind, Press};
 
 pub mod anchored;
-pub mod chips;
 pub mod img;
+pub mod inlines;
 pub mod input;
 
 // ── Render context ───────────────────────────────────────────────────

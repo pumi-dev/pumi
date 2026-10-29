@@ -1,6 +1,7 @@
 // A text field says where its caret is (`change` and `select` carry the selection), puts it where
-// it is told when its value is set from outside (`caret`), and draws mentions as chips (`chips`):
-// one character to the caret, taken whole by Backspace, kept as their text in the value.
+// it is told when its value is set from outside (`caret`), and has inline nodes (`inlines`), drawn
+// in the line by its children: one character to the caret, taken whole by any edit that reaches
+// into one, kept as their text in the value.
 import { describe, expect, test } from "bun:test"
 import { useState } from "react"
 import type { EventPayload } from "./index.ts"
@@ -9,10 +10,11 @@ import { createTestRoot, hasNativeTestRenderer } from "./testing.ts"
 
 const gpu = hasNativeTestRenderer ? describe : describe.skip
 
-const CHIP = { text: "@src/a.rs", label: "a.rs", icon: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><rect width=\"16\" height=\"16\"/></svg>" }
+const NODE = { text: "@src/a.rs", label: "a.rs" }
 
-function field(initial: string, caret?: number) {
-  const t = createTestRoot({ width: 400, height: 120 })
+function field(initial: string, caret?: number, width = 400) {
+  const t = createTestRoot({ width, height: 120 })
+  const hovers: boolean[] = []
   const changes: EventPayload[] = []
   const selects: EventPayload[] = []
   let set: (value: string) => void = () => {}
@@ -25,14 +27,18 @@ function field(initial: string, caret?: number) {
         autoFocus
         value={value}
         caret={caret}
-        chips={[CHIP]}
+        inlines={[NODE]}
         onChange={(e) => {
           changes.push(e)
           setValue(e.value ?? "")
         }}
         onSelect={(e) => selects.push(e)}
-        style={{ width: 400, height: 80 }}
-      />
+        style={{ width, height: 80, fontSize: 14, lineHeight: 20, fontFamily: "Menlo" }}
+      >
+        <div testId="node" onMouseEnter={() => hovers.push(true)} onMouseLeave={() => hovers.push(false)} style={{ display: "flex", flexDirection: "row", paddingLeft: 6, paddingRight: 6 }}>
+          <text style={{ fontSize: 12 }}>[a.rs]</text>
+        </div>
+      </textarea>
     )
   }
   t.render(<Field />)
@@ -41,7 +47,10 @@ function field(initial: string, caret?: number) {
     t.renderer.nativeSimulateKeystrokes(id, keystrokes)
     t.renderer.flush()
   }
-  return { t, keys, changes, selects, set: (value: string) => (flushSync(() => set(value)), t.renderer.flush()) }
+  // A node's width is the slot's from the frame after it is first measured.
+  t.renderer.flush()
+  const bounds = (testId: string) => t.renderer.getElementBounds(t.renderer.findByTestId(testId)!.id)!
+  return { t, keys, changes, selects, hovers, bounds, set: (value: string) => (flushSync(() => set(value)), t.renderer.flush(), t.renderer.flush()) }
 }
 
 const caretOf = (events: EventPayload[]) => events.at(-1)?.selectionEnd
@@ -91,11 +100,17 @@ gpu("a text field's caret", () => {
   })
 })
 
-gpu("chips", () => {
-  test("a chip is drawn as its label and is one character to the caret", () => {
-    const { t, keys, selects } = field("see @src/a.rs now")
-    expect(t.renderer.getPaintedText().join("\n")).toContain("a.rs")
-    expect(t.renderer.getPaintedText().join("\n")).not.toContain("@src/a.rs")
+gpu("inline nodes", () => {
+  test("a node is drawn by its child in the line, and is one character to the caret", () => {
+    const { t, keys, selects, bounds } = field("see @src/a.rs now")
+    const painted = t.renderer.getPaintedText().join("\n")
+    expect(painted).toContain("[a.rs]")
+    expect(painted).not.toContain("@src/a.rs")
+    const node = bounds("node")
+    const box = bounds("field")
+    // After "see " (four Menlo glyphs, about 8.4 px each), on the first line.
+    expect(node.x).toBeGreaterThan(box.x + 30)
+    expect(node.y).toBeLessThan(box.y + 20)
     keys("left left left left")
     expect(caretOf(selects)).toBe(13)
     keys("left")
@@ -105,9 +120,8 @@ gpu("chips", () => {
     t.unmount()
   })
 
-  test("Backspace at a chip's end takes it whole, and the value keeps a chip's text", () => {
+  test("Backspace at a node's end takes it whole, and the value keeps a node's text", () => {
     const { t, keys, changes } = field("see @src/a.rs now", 13)
-    t.renderer.flush()
     keys("backspace")
     expect(changes.at(-1)?.value).toBe("see  now")
     keys("cmd-z")
@@ -115,12 +129,42 @@ gpu("chips", () => {
     t.unmount()
   })
 
-  test("text that runs on from a chip's is text again", () => {
+  test("text typed against a node leaves it a node, and deleting into it takes it whole", () => {
     const { t, keys, changes, set } = field("")
     set("@src/a.rs")
     keys("x")
     expect(changes.at(-1)?.value).toBe("@src/a.rsx")
-    expect(t.renderer.getPaintedText().join("\n")).toContain("@src/a.rsx")
+    expect(t.renderer.getPaintedText().join("\n")).not.toContain("@src/a.rs")
+    keys("backspace")
+    expect(changes.at(-1)?.value).toBe("@src/a.rs")
+    keys("alt-backspace")
+    expect(changes.at(-1)?.value).toBe("")
+    t.unmount()
+  })
+
+  test("a selection that reaches into a node takes it whole when typed over", () => {
+    const { t, keys, changes } = field("ab @src/a.rs", 1)
+    keys("shift-right shift-right shift-right shift-right")
+    keys("z")
+    expect(changes.at(-1)?.value).toBe("az")
+    t.unmount()
+  })
+
+  test("a node that wraps is drawn whole at the start of the next line", () => {
+    const { t, bounds } = field("aaaa bbbb cccc @src/a.rs", undefined, 160)
+    const node = bounds("node")
+    const box = bounds("field")
+    expect(node.y).toBeGreaterThanOrEqual(box.y + 19)
+    expect(node.x).toBeLessThan(box.x + 12)
+    t.unmount()
+  })
+
+  test("its child takes the pointer: a hover reaches it", () => {
+    const { t, hovers, bounds } = field("see @src/a.rs now")
+    const node = bounds("node")
+    t.renderer.nativeSimulateMouseMove(node.x + node.width / 2, node.y + node.height / 2)
+    t.renderer.flush()
+    expect(hovers.at(-1)).toBe(true)
     t.unmount()
   })
 })

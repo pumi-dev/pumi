@@ -601,21 +601,30 @@ export interface InputProps extends HostProps {
    */
   caret?: number
   /**
-   * Mentions drawn as chips in the line: each `text` that stands whole in the value (at its start or
-   * after a space, at its end or before one) is drawn as `label` on a rounded wash, after `icon` (an
-   * SVG's markup or file). A chip is one character to the caret: it moves over it, and Backspace or
-   * Delete takes it whole. The value keeps the text; copying a chip copies it.
+   * Inline nodes, as Lexical's decorator nodes: runs of the value that the field's children draw.
+   * Without it the field is plain text. With it, child `i` is drawn in the line in place of the
+   * first place `inlines[i].text` is in the value, in a slot as wide as the child (it is measured
+   * as it would be alone, and centred on the line), so the line wraps around it, never inside it.
+   * A node is one character to the caret: it moves over it, and any edit that reaches into it
+   * (Backspace, a word deleted, a selection typed over) takes it whole. Text typed against a node
+   * leaves it a node. The value keeps the text, and copying a node copies its text. A later place
+   * the same text is in, or one with no child, shows `label` (the text without).
+   *
+   * ```tsx
+   * <textarea value={draft} inlines={[{ text: "@src/a.rs", label: "a.rs" }]}>
+   *   <FileMention path="src/a.rs" />
+   * </textarea>
+   * ```
    */
-  chips?: TextChip[]
+  inlines?: TextInline[]
   /** The caret or selection moved. `selectionStart`, `selectionEnd` (UTF-16) say where; `change` carries them too. */
   onSelect?: (event: EventPayload) => void
 }
 
-/** One of a text field's `chips`. */
-export interface TextChip {
+/** One of a text field's `inlines`. */
+export interface TextInline {
   text: string
-  label: string
-  icon?: string
+  label?: string
 }
 
 export interface TextareaProps extends InputProps {

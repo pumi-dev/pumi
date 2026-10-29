@@ -21,7 +21,7 @@ use gpui::{
 use unicode_segmentation::UnicodeSegmentation;
 use web_time::Instant;
 
-use super::chips::{ChipLayout, ChipSpec};
+use super::inlines::{InlineLayout, InlineSpec};
 use super::{CustomElement, CustomElementFactory, CustomRenderContext};
 use crate::renderer::{emit, emit_key_event, EventCallback};
 use crate::theme::Theme;
@@ -275,8 +275,8 @@ struct TextEditorElement {
     intercept_keys: Vec<String>,
     /// `caret`: where the caret goes (UTF-16) when `value` is set from outside; the end without.
     caret: Option<usize>,
-    /// `chips`: mentions drawn as chips (`chips.rs`).
-    chips: Vec<ChipSpec>,
+    /// `inlines`: runs of the value drawn by the editor's children (`inlines.rs`).
+    inlines: Vec<InlineSpec>,
     last_prop_value: Option<String>,
     theme: Theme,
     state: Option<Entity<TextEditorState>>,
@@ -293,7 +293,7 @@ impl TextEditorElement {
             max_rows: if multiline { 10 } else { 1 },
             intercept_keys: Vec::new(),
             caret: None,
-            chips: Vec::new(),
+            inlines: Vec::new(),
             last_prop_value: None,
             theme: Theme::dark(),
             state: None,
@@ -304,10 +304,12 @@ impl TextEditorElement {
 impl CustomElement for TextEditorElement {
     fn render(
         &mut self,
-        ctx: CustomRenderContext,
+        mut ctx: CustomRenderContext,
         _window: &mut Window,
         cx: &mut Context<crate::renderer::GpuixView>,
     ) -> gpui::AnyElement {
+        // The children draw the inline nodes, child `i` the first node of `inlines[i]`.
+        let children = std::mem::take(&mut ctx.children);
         let focus_handle = ctx.focus_handle.cloned().unwrap_or_else(|| cx.focus_handle());
         let emits_change = ctx.events.contains("change");
         let emits_submit = ctx.events.contains("submit");
@@ -331,7 +333,7 @@ impl CustomElement for TextEditorElement {
                 // Built with its value: its caret where `caret` says, or at its end.
                 let cursor = self.caret.map(|caret| utf16_offset_to_utf8(&value, caret)).unwrap_or(value.len());
                 let state_focus_handle = focus_handle.clone();
-                let chip_layout = ChipLayout { display: value.clone(), chips: Vec::new() };
+                let inline_layout = InlineLayout { display: value.clone(), nodes: Vec::new() };
                 cx.new(move |cx| TextEditorState {
                     element_id: id,
                     callback,
@@ -342,9 +344,12 @@ impl CustomElement for TextEditorElement {
                     emits_select,
                     reported_selection: None,
                     intercept_keys: Vec::new(),
-                    chip_specs: Vec::new(),
-                    chip_layout,
-                    chip_colors: ChipColors::default(),
+                    inline_specs: Vec::new(),
+                    inline_layout,
+                    inline_children: Vec::new(),
+                    inline_child_count: 0,
+                    inline_widths: Vec::new(),
+                    inline_slots: Vec::new(),
                     focus_handle: state_focus_handle,
                     content: value,
                     placeholder: placeholder.into(),
@@ -401,14 +406,13 @@ impl CustomElement for TextEditorElement {
                 state.caret_color = self.theme.caret;
                 cx.notify();
             }
-            let colors =
-                ChipColors { wash: self.theme.code_wash, border: self.theme.border, icon: self.theme.text_muted };
-            if state.chip_colors != colors {
-                state.chip_colors = colors;
+            if state.inline_child_count != children.len() {
+                state.inline_child_count = children.len();
                 cx.notify();
             }
-            if state.chip_specs != self.chips {
-                state.set_chips(self.chips.clone(), cx);
+            state.inline_children = children;
+            if state.inline_specs != self.inlines {
+                state.set_inlines(self.inlines.clone(), cx);
             }
             if prop_changed {
                 state.sync_prop_value(self.value.clone(), self.caret, cx);
@@ -497,13 +501,13 @@ impl CustomElement for TextEditorElement {
             }
             "theme" => self.theme = Theme::from_prop(Some(&value)),
             "caret" => self.caret = value.as_u64().map(|caret| caret as usize),
-            "chips" => self.chips = super::chips::parse_specs(&value),
+            "inlines" => self.inlines = super::inlines::parse_specs(&value),
             _ => {}
         }
     }
 
     fn supported_props(&self) -> &'static [&'static str] {
-        &["value", "placeholder", "readOnly", "minRows", "maxRows", "interceptKeys", "theme", "caret", "chips"]
+        &["value", "placeholder", "readOnly", "minRows", "maxRows", "interceptKeys", "theme", "caret", "inlines"]
     }
 
     fn supported_events(&self) -> &'static [&'static str] {
@@ -583,26 +587,8 @@ fn push_undo_snapshot(history: &mut VecDeque<EditSnapshot>, snapshot: EditSnapsh
     history.push_back(snapshot);
 }
 
-/// A chip's paint: its wash and hairline from the theme's inline code, its icon muted.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct ChipColors {
-    wash: gpui::Hsla,
-    border: gpui::Hsla,
-    icon: gpui::Hsla,
-}
-
-impl Default for ChipColors {
-    fn default() -> Self {
-        let theme = Theme::dark();
-        Self { wash: theme.code_wash, border: theme.border, icon: theme.text_muted }
-    }
-}
-
-/// A chip as prepaint placed it: its wash (one box a line it is on) and its icon.
-struct ChipPaint {
-    washes: Vec<PaintQuad>,
-    icon: Option<(Bounds<Pixels>, SharedString, std::sync::Arc<[u8]>)>,
-}
+/// The selection's tint, over text and over the inline nodes inside it.
+const SELECTION_COLOR: u32 = 0x7c86ff59;
 
 struct TextEditorState {
     element_id: u64,
@@ -616,11 +602,17 @@ struct TextEditorState {
     reported_selection: Option<(Range<usize>, bool)>,
     /// Keys the editor binds that go to `onKeyDown` instead (`TextEditorElement::intercept_keys`).
     intercept_keys: Vec<String>,
-    /// The `chips` prop, and where they are in `content` and in what is drawn (`chips.rs`). Every
-    /// offset below is the buffer's (`content`'s); the laid-out lines are the display text's.
-    chip_specs: Vec<ChipSpec>,
-    chip_layout: ChipLayout,
-    chip_colors: ChipColors,
+    /// The `inlines` prop, and where they are in `content` and in what is drawn (`inlines.rs`).
+    /// Every offset below is the buffer's (`content`'s); the laid-out lines are the display text's.
+    inline_specs: Vec<InlineSpec>,
+    inline_layout: InlineLayout,
+    /// The children this frame built, which draw the nodes (taken by the text element), and how
+    /// many there are (a spec with a child has its text hidden under it).
+    inline_children: Vec<gpui::AnyElement>,
+    inline_child_count: usize,
+    /// Each child's width as last measured, and the slot it takes: that many no-break spaces.
+    inline_widths: Vec<Option<Pixels>>,
+    inline_slots: Vec<Option<usize>>,
     focus_handle: FocusHandle,
     content: String,
     placeholder: SharedString,
@@ -700,9 +692,9 @@ impl TextEditorState {
             return;
         }
         self.content = value;
-        self.refresh_chips();
+        self.refresh_inlines();
         let at = caret.map(|caret| self.offset_from_utf16(caret)).unwrap_or(self.content.len()).min(self.content.len());
-        let at = self.chip_layout.snap(at, true);
+        let at = self.inline_layout.snap(at, true);
         self.selected_range = at..at;
         self.selection_reversed = false;
         self.marked_range = None;
@@ -717,7 +709,7 @@ impl TextEditorState {
     }
 
     fn emit_change(&mut self) {
-        self.refresh_chips();
+        self.refresh_inlines();
         if self.emits_change {
             self.pending_values.push_back(self.content.clone());
             while self.pending_values.len() > 32 {
@@ -753,28 +745,39 @@ impl TextEditorState {
         });
     }
 
-    /// The chips' places, after the content, the specs or the composition changed.
-    fn refresh_chips(&mut self) {
-        if self.chip_specs.is_empty() {
-            if !self.chip_layout.chips.is_empty() || self.chip_layout.display != self.content {
-                self.chip_layout = ChipLayout { display: self.content.clone(), chips: Vec::new() };
+    /// The nodes' places, after the content, the specs, their slots or the composition changed.
+    fn refresh_inlines(&mut self) {
+        if self.inline_specs.is_empty() {
+            if !self.inline_layout.nodes.is_empty() || self.inline_layout.display != self.content {
+                self.inline_layout = InlineLayout { display: self.content.clone(), nodes: Vec::new() };
             }
             return;
         }
-        self.chip_layout = super::chips::layout(&self.content, &self.chip_specs, self.marked_range.as_ref());
+        self.inline_layout =
+            super::inlines::layout(&self.content, &self.inline_specs, &self.inline_slots, self.marked_range.as_ref());
     }
 
-    fn set_chips(&mut self, specs: Vec<ChipSpec>, cx: &mut Context<Self>) {
-        self.chip_specs = specs;
-        self.refresh_chips();
+    fn set_inlines(&mut self, specs: Vec<InlineSpec>, cx: &mut Context<Self>) {
+        // A child measured for another text is measured again.
+        let kept = |index: usize| self.inline_specs.get(index) == specs.get(index);
+        let widths: Vec<Option<Pixels>> = (0..specs.len())
+            .map(|index| self.inline_widths.get(index).copied().flatten().filter(|_| kept(index)))
+            .collect();
+        let slots: Vec<Option<usize>> = (0..specs.len())
+            .map(|index| self.inline_slots.get(index).copied().flatten().filter(|_| kept(index)))
+            .collect();
+        self.inline_specs = specs;
+        self.inline_widths = widths;
+        self.inline_slots = slots;
+        self.refresh_inlines();
         let range = self.selected_range.clone();
-        self.selected_range = self.chip_layout.snap(range.start, false)..self.chip_layout.snap(range.end, true);
+        self.selected_range = self.inline_layout.snap(range.start, false)..self.inline_layout.snap(range.end, true);
         cx.notify();
     }
 
-    /// Where `offset` lands, moved there from the caret: past a chip in the direction it went.
+    /// Where `offset` lands, moved there from the caret: past a node in the direction it went.
     fn snap_from_cursor(&self, offset: usize) -> usize {
-        self.chip_layout.snap(offset, offset >= self.cursor_offset())
+        self.inline_layout.snap(offset, offset >= self.cursor_offset())
     }
 
     fn emit_submit(&self) {
@@ -848,7 +851,7 @@ impl TextEditorState {
             .rev()
             .find_map(|(index, _)| (index < offset).then_some(index))
             .unwrap_or(0);
-        self.chip_layout.snap(previous, false)
+        self.inline_layout.snap(previous, false)
     }
 
     fn next_boundary(&self, offset: usize) -> usize {
@@ -857,7 +860,7 @@ impl TextEditorState {
             .grapheme_indices(true)
             .find_map(|(index, _)| (index > offset).then_some(index))
             .unwrap_or(self.content.len());
-        self.chip_layout.snap(next, true)
+        self.inline_layout.snap(next, true)
     }
 
     fn previous_word_boundary(&self, offset: usize) -> usize {
@@ -867,7 +870,7 @@ impl TextEditorState {
             .rev()
             .find_map(|(index, word)| (index < offset && !word.trim().is_empty()).then_some(index))
             .unwrap_or(0);
-        self.chip_layout.snap(previous, false)
+        self.inline_layout.snap(previous, false)
     }
 
     fn next_word_boundary(&self, offset: usize) -> usize {
@@ -879,7 +882,7 @@ impl TextEditorState {
                 (end > offset && !word.trim().is_empty()).then_some(end)
             })
             .unwrap_or(self.content.len());
-        self.chip_layout.snap(next, true)
+        self.inline_layout.snap(next, true)
     }
 
     fn line_range_at(&self, offset: usize) -> Range<usize> {
@@ -1171,7 +1174,7 @@ impl TextEditorState {
     }
 
     fn point_for_index(&self, index: usize) -> Option<Point<Pixels>> {
-        self.point_for_display(if self.display_is_placeholder { 0 } else { self.chip_layout.to_display(index) })
+        self.point_for_display(if self.display_is_placeholder { 0 } else { self.inline_layout.to_display(index) })
     }
 
     /// Where display offset `index` (of the laid-out text) is drawn, from the text's top left.
@@ -1193,12 +1196,12 @@ impl TextEditorState {
         if self.display_is_placeholder {
             return 0;
         }
-        self.chip_layout.to_buffer(self.display_index_for_point(position)).min(self.content.len())
+        self.inline_layout.to_buffer(self.display_index_for_point(position)).min(self.content.len())
     }
 
     /// The display offset (of the laid-out text) nearest `position`, from the text's top left.
     fn display_index_for_point(&self, position: Point<Pixels>) -> usize {
-        let display_len = self.chip_layout.display.len();
+        let display_len = self.inline_layout.display.len();
         let mut y = f32::from(position.y).max(0.0);
         for (line_index, line) in self.last_lines.iter().enumerate() {
             let height = f32::from(line.size(self.line_height).height);
@@ -1240,15 +1243,18 @@ impl TextEditorState {
             }
             PressIntent::SelectWord => {
                 let index = self.index_for_mouse_position(event.position);
-                // A double click on a chip selects it; elsewhere the word under it.
-                let chip = self.last_bounds.filter(|_| !self.display_is_placeholder).and_then(|bounds| {
+                // A double click on a node selects it; elsewhere the word under it, with whole
+                // any node the word runs into.
+                let node = self.last_bounds.filter(|_| !self.display_is_placeholder).and_then(|bounds| {
                     let local = point(
                         event.position.x - bounds.left() + px(self.scroll_left),
                         event.position.y - bounds.top() + px(self.scroll_top),
                     );
-                    self.chip_layout.at_display(self.display_index_for_point(local)).map(|chip| chip.range.clone())
+                    self.inline_layout.at_display(self.display_index_for_point(local)).map(|node| node.range.clone())
                 });
-                let range = chip.unwrap_or_else(|| crate::text::selection::word_range(&self.content, index));
+                let range = node.unwrap_or_else(|| {
+                    self.inline_layout.widen(crate::text::selection::word_range(&self.content, index))
+                });
                 self.move_to(range.start, cx);
                 self.select_to(range.end, cx);
             }
@@ -1396,11 +1402,11 @@ impl TextEditorState {
     }
 
     fn layout_text(&mut self, width: Pixels, style: &TextStyle, window: &mut Window) -> f32 {
-        self.refresh_chips();
+        self.refresh_inlines();
         let (display, is_placeholder) = if self.content.is_empty() {
             (self.placeholder.clone(), true)
         } else {
-            (SharedString::from(self.chip_layout.display.clone()), false)
+            (SharedString::from(self.inline_layout.display.clone()), false)
         };
         let rem_size = window.rem_size();
         let font_size = style.font_size.to_pixels(rem_size);
@@ -1410,23 +1416,63 @@ impl TextEditorState {
         // request_layout instead.
         self.line_height = style.line_height_in_pixels(rem_size);
         let color = if is_placeholder { gpui::rgba(0x8f8f8fff).into() } else { style.color };
-        let run = |len: usize, underline: bool| TextRun {
+        let run = |len: usize, underline: bool, hidden: bool| TextRun {
             len,
             font: style.font(),
-            color,
+            color: if hidden { gpui::transparent_black() } else { color },
             background_color: None,
             underline: underline.then_some(UnderlineStyle { color: Some(color), thickness: px(1.0), wavy: false }),
             strikethrough: None,
         };
-        let runs = match self.marked_range.as_ref() {
-            Some(marked) if !is_placeholder => {
-                let marked = self.chip_layout.to_display(marked.start)..self.chip_layout.to_display(marked.end);
-                vec![run(marked.start, false), run(marked.len(), true), run(display.len() - marked.end, false)]
-                    .into_iter()
-                    .filter(|run| run.len > 0)
-                    .collect()
+        // How wide a slot's no-break space is, in this font: a measured child takes as many as it needs.
+        let slot_char = SharedString::from(super::inlines::SLOT.to_string());
+        let advance = window
+            .text_system()
+            .shape_line(slot_char, font_size, &[run(super::inlines::SLOT.len_utf8(), false, false)], None)
+            .width;
+        if advance > px(0.0) {
+            let slots: Vec<Option<usize>> = self
+                .inline_widths
+                .iter()
+                .map(|width| width.map(|width| (f32::from(width) / f32::from(advance)).ceil().max(1.0) as usize))
+                .collect();
+            if slots != self.inline_slots {
+                self.inline_slots = slots;
+                self.refresh_inlines();
             }
-            _ => vec![run(display.len(), false)],
+        }
+        let display = if is_placeholder { display } else { SharedString::from(self.inline_layout.display.clone()) };
+        // Runs split where the composition and every node a child draws begin and end: the
+        // composition underlined, a node's own text (its slot, or its label until measured) not drawn.
+        let runs = if is_placeholder {
+            vec![run(display.len(), false, false)]
+        } else {
+            let marked = self
+                .marked_range
+                .as_ref()
+                .map(|marked| self.inline_layout.to_display(marked.start)..self.inline_layout.to_display(marked.end));
+            let hidden: Vec<Range<usize>> = self
+                .inline_layout
+                .nodes
+                .iter()
+                .filter(|node| node.first && node.spec < self.inline_child_count)
+                .map(|node| node.display.clone())
+                .collect();
+            let mut cuts = vec![0, display.len()];
+            cuts.extend(marked.iter().flat_map(|range| [range.start, range.end]));
+            cuts.extend(hidden.iter().flat_map(|range| [range.start, range.end]));
+            cuts.retain(|cut| *cut <= display.len());
+            cuts.sort_unstable();
+            cuts.dedup();
+            cuts.windows(2)
+                .map(|pair| {
+                    let (from, to) = (pair[0], pair[1]);
+                    let underline = marked.as_ref().is_some_and(|range| from >= range.start && to <= range.end);
+                    let hide = hidden.iter().any(|range| from >= range.start && to <= range.end);
+                    run(to - from, underline, hide)
+                })
+                .filter(|run| run.len > 0)
+                .collect()
         };
         let wrap_width = self.multiline.then_some(width);
         let lines = window
@@ -1455,46 +1501,28 @@ impl TextEditorState {
         self.content_height
     }
 
-    /// The chips' washes and icons, placed on the laid-out lines whose top left is `origin`.
-    fn chip_paints(&self, origin: Point<Pixels>, bounds: Bounds<Pixels>) -> Vec<ChipPaint> {
-        let line_height = self.line_height;
-        let inset = px(1.0);
-        let radius = px(4.0);
-        let wash = |from: Point<Pixels>, to: Point<Pixels>| {
-            gpui::quad(
-                Bounds::from_corners(
-                    point(origin.x + from.x + inset, origin.y + from.y + inset),
-                    point(origin.x + to.x - inset, origin.y + from.y + line_height - inset),
-                ),
-                radius,
-                self.chip_colors.wash,
-                px(1.0),
-                self.chip_colors.border,
-                gpui::BorderStyle::Solid,
-            )
-        };
-        let mut paints = Vec::with_capacity(self.chip_layout.chips.len());
-        for chip in &self.chip_layout.chips {
-            let (Some(start), Some(end)) =
-                (self.point_for_display(chip.display.start), self.point_for_display(chip.display.end))
+    /// Where each node a child draws is, on the laid-out lines (from the text's top left): its
+    /// spec, the top left of its slot, and the slot's width. A node that wraps to a new line starts
+    /// there: gpui places the offset at a wrap at the end of the line before.
+    fn inline_places(&self) -> Vec<(usize, Point<Pixels>, Pixels)> {
+        let mut places = Vec::new();
+        for node in self.inline_layout.nodes.iter().filter(|node| node.first) {
+            let (Some(mut start), Some(end)) =
+                (self.point_for_display(node.display.start), self.point_for_display(node.display.end))
             else {
                 continue;
             };
-            let washes = if start.y == end.y {
-                vec![wash(start, end)]
-            } else {
-                // Wrapped (a label longer than the line): to the line's end, then from the next's start.
-                let line_end = point(bounds.right() - origin.x, start.y);
-                vec![wash(start, line_end), wash(point(px(0.0), end.y), end)]
-            };
-            let side = (self.font_size * 0.95).min(line_height - px(4.0)).max(px(8.0));
-            let icon = self.chip_specs.get(chip.spec).and_then(|spec| spec.icon.clone()).map(|(key, bytes)| {
-                let at = point(origin.x + start.x + px(5.0), origin.y + start.y + (line_height - side) / 2.0);
-                (Bounds::new(at, size(side, side)), key, bytes)
-            });
-            paints.push(ChipPaint { washes, icon });
+            let first_char = self.inline_layout.display[node.display.start..].chars().next().map_or(1, char::len_utf8);
+            if let Some(after) = self.point_for_display(node.display.start + first_char) {
+                if after.y > start.y {
+                    start = point(px(0.0), after.y);
+                }
+            }
+            // Wider than its line, it was broken: drawn from its start, its width unknown here.
+            let width = if end.y == start.y { end.x - start.x } else { px(0.0) };
+            places.push((node.spec, start, width));
         }
-        paints
+        places
     }
 
     fn clamp_scroll(&mut self, viewport_width: f32, viewport_height: f32) {
@@ -1548,7 +1576,7 @@ impl EntityInputHandler for TextEditorState {
 
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.marked_range = None;
-        self.refresh_chips();
+        self.refresh_inlines();
         cx.notify();
     }
 
@@ -1567,6 +1595,8 @@ impl EntityInputHandler for TextEditorState {
             .map(|range| self.range_from_utf16(range))
             .or(self.marked_range.clone())
             .unwrap_or(self.selected_range.clone());
+        // An edit that reaches into an inline node takes it whole (a composition never holds one).
+        let range = if self.marked_range.is_none() { self.inline_layout.widen(range) } else { range };
         let replacement = if self.multiline { new_text.to_string() } else { single_line_text(new_text) };
         if self.marked_range.is_none() {
             self.record_edit(&range, &replacement, cx.background_executor().now());
@@ -1604,6 +1634,7 @@ impl EntityInputHandler for TextEditorState {
             self.redo_stack.clear();
             self.last_edit = None;
         }
+        let range = if self.marked_range.is_none() { self.inline_layout.widen(range) } else { range };
         let replacement = if self.multiline { new_text.to_string() } else { single_line_text(new_text) };
         self.content = self.content[..range.start].to_owned() + &replacement + &self.content[range.end..];
         self.marked_range = (!replacement.is_empty()).then_some(range.start..range.start + replacement.len());
@@ -1646,7 +1677,7 @@ impl EntityInputHandler for TextEditorState {
 
     fn set_selected_text_range(&mut self, range_utf16: Range<usize>, _: &mut Window, cx: &mut Context<Self>) {
         let range = self.range_from_utf16(&range_utf16);
-        self.selected_range = self.chip_layout.snap(range.start, false)..self.chip_layout.snap(range.end, true);
+        self.selected_range = self.inline_layout.snap(range.start, false)..self.inline_layout.snap(range.end, true);
         self.selection_reversed = false;
         self.follow_cursor = true;
         self.reset_blink(cx);
@@ -1733,7 +1764,12 @@ impl gpui::Render for TextEditorState {
             })
             .w_full()
             .min_w_0()
-            .child(EditorTextElement { input: cx.entity(), min_rows: self.min_rows, max_rows: self.max_rows })
+            .child(EditorTextElement {
+                input: cx.entity(),
+                min_rows: self.min_rows,
+                max_rows: self.max_rows,
+                children: std::mem::take(&mut self.inline_children).into_iter().map(Some).collect(),
+            })
     }
 }
 
@@ -1741,12 +1777,16 @@ struct EditorTextElement {
     input: Entity<TextEditorState>,
     min_rows: usize,
     max_rows: usize,
+    /// The editor's children: child `i` draws the first node of `inlines[i]`.
+    children: Vec<Option<gpui::AnyElement>>,
 }
 
 struct EditorPrepaint {
     caret: Option<PaintQuad>,
     selection: Vec<PaintQuad>,
-    chips: Vec<ChipPaint>,
+    /// The children placed on their nodes, and the selection's tint over the nodes inside it.
+    inlines: Vec<gpui::AnyElement>,
+    inline_selection: Vec<PaintQuad>,
 }
 
 impl gpui::Element for EditorTextElement {
@@ -1795,7 +1835,7 @@ impl gpui::Element for EditorTextElement {
         _: Option<&gpui::InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut (),
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut App,
     ) -> EditorPrepaint {
         self.input.update(cx, |input, _| {
@@ -1805,7 +1845,7 @@ impl gpui::Element for EditorTextElement {
         });
         let input = self.input.read(cx);
         let origin = point(bounds.left() - px(input.scroll_left), bounds.top() - px(input.scroll_top));
-        let chips = if input.display_is_placeholder { Vec::new() } else { input.chip_paints(origin, bounds) };
+        let places = if input.display_is_placeholder { Vec::new() } else { input.inline_places() };
         let mut selection = Vec::new();
         let mut caret = None;
         if input.selected_range.is_empty() || input.display_is_placeholder {
@@ -1817,7 +1857,7 @@ impl gpui::Element for EditorTextElement {
         } else if let (Some(start), Some(end)) =
             (input.point_for_index(input.selected_range.start), input.point_for_index(input.selected_range.end))
         {
-            let color = gpui::rgba(0x7c86ff59);
+            let color = gpui::rgba(SELECTION_COLOR);
             if start.y == end.y {
                 selection.push(fill(
                     Bounds::from_corners(
@@ -1852,7 +1892,66 @@ impl gpui::Element for EditorTextElement {
                 ));
             }
         }
-        EditorPrepaint { caret, selection, chips }
+        // Each child on its node: measured as it would be alone, centred in its slot, and kept
+        // inside the field. A width not seen before is the slot's at the next layout.
+        let line_height = input.line_height;
+        let selected = input.selected_range.clone();
+        let selected_nodes: Vec<usize> = input
+            .inline_layout
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.first
+                    && !selected.is_empty()
+                    && node.range.start >= selected.start
+                    && node.range.end <= selected.end
+            })
+            .map(|node| node.spec)
+            .collect();
+        let mut inlines = Vec::new();
+        let mut inline_selection = Vec::new();
+        let mut measured: Vec<(usize, Pixels)> = Vec::new();
+        window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+            for (spec, at, slot_width) in places {
+                let Some(mut child) = self.children.get_mut(spec).and_then(Option::take) else {
+                    continue;
+                };
+                let child_size = child.layout_as_root(
+                    size(gpui::AvailableSpace::MaxContent, gpui::AvailableSpace::MaxContent),
+                    window,
+                    cx,
+                );
+                measured.push((spec, child_size.width));
+                let dx = ((slot_width - child_size.width) / 2.0).max(px(0.0));
+                let dy = (line_height - child_size.height) / 2.0;
+                child.prepaint_at(point(origin.x + at.x + dx, origin.y + at.y + dy), window, cx);
+                inlines.push(child);
+                if selected_nodes.contains(&spec) {
+                    let top_left = point(origin.x + at.x, origin.y + at.y);
+                    let width = slot_width.max(child_size.width);
+                    inline_selection
+                        .push(fill(Bounds::new(top_left, size(width, line_height)), gpui::rgba(SELECTION_COLOR)));
+                }
+            }
+        });
+        let changed = self.input.update(cx, |input, _| {
+            let mut changed = false;
+            for (spec, width) in measured {
+                if input.inline_widths.len() <= spec {
+                    input.inline_widths.resize(spec + 1, None);
+                }
+                let known = input.inline_widths[spec];
+                if known.is_none_or(|known| (f32::from(known) - f32::from(width)).abs() > 0.5) {
+                    input.inline_widths[spec] = Some(width);
+                    changed = true;
+                }
+            }
+            changed
+        });
+        if changed {
+            window.refresh();
+        }
+        EditorPrepaint { caret, selection, inlines, inline_selection }
     }
 
     fn paint(
@@ -1874,11 +1973,6 @@ impl gpui::Element for EditorTextElement {
             }
         });
         window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
-            for chip in &mut prepaint.chips {
-                for wash in chip.washes.drain(..) {
-                    window.paint_quad(wash);
-                }
-            }
             for quad in prepaint.selection.drain(..) {
                 window.paint_quad(quad);
             }
@@ -1886,7 +1980,7 @@ impl gpui::Element for EditorTextElement {
                 let display = if input.content.is_empty() {
                     input.placeholder.clone()
                 } else {
-                    input.chip_layout.display.clone().into()
+                    input.inline_layout.display.clone().into()
                 };
                 (std::mem::take(&mut input.last_lines), input.line_height, input.scroll_top, input.scroll_left, display)
             });
@@ -1906,13 +2000,11 @@ impl gpui::Element for EditorTextElement {
                 y += height;
             }
             self.input.update(cx, |input, _| input.last_lines = lines);
-            let icon_color = self.input.read(cx).chip_colors.icon;
-            for chip in prepaint.chips.drain(..) {
-                if let Some((icon_bounds, key, bytes)) = chip.icon {
-                    window
-                        .paint_svg(icon_bounds, key, Some(&bytes), gpui::TransformationMatrix::unit(), icon_color, cx)
-                        .ok();
-                }
+            for child in &mut prepaint.inlines {
+                child.paint(window, cx);
+            }
+            for quad in prepaint.inline_selection.drain(..) {
+                window.paint_quad(quad);
             }
             let caret_shown = self.input.update(cx, |input, cx| input.caret_shown(window, cx));
             if caret_shown {
