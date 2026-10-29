@@ -1,33 +1,33 @@
-// Settings → General → New tabs open: the `new_tab` option as a menu of the blocks the plugins that
-// are on declare (Launcher's list, Terminal's shell, Browser's page, …). pumi has no block of its
-// own for a new tab, so with nothing picked a new tab doesn't open; with nothing installed there is
-// nothing to pick, and the row says to install a plugin.
+// Settings → General → New tabs open: the `new_tab` option as a menu of what a new tab can start,
+// the `+` menu's list (`startable.ts`): Terminal, Pi, Claude Code, the Launcher's list, Film…
+// While the option names nothing installed, the menu shows what new tabs open then (the Launcher's
+// list, else a shell, else the first); with nothing installed there is nothing to pick, and the
+// row offers plugins.
 import { useSyncExternalStore } from "react"
 import { Button, OptionRow, SelectField, type SelectOption } from "../../sdk/settings/index.ts"
 import * as plugins from "../plugins.ts"
+import { newTabOf, settable, startables, type From } from "../startable.ts"
 
-/** What the menu calls `new_tab` naming no block. */
-export const NOTHING = "Nothing (install a plugin)"
-
-type Entry = Pick<plugins.Entry, "id" | "title" | "prefix" | "active" | "manifest">
+/** Its title, and its plugin's name when they differ (`Claude Code · Agents`). */
+const labelOf = (title: string, plugin: string) => (title === plugin ? title : `${title} · ${plugin}`)
 
 /**
- * The menu's choices: nothing, then every block of a plugin that is on, called by its title and
- * its plugin's name when they differ (`New Tab · Launcher`). A value naming a block no plugin that
- * is on declares stays, said to be missing, so the menu shows what is set.
+ * The menu's choices and the one chosen, for `new_tab` being `current`. A block `new_tab` names
+ * that a plugin declares but the list leaves out (an agent's bare terminal) opens, so it is shown
+ * too; anything else not installed is what new tabs fall back on.
  */
-export function newTabChoices(entries: Iterable<Entry>, current: string): SelectOption[] {
-  const out: SelectOption[] = [{ value: "", label: NOTHING }]
-  for (const e of entries) {
-    if (!e.active) continue
-    const plugin = e.title ?? e.manifest.name ?? e.id
-    for (const b of e.manifest.contributes?.blocks ?? []) {
-      const title = b.title ?? b.id
-      out.push({ value: `${e.prefix}${b.id}`, label: title === plugin ? title : `${title} · ${plugin}` })
+export function newTabChoices(entries: Iterable<From>, current: string): { options: SelectOption[]; value: string } {
+  const all = [...entries]
+  const list = startables(all).filter(settable)
+  const options: SelectOption[] = list.map((s) => ({ value: s.value, label: labelOf(s.title, s.pluginTitle) }))
+  for (const e of all) {
+    const block = (e.manifest.contributes?.blocks ?? []).find((b) => `${e.prefix}${b.id}` === current)
+    if (block && !list.some((s) => s.value === current || s.alias === current)) {
+      options.push({ value: current, label: labelOf(block.title ?? block.id, e.title ?? e.manifest.name ?? e.id) })
+      return { options, value: current }
     }
   }
-  if (current && !out.some((o) => o.value === current)) out.push({ value: current, label: `${current} (not installed)` })
-  return out
+  return { options, value: newTabOf(list, current)?.value ?? "" }
 }
 
 let version = 0
@@ -42,18 +42,15 @@ export function NewTabRow({ open }: { open(page: string, link?: string): void })
     <OptionRow
       name="new_tab"
       control={(value, set) => {
-        const current = typeof value === "string" ? value : ""
-        const choices = newTabChoices(plugins.entries.values(), current)
-        return (
-          <>
-            {choices.length === 1 ? (
-              <Button primary onClick={() => open("store")}>
-                Get plugins
-              </Button>
-            ) : null}
-            <SelectField options={choices} value={current} onChange={(picked) => set(picked)} width={240} testId="select-new_tab" />
-          </>
-        )
+        const { options, value: chosen } = newTabChoices(plugins.entries.values(), typeof value === "string" ? value : "")
+        if (!options.length) {
+          return (
+            <Button primary onClick={() => open("store")}>
+              Get plugins
+            </Button>
+          )
+        }
+        return <SelectField options={options} value={chosen} onChange={(picked) => set(picked)} width={240} testId="select-new_tab" />
       }}
     />
   )

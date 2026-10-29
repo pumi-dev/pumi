@@ -1,6 +1,5 @@
-// What the app says when a new tab can't open: pumi has no block of its own for one, so while the
-// `new_tab` option names none (nothing installed, or nothing picked), `tab.open(null, …)` is
-// refused (`pumi-host`'s `NO_NEW_TAB`). The window explains it once at a time and offers Settings.
+// What the app says when a new tab can't open: pumi has no block of its own for one, so while no
+// plugin installed starts one, `tab.open(null, …)` is refused (`pumi-host`'s `NO_NEW_TAB`). The window explains it once at a time and offers Settings.
 import { confirm } from "../sdk/dialogs.ts"
 import { openSettings } from "./settings/open.ts"
 
@@ -22,7 +21,7 @@ export function explainNoNewTab(err: unknown): boolean {
   asking = true
   confirm({
     title: "Install a plugin to open tabs",
-    detail: "pumi opens what its plugins bring: install Launcher, Terminal, Agents or Browser, then pick what new tabs open in Settings ▸ General.",
+    detail: "pumi opens what its plugins bring: install Launcher, Terminal, Agents or Browser. Settings ▸ General picks which one new tabs open.",
     confirm: "Open Settings",
     cancel: "Close",
   })
