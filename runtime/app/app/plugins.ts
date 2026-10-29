@@ -103,6 +103,8 @@ export const entries = new Map<string, Entry>()
 const made = new Map<string, Made>()
 /** The functions each plugin provides, by name. */
 const provided = new Map<string, string>()
+/** Of those, the ones `route` provides from a plugin's manifest (its commands and `rpc`), by plugin. */
+const routed = new Map<string, Set<string>>()
 const listeners = new Set<() => void>()
 let host: Host | undefined
 let isHost = false
@@ -208,10 +210,10 @@ function route(entry: Entry) {
   }
   for (const command of entry.manifest.contributes?.commands ?? []) answer(`${entry.prefix}${command.id}`, { desc: command.title })
   if (entry.ui && entry.main) answer(`${entry.prefix}rpc`, { desc: `Calls an export of ${entry.id}'s main.ts, for its ui.tsx in another app` })
-  withdraw(
-    entry.id,
-    [...provided].filter(([name, owner]) => owner === entry.id && !answers.has(name)).map(([name]) => name),
-  )
+  // Only what an earlier route provided and the manifest no longer has: the functions its worker
+  // set itself (`fn.set`) are the worker's, and stay while it runs.
+  withdraw(entry.id, [...(routed.get(entry.id) ?? [])].filter((name) => !answers.has(name)))
+  routed.set(entry.id, answers)
 }
 
 function provide(pkg: string, name: string, spec: Record<string, unknown>): Promise<null> {
@@ -285,6 +287,7 @@ function undo(id: string) {
     ;(name === "event.off" ? unlisten(args[0] as number) : call(name, ...args)).catch(() => {})
   }
   withdraw(id, [...provided].filter(([, p]) => p === id).map(([n]) => n))
+  routed.delete(id)
 }
 
 /** `args` as the server takes them from `pkg`: callbacks bound to it, storage its own. */
