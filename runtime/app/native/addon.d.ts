@@ -763,6 +763,13 @@ export interface EventPayload {
    * Populated for: fileDrop.
    */
   paths?: Array<string>
+  /**
+   * A text editor's selection, as UTF-16 offsets into its value: equal when it is only the
+   * caret. `selectionEnd` is where the caret is unless the selection was made backwards.
+   * Populated for: `<input>` and `<textarea>` change and select.
+   */
+  selectionStart?: number
+  selectionEnd?: number
   modifiers?: EventModifiers
 }
 

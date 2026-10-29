@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 use crate::renderer::EventCallback;
 
 pub mod anchored;
+pub mod chips;
 pub mod img;
 pub mod input;
 

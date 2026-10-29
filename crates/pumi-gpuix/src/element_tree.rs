@@ -135,6 +135,12 @@ pub struct EventPayload {
     /// Populated for: fileDrop.
     pub paths: Option<Vec<String>>,
 
+    /// A text editor's selection, as UTF-16 offsets into its value: equal when it is only the
+    /// caret. `selectionEnd` is where the caret is unless the selection was made backwards.
+    /// Populated for: `<input>` and `<textarea>` change and select.
+    pub selection_start: Option<f64>,
+    pub selection_end: Option<f64>,
+
     // ── Modifiers ────────────────────────────────────────────────────
     pub modifiers: Option<EventModifiers>,
 }
@@ -172,6 +178,8 @@ impl Default for EventPayload {
             match_count: None,
             motion_generation: None,
             paths: None,
+            selection_start: None,
+            selection_end: None,
             modifiers: None,
         }
     }

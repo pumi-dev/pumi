@@ -579,7 +579,7 @@ impl SvgElement {
     }
 }
 
-fn svg_bytes(src: &str) -> Option<Vec<u8>> {
+pub(crate) fn svg_bytes(src: &str) -> Option<Vec<u8>> {
     if src.starts_with("data:") {
         let (format, bytes) = decode_image_data_url(src)?;
         return (format == gpui::ImageFormat::Svg).then_some(bytes);

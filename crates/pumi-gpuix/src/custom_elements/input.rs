@@ -21,6 +21,7 @@ use gpui::{
 use unicode_segmentation::UnicodeSegmentation;
 use web_time::Instant;
 
+use super::chips::{ChipLayout, ChipSpec};
 use super::{CustomElement, CustomElementFactory, CustomRenderContext};
 use crate::renderer::{emit_event_full, emit_key_event, EventCallback};
 use crate::theme::Theme;
@@ -271,6 +272,10 @@ struct TextEditorElement {
     /// `interceptKeys`: keys the editor binds (`up`, `down`, `enter`) that go to `onKeyDown`
     /// instead while listed, for a completion list drawn over the field.
     intercept_keys: Vec<String>,
+    /// `caret`: where the caret goes (UTF-16) when `value` is set from outside; the end without.
+    caret: Option<usize>,
+    /// `chips`: mentions drawn as chips (`chips.rs`).
+    chips: Vec<ChipSpec>,
     last_prop_value: Option<String>,
     theme: Theme,
     state: Option<Entity<TextEditorState>>,
@@ -286,6 +291,8 @@ impl TextEditorElement {
             min_rows: 1,
             max_rows: if multiline { 10 } else { 1 },
             intercept_keys: Vec::new(),
+            caret: None,
+            chips: Vec::new(),
             last_prop_value: None,
             theme: Theme::dark(),
             state: None,
@@ -305,6 +312,7 @@ impl CustomElement for TextEditorElement {
         let emits_submit = ctx.events.contains("submit");
         let emits_key_down = ctx.events.contains("keyDown");
         let emits_key_up = ctx.events.contains("keyUp");
+        let emits_select = ctx.events.contains("select");
         let callback = ctx.event_callback.clone();
 
         let state = self
@@ -319,8 +327,10 @@ impl CustomElement for TextEditorElement {
                 let caret_color = self.theme.caret;
                 let callback = callback.clone();
                 let id = ctx.id;
-                let cursor = value.len();
+                // Built with its value: its caret where `caret` says, or at its end.
+                let cursor = self.caret.map(|caret| utf16_offset_to_utf8(&value, caret)).unwrap_or(value.len());
                 let state_focus_handle = focus_handle.clone();
+                let chip_layout = ChipLayout { display: value.clone(), chips: Vec::new() };
                 cx.new(move |cx| TextEditorState {
                     element_id: id,
                     callback,
@@ -328,7 +338,12 @@ impl CustomElement for TextEditorElement {
                     emits_submit,
                     emits_key_down,
                     emits_key_up,
+                    emits_select,
+                    reported_selection: None,
                     intercept_keys: Vec::new(),
+                    chip_specs: Vec::new(),
+                    chip_layout,
+                    chip_colors: ChipColors::default(),
                     focus_handle: state_focus_handle,
                     content: value,
                     placeholder: placeholder.into(),
@@ -375,6 +390,7 @@ impl CustomElement for TextEditorElement {
             }
             state.emits_key_down = emits_key_down;
             state.emits_key_up = emits_key_up;
+            state.emits_select = emits_select;
             state.placeholder = self.placeholder.clone().into();
             state.read_only = self.read_only;
             state.min_rows = self.min_rows.max(1);
@@ -384,8 +400,17 @@ impl CustomElement for TextEditorElement {
                 state.caret_color = self.theme.caret;
                 cx.notify();
             }
+            let colors =
+                ChipColors { wash: self.theme.code_wash, border: self.theme.border, icon: self.theme.text_muted };
+            if state.chip_colors != colors {
+                state.chip_colors = colors;
+                cx.notify();
+            }
+            if state.chip_specs != self.chips {
+                state.set_chips(self.chips.clone(), cx);
+            }
             if prop_changed {
-                state.sync_prop_value(self.value.clone(), cx);
+                state.sync_prop_value(self.value.clone(), self.caret, cx);
             }
         });
         self.last_prop_value = Some(self.value.clone());
@@ -466,16 +491,18 @@ impl CustomElement for TextEditorElement {
                     .unwrap_or_default()
             }
             "theme" => self.theme = Theme::from_prop(Some(&value)),
+            "caret" => self.caret = value.as_u64().map(|caret| caret as usize),
+            "chips" => self.chips = super::chips::parse_specs(&value),
             _ => {}
         }
     }
 
     fn supported_props(&self) -> &'static [&'static str] {
-        &["value", "placeholder", "readOnly", "minRows", "maxRows", "interceptKeys", "theme"]
+        &["value", "placeholder", "readOnly", "minRows", "maxRows", "interceptKeys", "theme", "caret", "chips"]
     }
 
     fn supported_events(&self) -> &'static [&'static str] {
-        &["change", "submit", "click", "keyDown", "keyUp", "focus", "blur", "fileDrop"]
+        &["change", "submit", "select", "click", "keyDown", "keyUp", "focus", "blur", "fileDrop"]
     }
 
     fn destroy(&mut self) {
@@ -551,6 +578,27 @@ fn push_undo_snapshot(history: &mut VecDeque<EditSnapshot>, snapshot: EditSnapsh
     history.push_back(snapshot);
 }
 
+/// A chip's paint: its wash and hairline from the theme's inline code, its icon muted.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ChipColors {
+    wash: gpui::Hsla,
+    border: gpui::Hsla,
+    icon: gpui::Hsla,
+}
+
+impl Default for ChipColors {
+    fn default() -> Self {
+        let theme = Theme::dark();
+        Self { wash: theme.code_wash, border: theme.border, icon: theme.text_muted }
+    }
+}
+
+/// A chip as prepaint placed it: its wash (one box a line it is on) and its icon.
+struct ChipPaint {
+    washes: Vec<PaintQuad>,
+    icon: Option<(Bounds<Pixels>, SharedString, std::sync::Arc<[u8]>)>,
+}
+
 struct TextEditorState {
     element_id: u64,
     callback: Option<EventCallback>,
@@ -558,8 +606,16 @@ struct TextEditorState {
     emits_submit: bool,
     emits_key_down: bool,
     emits_key_up: bool,
+    emits_select: bool,
+    /// The selection the last `change` or `select` said, so a `select` says only a move.
+    reported_selection: Option<(Range<usize>, bool)>,
     /// Keys the editor binds that go to `onKeyDown` instead (`TextEditorElement::intercept_keys`).
     intercept_keys: Vec<String>,
+    /// The `chips` prop, and where they are in `content` and in what is drawn (`chips.rs`). Every
+    /// offset below is the buffer's (`content`'s); the laid-out lines are the display text's.
+    chip_specs: Vec<ChipSpec>,
+    chip_layout: ChipLayout,
+    chip_colors: ChipColors,
     focus_handle: FocusHandle,
     content: String,
     placeholder: SharedString,
@@ -624,22 +680,25 @@ impl TextEditorState {
         }
     }
 
-    fn sync_prop_value(&mut self, value: String, cx: &mut Context<Self>) {
+    fn sync_prop_value(&mut self, value: String, caret: Option<usize>, cx: &mut Context<Self>) {
         if let Some(index) = self.pending_values.iter().rposition(|pending| pending == &value) {
             self.pending_values.drain(..=index);
             return;
         }
         self.pending_values.clear();
-        self.set_external_text(value, cx);
+        self.set_external_text(value, caret, cx);
     }
 
-    fn set_external_text(&mut self, value: String, cx: &mut Context<Self>) {
+    /// The value set from outside: its caret at `caret` (UTF-16), or its end.
+    fn set_external_text(&mut self, value: String, caret: Option<usize>, cx: &mut Context<Self>) {
         if self.content == value {
             return;
         }
         self.content = value;
-        let end = self.content.len();
-        self.selected_range = end..end;
+        self.refresh_chips();
+        let at = caret.map(|caret| self.offset_from_utf16(caret)).unwrap_or(self.content.len()).min(self.content.len());
+        let at = self.chip_layout.snap(at, true);
+        self.selected_range = at..at;
         self.selection_reversed = false;
         self.marked_range = None;
         self.scroll_top = 0.0;
@@ -653,15 +712,66 @@ impl TextEditorState {
     }
 
     fn emit_change(&mut self) {
+        self.refresh_chips();
         if self.emits_change {
             self.pending_values.push_back(self.content.clone());
             while self.pending_values.len() > 32 {
                 self.pending_values.pop_front();
             }
+            let (start, end) = self.selection_utf16();
+            self.reported_selection = Some((self.selected_range.clone(), self.selection_reversed));
             emit_event_full(&self.callback, self.element_id, "change", |payload| {
                 payload.value = Some(self.content.clone());
+                payload.selection_start = Some(start as f64);
+                payload.selection_end = Some(end as f64);
             });
         }
+    }
+
+    /// The selection as UTF-16 offsets, start first.
+    fn selection_utf16(&self) -> (usize, usize) {
+        (self.offset_to_utf16(self.selected_range.start), self.offset_to_utf16(self.selected_range.end))
+    }
+
+    /// `select`, once the selection is not where the last `change` or `select` said.
+    fn report_selection(&mut self) {
+        if !self.emits_select {
+            return;
+        }
+        let now = (self.selected_range.clone(), self.selection_reversed);
+        if self.reported_selection.as_ref() == Some(&now) {
+            return;
+        }
+        self.reported_selection = Some(now);
+        let (start, end) = self.selection_utf16();
+        emit_event_full(&self.callback, self.element_id, "select", |payload| {
+            payload.selection_start = Some(start as f64);
+            payload.selection_end = Some(end as f64);
+        });
+    }
+
+    /// The chips' places, after the content, the specs or the composition changed.
+    fn refresh_chips(&mut self) {
+        if self.chip_specs.is_empty() {
+            if !self.chip_layout.chips.is_empty() || self.chip_layout.display != self.content {
+                self.chip_layout = ChipLayout { display: self.content.clone(), chips: Vec::new() };
+            }
+            return;
+        }
+        self.chip_layout = super::chips::layout(&self.content, &self.chip_specs, self.marked_range.as_ref());
+    }
+
+    fn set_chips(&mut self, specs: Vec<ChipSpec>, cx: &mut Context<Self>) {
+        self.chip_specs = specs;
+        self.refresh_chips();
+        let range = self.selected_range.clone();
+        self.selected_range = self.chip_layout.snap(range.start, false)..self.chip_layout.snap(range.end, true);
+        cx.notify();
+    }
+
+    /// Where `offset` lands, moved there from the caret: past a chip in the direction it went.
+    fn snap_from_cursor(&self, offset: usize) -> usize {
+        self.chip_layout.snap(offset, offset >= self.cursor_offset())
     }
 
     fn emit_submit(&self) {
@@ -706,7 +816,7 @@ impl TextEditorState {
     }
 
     fn move_to(&mut self, offset: usize, cx: &mut Context<Self>) {
-        let offset = offset.min(self.content.len());
+        let offset = self.snap_from_cursor(offset.min(self.content.len()));
         self.selected_range = offset..offset;
         self.selection_reversed = false;
         self.follow_cursor = true;
@@ -715,7 +825,7 @@ impl TextEditorState {
     }
 
     fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
-        let offset = offset.min(self.content.len());
+        let offset = self.snap_from_cursor(offset.min(self.content.len()));
         if self.selection_reversed {
             self.selected_range.start = offset;
         } else {
@@ -731,32 +841,44 @@ impl TextEditorState {
     }
 
     fn previous_boundary(&self, offset: usize) -> usize {
-        self.content.grapheme_indices(true).rev().find_map(|(index, _)| (index < offset).then_some(index)).unwrap_or(0)
+        let previous = self
+            .content
+            .grapheme_indices(true)
+            .rev()
+            .find_map(|(index, _)| (index < offset).then_some(index))
+            .unwrap_or(0);
+        self.chip_layout.snap(previous, false)
     }
 
     fn next_boundary(&self, offset: usize) -> usize {
-        self.content
+        let next = self
+            .content
             .grapheme_indices(true)
             .find_map(|(index, _)| (index > offset).then_some(index))
-            .unwrap_or(self.content.len())
+            .unwrap_or(self.content.len());
+        self.chip_layout.snap(next, true)
     }
 
     fn previous_word_boundary(&self, offset: usize) -> usize {
-        self.content
+        let previous = self
+            .content
             .split_word_bound_indices()
             .rev()
             .find_map(|(index, word)| (index < offset && !word.trim().is_empty()).then_some(index))
-            .unwrap_or(0)
+            .unwrap_or(0);
+        self.chip_layout.snap(previous, false)
     }
 
     fn next_word_boundary(&self, offset: usize) -> usize {
-        self.content
+        let next = self
+            .content
             .split_word_bound_indices()
             .find_map(|(index, word)| {
                 let end = index + word.len();
                 (end > offset && !word.trim().is_empty()).then_some(end)
             })
-            .unwrap_or(self.content.len())
+            .unwrap_or(self.content.len());
+        self.chip_layout.snap(next, true)
     }
 
     fn line_range_at(&self, offset: usize) -> Range<usize> {
@@ -826,6 +948,10 @@ impl TextEditorState {
             return false;
         }
         let keystroke = gpui::Keystroke { key: key.to_string(), key_char: None, modifiers: gpui::Modifiers::default() };
+        // The action took the keystroke before any key listener, the root's too, so it has no id
+        // of its own yet: without one it would share the last keystroke's, and a `stopPropagation`
+        // of that one (a letter the field kept) would drop it.
+        crate::renderer::next_keystroke_id();
         emit_key_event(&self.callback, self.element_id, "keyDown", &keystroke, Some(false));
         true
     }
@@ -1044,6 +1170,11 @@ impl TextEditorState {
     }
 
     fn point_for_index(&self, index: usize) -> Option<Point<Pixels>> {
+        self.point_for_display(if self.display_is_placeholder { 0 } else { self.chip_layout.to_display(index) })
+    }
+
+    /// Where display offset `index` (of the laid-out text) is drawn, from the text's top left.
+    fn point_for_display(&self, index: usize) -> Option<Point<Pixels>> {
         for (line_index, line) in self.last_lines.iter().enumerate() {
             let line_start = *self.line_starts.get(line_index)?;
             if index < line_start || index > line_start + line.len() {
@@ -1061,6 +1192,12 @@ impl TextEditorState {
         if self.display_is_placeholder {
             return 0;
         }
+        self.chip_layout.to_buffer(self.display_index_for_point(position)).min(self.content.len())
+    }
+
+    /// The display offset (of the laid-out text) nearest `position`, from the text's top left.
+    fn display_index_for_point(&self, position: Point<Pixels>) -> usize {
+        let display_len = self.chip_layout.display.len();
         let mut y = f32::from(position.y).max(0.0);
         for (line_index, line) in self.last_lines.iter().enumerate() {
             let height = f32::from(line.size(self.line_height).height);
@@ -1068,11 +1205,11 @@ impl TextEditorState {
             if y < height || line_index + 1 == self.last_lines.len() {
                 let local = point(position.x, px(y.min(height - 1.0).max(0.0)));
                 let index = line.closest_index_for_position(local, self.line_height).unwrap_or_else(|index| index);
-                return (line_start + index).min(self.content.len());
+                return (line_start + index).min(display_len);
             }
             y -= height;
         }
-        self.content.len()
+        display_len
     }
 
     fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
@@ -1102,7 +1239,15 @@ impl TextEditorState {
             }
             PressIntent::SelectWord => {
                 let index = self.index_for_mouse_position(event.position);
-                let range = crate::text::selection::word_range(&self.content, index);
+                // A double click on a chip selects it; elsewhere the word under it.
+                let chip = self.last_bounds.filter(|_| !self.display_is_placeholder).and_then(|bounds| {
+                    let local = point(
+                        event.position.x - bounds.left() + px(self.scroll_left),
+                        event.position.y - bounds.top() + px(self.scroll_top),
+                    );
+                    self.chip_layout.at_display(self.display_index_for_point(local)).map(|chip| chip.range.clone())
+                });
+                let range = chip.unwrap_or_else(|| crate::text::selection::word_range(&self.content, index));
                 self.move_to(range.start, cx);
                 self.select_to(range.end, cx);
             }
@@ -1250,10 +1395,11 @@ impl TextEditorState {
     }
 
     fn layout_text(&mut self, width: Pixels, style: &TextStyle, window: &mut Window) -> f32 {
+        self.refresh_chips();
         let (display, is_placeholder) = if self.content.is_empty() {
             (self.placeholder.clone(), true)
         } else {
-            (SharedString::from(self.content.clone()), false)
+            (SharedString::from(self.chip_layout.display.clone()), false)
         };
         let rem_size = window.rem_size();
         let font_size = style.font_size.to_pixels(rem_size);
@@ -1273,6 +1419,7 @@ impl TextEditorState {
         };
         let runs = match self.marked_range.as_ref() {
             Some(marked) if !is_placeholder => {
+                let marked = self.chip_layout.to_display(marked.start)..self.chip_layout.to_display(marked.end);
                 vec![run(marked.start, false), run(marked.len(), true), run(display.len() - marked.end, false)]
                     .into_iter()
                     .filter(|run| run.len > 0)
@@ -1305,6 +1452,48 @@ impl TextEditorState {
         self.last_lines = lines;
         self.line_starts = line_starts;
         self.content_height
+    }
+
+    /// The chips' washes and icons, placed on the laid-out lines whose top left is `origin`.
+    fn chip_paints(&self, origin: Point<Pixels>, bounds: Bounds<Pixels>) -> Vec<ChipPaint> {
+        let line_height = self.line_height;
+        let inset = px(1.0);
+        let radius = px(4.0);
+        let wash = |from: Point<Pixels>, to: Point<Pixels>| {
+            gpui::quad(
+                Bounds::from_corners(
+                    point(origin.x + from.x + inset, origin.y + from.y + inset),
+                    point(origin.x + to.x - inset, origin.y + from.y + line_height - inset),
+                ),
+                radius,
+                self.chip_colors.wash,
+                px(1.0),
+                self.chip_colors.border,
+                gpui::BorderStyle::Solid,
+            )
+        };
+        let mut paints = Vec::with_capacity(self.chip_layout.chips.len());
+        for chip in &self.chip_layout.chips {
+            let (Some(start), Some(end)) =
+                (self.point_for_display(chip.display.start), self.point_for_display(chip.display.end))
+            else {
+                continue;
+            };
+            let washes = if start.y == end.y {
+                vec![wash(start, end)]
+            } else {
+                // Wrapped (a label longer than the line): to the line's end, then from the next's start.
+                let line_end = point(bounds.right() - origin.x, start.y);
+                vec![wash(start, line_end), wash(point(px(0.0), end.y), end)]
+            };
+            let side = (self.font_size * 0.95).min(line_height - px(4.0)).max(px(8.0));
+            let icon = self.chip_specs.get(chip.spec).and_then(|spec| spec.icon.clone()).map(|(key, bytes)| {
+                let at = point(origin.x + start.x + px(5.0), origin.y + start.y + (line_height - side) / 2.0);
+                (Bounds::new(at, size(side, side)), key, bytes)
+            });
+            paints.push(ChipPaint { washes, icon });
+        }
+        paints
     }
 
     fn clamp_scroll(&mut self, viewport_width: f32, viewport_height: f32) {
@@ -1358,6 +1547,7 @@ impl EntityInputHandler for TextEditorState {
 
     fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.marked_range = None;
+        self.refresh_chips();
         cx.notify();
     }
 
@@ -1454,7 +1644,8 @@ impl EntityInputHandler for TextEditorState {
     }
 
     fn set_selected_text_range(&mut self, range_utf16: Range<usize>, _: &mut Window, cx: &mut Context<Self>) {
-        self.selected_range = self.range_from_utf16(&range_utf16);
+        let range = self.range_from_utf16(&range_utf16);
+        self.selected_range = self.chip_layout.snap(range.start, false)..self.chip_layout.snap(range.end, true);
         self.selection_reversed = false;
         self.follow_cursor = true;
         self.reset_blink(cx);
@@ -1548,6 +1739,7 @@ struct EditorTextElement {
 struct EditorPrepaint {
     caret: Option<PaintQuad>,
     selection: Vec<PaintQuad>,
+    chips: Vec<ChipPaint>,
 }
 
 impl gpui::Element for EditorTextElement {
@@ -1602,9 +1794,11 @@ impl gpui::Element for EditorTextElement {
         self.input.update(cx, |input, _| {
             input.last_bounds = Some(bounds);
             input.clamp_scroll(f32::from(bounds.size.width), f32::from(bounds.size.height));
+            input.report_selection();
         });
         let input = self.input.read(cx);
         let origin = point(bounds.left() - px(input.scroll_left), bounds.top() - px(input.scroll_top));
+        let chips = if input.display_is_placeholder { Vec::new() } else { input.chip_paints(origin, bounds) };
         let mut selection = Vec::new();
         let mut caret = None;
         if input.selected_range.is_empty() || input.display_is_placeholder {
@@ -1651,7 +1845,7 @@ impl gpui::Element for EditorTextElement {
                 ));
             }
         }
-        EditorPrepaint { caret, selection }
+        EditorPrepaint { caret, selection, chips }
     }
 
     fn paint(
@@ -1673,12 +1867,20 @@ impl gpui::Element for EditorTextElement {
             }
         });
         window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+            for chip in &mut prepaint.chips {
+                for wash in chip.washes.drain(..) {
+                    window.paint_quad(wash);
+                }
+            }
             for quad in prepaint.selection.drain(..) {
                 window.paint_quad(quad);
             }
             let (lines, line_height, scroll_top, scroll_left, display) = self.input.update(cx, |input, _| {
-                let display =
-                    if input.content.is_empty() { input.placeholder.clone() } else { input.content.clone().into() };
+                let display = if input.content.is_empty() {
+                    input.placeholder.clone()
+                } else {
+                    input.chip_layout.display.clone().into()
+                };
                 (std::mem::take(&mut input.last_lines), input.line_height, input.scroll_top, input.scroll_left, display)
             });
             crate::text::log_painted_text(display);
@@ -1697,6 +1899,14 @@ impl gpui::Element for EditorTextElement {
                 y += height;
             }
             self.input.update(cx, |input, _| input.last_lines = lines);
+            let icon_color = self.input.read(cx).chip_colors.icon;
+            for chip in prepaint.chips.drain(..) {
+                if let Some((icon_bounds, key, bytes)) = chip.icon {
+                    window
+                        .paint_svg(icon_bounds, key, Some(&bytes), gpui::TransformationMatrix::unit(), icon_color, cx)
+                        .ok();
+                }
+            }
             let caret_shown = self.input.update(cx, |input, cx| input.caret_shown(window, cx));
             if caret_shown {
                 if let Some(caret) = prepaint.caret.take() {

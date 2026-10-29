@@ -1407,7 +1407,9 @@ pub(crate) fn emit_key_event(
     });
 }
 
-fn next_keystroke_id() {
+/// A new keystroke's id. The root's capture listener takes one for every keystroke that reaches
+/// the key listeners; one an element's action handles never does, so that element takes its own.
+pub(crate) fn next_keystroke_id() {
     KEYSTROKE_ID.with(|id| id.set(id.get() + 1));
 }
 

@@ -584,6 +584,27 @@ export interface InputProps extends HostProps {
    * no `onSubmit`. Keys the editor does not bind (`"tab"`, `"escape"`) reach `onKeyDown` anyway.
    */
   interceptKeys?: string[]
+  /**
+   * Where the caret goes when `value` is set from outside (not echoing an edit of the field's own), as
+   * a UTF-16 offset: its end without. A field the app types into keeps its caret where it was typed.
+   */
+  caret?: number
+  /**
+   * Mentions drawn as chips in the line: each `text` that stands whole in the value (at its start or
+   * after a space, at its end or before one) is drawn as `label` on a rounded wash, after `icon` (an
+   * SVG's markup or file). A chip is one character to the caret: it moves over it, and Backspace or
+   * Delete takes it whole. The value keeps the text; copying a chip copies it.
+   */
+  chips?: TextChip[]
+  /** The caret or selection moved. `selectionStart`, `selectionEnd` (UTF-16) say where; `change` carries them too. */
+  onSelect?: (event: EventPayload) => void
+}
+
+/** One of a text field's `chips`. */
+export interface TextChip {
+  text: string
+  label: string
+  icon?: string
 }
 
 export interface TextareaProps extends InputProps {

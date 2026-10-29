@@ -109,6 +109,7 @@ export const EVENT_PROPS = [
   ["onMotionThrottled", "motionThrottled"],
   ["onChange", "change"],
   ["onSubmit", "submit"],
+  ["onSelect", "select"],
   ["onClick", "click"],
   ["onDoubleClick", "doubleClick"],
   ["onContextMenu", "contextMenu"],
