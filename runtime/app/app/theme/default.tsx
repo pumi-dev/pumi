@@ -52,6 +52,8 @@ import { nameOf, shortName } from "../worktrees.ts"
 import { runsTerminal } from "../terminals.ts"
 import { useStarters, type Starters } from "../starters.ts"
 import { explainNoNewTab } from "../new-tab.ts"
+import * as plugins from "../plugins.ts"
+import { startables } from "../startable.ts"
 import { openSettings } from "../settings/open.ts"
 
 // A new tab nothing can open (`new_tab` names no block) says so in the window; the rest go to the log.
@@ -1465,29 +1467,43 @@ function serverShortcut(tables: unknown, fn: string): string | undefined {
   return undefined
 }
 
+let pluginsVersion = 0
+plugins.subscribe(() => pluginsVersion++)
+
+/** An icon of the app's by name, for a menu row: a block's own file (`plugin:icon.svg`) is a box. */
+const menuIcon = (icon: string | undefined) => (icon && /^[a-z0-9_]{1,64}$/.test(icon) ? icon : "box")
+
 /**
- * What a new tab can be: what the plugins add to `tab.new` (a terminal, a file, an image, a page,
- * the agents), each plugin's a group of its own. A plugin's action is run with `{tab, place}`: the
+ * What a new tab can be: the list Settings ▸ General ▸ New tabs open picks from too
+ * (`startable.ts`), each plugin's a group of its own. An action is run with `{tab, place}`: the
  * pane or tab it opens beside (it names the server), and where; one with a `pick` asks for its
- * files first. Each shows the keys that open one elsewhere when there are any.
+ * files first. A block opens there with no arguments. Each shows the keys that open one elsewhere
+ * when there are any.
  */
 function useNewKinds(): NewKind[] {
   const { actions } = useSlot("tab.new")
   const tables = useApp((s) => s.options.keys)
+  const version = useSyncExternalStore(plugins.subscribe, () => pluginsVersion)
   return useMemo(() => {
-    const out: NewKind[] = []
-    actions.forEach((a) => {
-      out.push({
-        id: `${a.plugin}/${a.id}`,
-        title: a.title,
-        icon: a.icon ?? "plus",
-        keys: a.keys ?? (a.command ? serverShortcut(tables, a.command) : undefined),
-        group: a.plugin,
-        open: async (on, place) => a.run({ tab: on, place }),
-      })
+    const slotted = new Map(actions.map((a) => [`${a.plugin}/${a.id}`, a]))
+    return startables(plugins.entries.values()).map((s): NewKind => {
+      const id = s.action ? `${s.plugin}/${s.action.id}` : `${s.plugin}/${s.value}`
+      const slot = slotted.get(id)
+      const command = s.action ? s.value : undefined
+      return {
+        id,
+        title: s.title,
+        icon: menuIcon(s.icon ?? (s.action ? "plus" : undefined)),
+        keys: slot?.keys ?? (command ? serverShortcut(tables, command) : undefined),
+        group: s.plugin,
+        open: async (on, place) => {
+          if (slot) return slot.run({ tab: on, place })
+          if (s.action) return plugins.command(s.plugin, s.action.command, { tab: on, place })
+          return call(via(on, "tab.open"), s.value, {}, place)
+        },
+      }
     })
-    return out
-  }, [actions, tables])
+  }, [actions, tables, version])
 }
 
 /**
