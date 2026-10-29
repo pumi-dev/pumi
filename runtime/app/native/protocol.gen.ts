@@ -50,6 +50,7 @@ export const UNIVERSAL_PROPS = [
   "title",
   "highlight",
   "textFlow",
+  "inline",
   "role",
   "aria-label",
   "aria-description",

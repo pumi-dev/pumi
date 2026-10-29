@@ -524,6 +524,16 @@ export interface HostProps {
    */
   textFlow?: boolean
 
+  /**
+   * On a `<text>`: its `<text>` children are runs of one paragraph, drawn as one text that wraps
+   * at its box's end and selects as one, each run styled over what the paragraph inherits:
+   * `color`, `fontWeight`, `fontStyle`, `fontFamily`, `textDecoration`, and a rounded
+   * `backgroundColor` (`borderRadius`, `paddingLeft` up to 4) behind it, as inline code has. A run
+   * with `onClick` is pressed by a click on its text (a link). Nothing else of a run's style or
+   * events applies, and children that are not `<text>` are not drawn.
+   */
+  inline?: boolean
+
   // ── Focus props ────────────────────────────────────────────────
   /** Take keyboard focus when the element first mounts. Required for `<input>`:
    *  without it, or a click, the field never receives key events. */

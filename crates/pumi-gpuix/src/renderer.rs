@@ -3691,7 +3691,15 @@ pub(crate) fn build_host_container(
         el = el.child(decor);
     }
 
-    if let Some(content) = element.content.as_deref().filter(|value| !value.is_empty()) {
+    let inline = element.element_type == "text"
+        && element.custom_props().get("inline").is_some_and(|value| value.as_bool() == Some(true));
+    if inline {
+        // `<text inline>`: its `<text>` children are the runs of one paragraph, drawn and
+        // selected as one text that wraps where its box ends.
+        if let Some(text) = inline_paragraph(element, ctx) {
+            el = el.child(selectable_text(text));
+        }
+    } else if let Some(content) = element.content.as_deref().filter(|value| !value.is_empty()) {
         let text = text_content(element, content, ctx);
         // A node with no style of its own (every text React makes) is already `relative` and
         // exactly the text's box: its runs go straight in, without a wrapper per string.
@@ -3717,7 +3725,7 @@ pub(crate) fn build_host_container(
         sorted.sort_by(|a, b| z_of(a).partial_cmp(&z_of(b)).unwrap_or(std::cmp::Ordering::Equal));
         children = std::borrow::Cow::Owned(sorted);
     }
-    for &child_id in children.iter() {
+    for &child_id in children.iter().filter(|_| !inline) {
         let child = build_element(child_id, ctx, window, cx);
         el = if overflow_x_only { el.child(gpui::div().flex_none().child(child)) } else { el.child(child) };
     }
@@ -4009,6 +4017,180 @@ fn text_content(
             ctx.inherited.selection_wash,
         )
     }
+}
+
+/// How a run of an inline paragraph differs from the paragraph: its spans' styles, the nearer
+/// one winning, and the span a click on it presses.
+#[derive(Clone, Default, PartialEq)]
+struct RunStyle {
+    color: Option<gpui::Hsla>,
+    weight: Option<gpui::FontWeight>,
+    italic: Option<bool>,
+    family: Option<gpui::SharedString>,
+    underline: Option<bool>,
+    strike: Option<bool>,
+    /// A rounded wash behind it (inline code): its colour, corner radius and side padding.
+    wash: Option<(gpui::Hsla, f32, f32)>,
+    press: Option<u64>,
+}
+
+impl RunStyle {
+    fn under(&self, style: Option<&StyleDesc>, press: Option<u64>) -> Self {
+        let mut next = self.clone();
+        if let Some(style) = style {
+            if let Some(color) = style.color.as_deref().and_then(crate::color::parse_color_rgba) {
+                next.color = Some(color.into());
+            }
+            if let Some(weight) = &style.font_weight {
+                next.weight = Some(parse_font_weight(weight));
+            }
+            match style.font_style.as_deref() {
+                Some("italic") | Some("oblique") => next.italic = Some(true),
+                Some("normal") => next.italic = Some(false),
+                _ => {}
+            }
+            if let Some(family) = &style.font_family {
+                next.family = Some(family.clone().into());
+            }
+            match style.text_decoration.as_deref() {
+                Some("underline") => next.underline = Some(true),
+                Some("line-through") => next.strike = Some(true),
+                Some("none") => (next.underline, next.strike) = (Some(false), Some(false)),
+                _ => {}
+            }
+            if let Some(color) = style.background_color.as_deref().and_then(crate::color::parse_color_rgba) {
+                let pad = style.padding_left.or(style.padding).unwrap_or(0.0).clamp(0.0, 4.0) as f32;
+                next.wash = Some((color.into(), style.border_radius.unwrap_or(0.0) as f32, pad));
+            }
+        }
+        if press.is_some() {
+            next.press = press;
+        }
+        next
+    }
+
+    fn highlight(&self) -> gpui::HighlightStyle {
+        gpui::HighlightStyle {
+            color: self.color,
+            font_weight: self.weight,
+            font_style: self
+                .italic
+                .map(|italic| if italic { gpui::FontStyle::Italic } else { gpui::FontStyle::Normal }),
+            underline: self.underline.filter(|on| *on).map(|_| gpui::UnderlineStyle {
+                thickness: gpui::px(1.0),
+                color: self.color,
+                wavy: false,
+            }),
+            strikethrough: self
+                .strike
+                .filter(|on| *on)
+                .map(|_| gpui::StrikethroughStyle { thickness: gpui::px(1.0), color: self.color }),
+            ..Default::default()
+        }
+    }
+}
+
+/// `<text inline>`'s text and runs: its own string, then each `<text>` under it in tree order.
+fn inline_runs(
+    tree: &RetainedTree,
+    element: &crate::retained_tree::RetainedElement,
+) -> (String, Vec<(std::ops::Range<usize>, RunStyle)>) {
+    fn walk(
+        tree: &RetainedTree,
+        element: &crate::retained_tree::RetainedElement,
+        style: &RunStyle,
+        text: &mut String,
+        runs: &mut Vec<(std::ops::Range<usize>, RunStyle)>,
+    ) {
+        if let Some(content) = element.content.as_deref().filter(|content| !content.is_empty()) {
+            let start = text.len();
+            text.push_str(content);
+            if *style != RunStyle::default() {
+                // One run with its neighbour when they look the same (React's split strings).
+                match runs.last_mut() {
+                    Some((range, last)) if range.end == start && last == style => range.end = text.len(),
+                    _ => runs.push((start..text.len(), style.clone())),
+                }
+            }
+        }
+        for child in element.children.iter().filter_map(|id| tree.elements.get(id)) {
+            if child.element_type != "text" {
+                continue;
+            }
+            let press = child.events().contains("click").then_some(child.id);
+            walk(tree, child, &style.under(child.style.as_deref(), press), text, runs);
+        }
+    }
+    let (mut text, mut runs) = (String::new(), Vec::new());
+    walk(tree, element, &RunStyle::default(), &mut text, &mut runs);
+    (text, runs)
+}
+
+/// `<text inline>` as one selectable text: its spans' styles laid over what it inherits, inline
+/// code's rounded washes under the glyphs, and a click on a span with `onClick` pressing it.
+fn inline_paragraph(
+    element: &crate::retained_tree::RetainedElement,
+    ctx: &BuildCtx,
+) -> Option<crate::text::SelectableText> {
+    let (text, runs) = inline_runs(ctx.tree, element);
+    if text.is_empty() {
+        return None;
+    }
+    let highlights = runs.iter().map(|(range, style)| (range.clone(), style.highlight())).collect();
+    let families =
+        runs.iter().filter_map(|(range, style)| style.family.clone().map(|family| (range.clone(), family))).collect();
+    let washes: Vec<(std::ops::Range<usize>, gpui::Hsla, f32, f32)> = runs
+        .iter()
+        .filter_map(|(range, style)| style.wash.map(|(color, radius, pad)| (range.clone(), color, radius, pad)))
+        .collect();
+    let links: Vec<(std::ops::Range<usize>, String)> =
+        runs.iter().filter_map(|(range, style)| style.press.map(|id| (range.clone(), id.to_string()))).collect();
+    let extra_wash: Option<Box<dyn Fn(&gpui::TextLayout, &mut gpui::Window)>> = (!washes.is_empty()).then(|| {
+        Box::new(move |layout: &gpui::TextLayout, window: &mut gpui::Window| {
+            for (range, color, radius, pad) in &washes {
+                for rect in crate::text::paint::range_rects(layout, range, *pad, 1.0) {
+                    window.paint_quad(gpui::quad(
+                        rect,
+                        gpui::px(*radius),
+                        *color,
+                        gpui::px(0.0),
+                        gpui::transparent_black(),
+                        gpui::BorderStyle::default(),
+                    ));
+                }
+            }
+        }) as Box<dyn Fn(&gpui::TextLayout, &mut gpui::Window)>
+    });
+    let on_link: Option<Arc<dyn Fn(&str)>> = (!links.is_empty()).then(|| {
+        let callback = ctx.event_callback.clone();
+        Arc::new(move |payload: &str| {
+            if let Ok(id) = payload.parse::<u64>() {
+                emit_press_event(
+                    &callback,
+                    id,
+                    EventKind::Click,
+                    Press { button: Some(0), click_count: Some(1), ..Press::default() },
+                );
+            }
+        }) as Arc<dyn Fn(&str)>
+    });
+    Some(crate::text::SelectableText {
+        selectable: ctx.inherited.selectable,
+        highlight: ctx.inherited.highlight.clone().map(crate::text::HighlightSource::Native),
+        highlights,
+        families,
+        extra_wash,
+        links,
+        on_link,
+        ..crate::text::SelectableText::new(
+            element.id,
+            0,
+            gpui::SharedString::from(text),
+            None,
+            ctx.selection.clone(),
+            ctx.inherited.selection_wash,
+        )
+    })
 }
 
 /// Explicit `userSelect` on this node. `None` means inherit; the ancestor

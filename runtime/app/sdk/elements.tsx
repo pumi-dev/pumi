@@ -47,3 +47,12 @@ export function useAgentStatus(status: string | undefined): { color: string; ico
   const t = useTheme()
   return { color: t[`agent.${status || "unknown"}`] ?? t["agent.unknown"], icon: `status_${status && status !== "unknown" ? status : "unknown"}` }
 }
+
+/**
+ * What the window's elements can do that an older app's cannot, for a plugin that runs in both: it
+ * reads them off the module (`import * as pumi from "pumi"`, `pumi.features?.inlineText`), since a
+ * name an older app lacks fails the import.
+ * - `inlineText`: `<text inline>`, a paragraph of styled runs.
+ * - `textChips`: a text field's `chips` and `caret`, and the selection on its `change` and `select`.
+ */
+export const features = { inlineText: true, textChips: true } as const

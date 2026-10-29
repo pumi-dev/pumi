@@ -244,6 +244,11 @@ pub struct SelectableText {
     /// inheriting from ancestor `style` props. Pass `Some(..)` only when the
     /// element owns its own colours, as `<code>` and `<diff>` do.
     pub runs: Option<Vec<TextRun>>,
+    /// Ranges styled over what the text inherits (`<text inline>`'s spans), sorted and apart.
+    /// Resolved at layout against the inherited style, as `runs: None` is. Not with `runs`.
+    pub highlights: Vec<(Range<usize>, gpui::HighlightStyle)>,
+    /// Ranges in another font family; each is also one of `highlights`, so it is a run of its own.
+    pub families: Vec<(Range<usize>, SharedString)>,
     pub selection: SharedSelection,
     pub wash_color: Hsla,
     /// Paints additional quads under the glyphs before the selection wash:
@@ -277,6 +282,8 @@ impl SelectableText {
             sub,
             text,
             runs,
+            highlights: Vec::new(),
+            families: Vec::new(),
             selection,
             wash_color,
             extra_wash: None,
@@ -307,6 +314,8 @@ pub fn selectable_text_parts(opts: SelectableText) -> [gpui::AnyElement; 2] {
         sub,
         text,
         runs,
+        highlights,
+        families,
         selection,
         wash_color,
         extra_wash,
@@ -318,10 +327,14 @@ pub fn selectable_text_parts(opts: SelectableText) -> [gpui::AnyElement; 2] {
     } = opts;
     let key = selection_key(element_id, sub);
 
-    let styled = match runs {
+    let mut styled = match runs {
         Some(runs) => StyledText::new(text.clone()).with_runs(runs),
+        None if !highlights.is_empty() => StyledText::new(text.clone()).with_highlights(highlights),
         None => StyledText::new(text.clone()),
     };
+    if !families.is_empty() {
+        styled = styled.with_font_family_overrides(families);
+    }
     let layout = styled.layout().clone();
 
     let underlay = canvas(

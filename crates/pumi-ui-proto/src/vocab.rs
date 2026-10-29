@@ -45,6 +45,7 @@ pub const UNIVERSAL_PROPS: &[&str] = &[
     "title",
     "highlight",
     "textFlow",
+    "inline",
     "role",
     "aria-label",
     "aria-description",

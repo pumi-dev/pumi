@@ -33,7 +33,7 @@ export { useChannel, useChannelListener } from "./channels.ts"
 export { useEvent, type UseEventOptions, type WindowEvent } from "./events.ts"
 export { conversationNames, type ConversationChanged, type ConversationProvider, type ConversationRead } from "../worker/sdk/conversation.ts"
 export { useWebview, webview, webviewRun, webviewSnapshot, WebView, type WebState, type WebViewProps } from "./webview.tsx"
-export { Icon, IconButton, IconImage, TabIcon, type IconProps } from "./elements.tsx"
+export { features, Icon, IconButton, IconImage, TabIcon, type IconProps } from "./elements.tsx"
 // A tab's icon and status, for a theme's `TabIcon` part or a plugin's own list of tabs.
 export { ICON, iconSource, showsStatus, useTabIcon, useTabStatus, type IconFrom, type IconSource, type TabIconInfo } from "./icons.ts"
 // The renderer's own kit, for a theme or a component: native motion (keyframes, repeats, springs),
