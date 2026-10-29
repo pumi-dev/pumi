@@ -8,6 +8,7 @@ import type {
   PathPromptOptions,
   WindowInsets as NativeWindowInsets,
 } from "./addon"
+import type { StyleDesc as WireStyle } from "./protocol.gen.js"
 
 export type {
   DebugFrameOverlayStats,
@@ -337,6 +338,10 @@ export interface StyleDesc {
   keyboardFocusDim?: boolean
 }
 
+/** Fails to compile when `StyleDesc` has a field the renderer does not read: one that is not in
+ *  the UI protocol's (`protocol.gen.ts`). */
+export type StyleFieldsAreTheRenderers<Extra extends never = Exclude<keyof StyleDesc, keyof WireStyle>> = Extra
+
 export type StateStyleDesc = Omit<
   StyleDesc,
   "hover" | "active" | "focusVisible" | "keyboardFocusDim"
@@ -491,10 +496,6 @@ export interface HostProps {
   onSubmit?: (event: EventPayload) => void
 
   // ── Native component events ─────────────────────────────────────
-  onToggleFile?: (event: EventPayload) => void
-  onShowMore?: (event: EventPayload) => void
-  onLineClick?: (event: EventPayload) => void
-  onLinkClick?: (event: EventPayload) => void
   onVisibleRange?: (event: EventPayload) => void
   /** Match count changed for this element's `highlight`. See `matchCount`. */
   onHighlight?: (event: EventPayload) => void
@@ -772,7 +773,7 @@ export interface MutationRenderer {
   destroyElement(id: number): Array<number>
   appendChild(parentId: number, childId: number): void
   insertBefore(parentId: number, childId: number, beforeId: number): void
-  setStyle(id: number, style: object): void
+  setStyle(id: number, style: WireStyle): void
   setText(id: number, content: string): void
   setEventListener(id: number, eventType: string, hasHandler: boolean): void
   setRoot(id: number): void

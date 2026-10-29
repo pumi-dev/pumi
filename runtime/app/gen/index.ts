@@ -3,6 +3,7 @@
 //   api/pumi-api.json  →  worker/sdk/api.gen.ts (function, event, tab method and model names),
 //                         worker/sdk/api.types.gen.ts (every type, for tsc and editors),
 //                         worker/sdk/models.gen.ts (the model classes)
+//   api/ui-protocol.json → native/protocol.gen.ts (the UI protocol's types and names)
 //
 //   bun runtime/app/gen/index.ts           writes them
 //   bun runtime/app/gen/index.ts --check   says which are stale, and fails
@@ -10,21 +11,28 @@
 // `cargo xtask api` runs this after writing the export, so they follow it.
 import { join, relative } from "node:path";
 import { modelsFile, runtimeFile, typesFile, type Export } from "./api.ts";
+import { protocolFile, type Protocol } from "./protocol.ts";
 
 export const ROOT = join(import.meta.dir, "../../..");
 
 /** The export the SDK is generated from. */
 export const EXPORT = "api/pumi-api.json";
+/** The UI protocol's export, which `protocol.gen.ts` is generated from. */
+export const PROTOCOL = "api/ui-protocol.json";
 
-const header = `// Generated from ${EXPORT} by \`bun runtime/app/gen/index.ts\` (\`cargo xtask api\` runs it); do not edit.\n\n`;
+const generated = (from: string) =>
+  `// Generated from ${from} by \`bun runtime/app/gen/index.ts\` (\`cargo xtask api\` runs it); do not edit.\n\n`;
+const header = generated(EXPORT);
 
 /** Every generated file, by its path from the checkout, and what it should hold. */
 export async function files(root = ROOT): Promise<Map<string, string>> {
   const exported: Export = await Bun.file(join(root, EXPORT)).json();
+  const protocol: Protocol = await Bun.file(join(root, PROTOCOL)).json();
   return new Map([
     ["runtime/app/worker/sdk/api.gen.ts", runtimeFile(exported, header)],
     ["runtime/app/worker/sdk/api.types.gen.ts", typesFile(exported, header)],
     ["runtime/app/worker/sdk/models.gen.ts", modelsFile(exported, header)],
+    ["runtime/app/native/protocol.gen.ts", protocolFile(protocol, generated(PROTOCOL))],
   ]);
 }
 

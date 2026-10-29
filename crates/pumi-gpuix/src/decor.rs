@@ -10,8 +10,9 @@ use std::sync::Arc;
 use gpui::{Bounds, Corners, Pixels, Point, Size};
 
 use crate::style::{
-    BackgroundImageLayer, BackgroundLayerValue, BackgroundPositionValue, BackgroundSizeValue, BackgroundValue,
-    BorderImageValue, GradientValue, LengthValue, LinearGradientStopValue, RadiusValue, StyleDesc,
+    BackgroundExt, BackgroundImageLayer, BackgroundLayerValue, BackgroundPositionValue, BackgroundSizeValue,
+    BackgroundValue, BorderImageValue, GradientValue, LengthValue, LinearGradientStopValue, RadiusValue, StyleDesc,
+    StyleExt,
 };
 
 /// A raster gradient's longest side. It is stretched over the box with bilinear sampling, which a

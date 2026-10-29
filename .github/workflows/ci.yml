@@ -56,6 +56,8 @@ jobs:
         working-directory: runtime/app
       - run: cargo xtask api --check
       - run: cargo xtask platform
+      # The renderer builds without its addon: nothing but `src/addon` knows about JS.
+      - run: cargo check --locked -p pumi-gpuix
       - run: bunx tsc --noEmit -p .
         working-directory: runtime/app
       - run: cargo test --locked --workspace --exclude xtask

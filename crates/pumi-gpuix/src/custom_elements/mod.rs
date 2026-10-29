@@ -12,6 +12,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::renderer::EventCallback;
+use pumi_ui_proto::{EventKind, Press};
 
 pub mod anchored;
 pub mod chips;
@@ -143,15 +144,19 @@ pub(crate) fn wire_standard_events<E: gpui::StatefulInteractiveElement>(mut el: 
                 // Match retained hosts: GPUI's semantic click is unreliable under
                 // embedded AppKit pumping, so primary mouse-up is the click boundary.
                 el = el.on_mouse_up(gpui::MouseButton::Left, move |mouse_event, _window, _cx| {
-                    crate::renderer::emit_press_event(&callback, id, "click", |p| {
-                        let (x, y) = crate::renderer::point_to_xy(mouse_event.position);
-                        p.x = Some(x);
-                        p.y = Some(y);
-                        p.button = Some(0);
-                        p.click_count = Some(mouse_event.click_count as u32);
-                        p.modifiers = Some(mouse_event.modifiers.into());
-                        p.is_right_click = Some(false);
-                    });
+                    crate::renderer::emit_press_event(
+                        &callback,
+                        id,
+                        EventKind::Click,
+                        Press {
+                            position: Some(crate::renderer::point(mouse_event.position)),
+                            button: Some(0),
+                            click_count: Some(mouse_event.click_count as u32),
+                            modifiers: Some(crate::element_tree::modifiers(mouse_event.modifiers)),
+                            is_right_click: Some(false),
+                            press_id: None,
+                        },
+                    );
                 });
             }
             "mouseEnter" | "mouseLeave" => {
@@ -161,10 +166,13 @@ pub(crate) fn wire_standard_events<E: gpui::StatefulInteractiveElement>(mut el: 
                     let leave = ctx.events.contains("mouseLeave");
                     let callback = ctx.event_callback.clone();
                     el = el.on_hover(move |&hovered, _window, _cx| {
-                        let kind = if hovered { "mouseEnter" } else { "mouseLeave" };
                         if (hovered && enter) || (!hovered && leave) {
-                            crate::renderer::emit_event_full(&callback, id, kind, |p| {
-                                p.hovered = Some(hovered);
+                            crate::renderer::emit(&callback, id, || {
+                                if hovered {
+                                    EventKind::MouseEnter
+                                } else {
+                                    EventKind::MouseLeave
+                                }
                             });
                         }
                     });
@@ -178,12 +186,10 @@ pub(crate) fn wire_standard_events<E: gpui::StatefulInteractiveElement>(mut el: 
             // A press anywhere but on the element: what closes a menu.
             "mouseDownOutside" => {
                 el = el.on_mouse_down_out(move |mouse_event, _window, _cx| {
-                    crate::renderer::emit_event_full(&callback, id, "mouseDownOutside", |p| {
-                        let (x, y) = crate::renderer::point_to_xy(mouse_event.position);
-                        p.x = Some(x);
-                        p.y = Some(y);
-                        p.button = Some(crate::renderer::mouse_button_to_u32(mouse_event.button));
-                        p.modifiers = Some(mouse_event.modifiers.into());
+                    crate::renderer::emit(&callback, id, || EventKind::MouseDownOutside {
+                        position: crate::renderer::point(mouse_event.position),
+                        button: crate::renderer::mouse_button_to_u32(mouse_event.button),
+                        modifiers: crate::element_tree::modifiers(mouse_event.modifiers),
                     });
                 });
             }

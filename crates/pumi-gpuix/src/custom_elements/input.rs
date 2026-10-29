@@ -23,8 +23,9 @@ use web_time::Instant;
 
 use super::chips::{ChipLayout, ChipSpec};
 use super::{CustomElement, CustomElementFactory, CustomRenderContext};
-use crate::renderer::{emit_event_full, emit_key_event, EventCallback};
+use crate::renderer::{emit, emit_key_event, EventCallback};
 use crate::theme::Theme;
+use pumi_ui_proto::{EventKind, Press, Selection};
 
 actions!(
     gpuix_text_editor,
@@ -455,15 +456,19 @@ impl CustomElement for TextEditorElement {
             // Match retained hosts: GPUI's semantic click is unreliable under
             // embedded AppKit pumping, so primary mouse-up is the click boundary.
             editor = editor.on_mouse_up(MouseButton::Left, move |event, _window, _cx| {
-                crate::renderer::emit_press_event(&callback, id, "click", |payload| {
-                    let (x, y) = crate::renderer::point_to_xy(event.position);
-                    payload.x = Some(x);
-                    payload.y = Some(y);
-                    payload.button = Some(0);
-                    payload.click_count = Some(event.click_count as u32);
-                    payload.modifiers = Some(event.modifiers.into());
-                    payload.is_right_click = Some(false);
-                });
+                crate::renderer::emit_press_event(
+                    &callback,
+                    id,
+                    EventKind::Click,
+                    Press {
+                        position: Some(crate::renderer::point(event.position)),
+                        button: Some(0),
+                        click_count: Some(event.click_count as u32),
+                        modifiers: Some(crate::element_tree::modifiers(event.modifiers)),
+                        is_right_click: Some(false),
+                        press_id: None,
+                    },
+                );
             });
         }
         if ctx.events.contains("fileDrop") {
@@ -720,10 +725,9 @@ impl TextEditorState {
             }
             let (start, end) = self.selection_utf16();
             self.reported_selection = Some((self.selected_range.clone(), self.selection_reversed));
-            emit_event_full(&self.callback, self.element_id, "change", |payload| {
-                payload.value = Some(self.content.clone());
-                payload.selection_start = Some(start as f64);
-                payload.selection_end = Some(end as f64);
+            emit(&self.callback, self.element_id, || EventKind::Change {
+                value: self.content.clone(),
+                selection: Selection { start: start as u64, end: end as u64 },
             });
         }
     }
@@ -744,9 +748,8 @@ impl TextEditorState {
         }
         self.reported_selection = Some(now);
         let (start, end) = self.selection_utf16();
-        emit_event_full(&self.callback, self.element_id, "select", |payload| {
-            payload.selection_start = Some(start as f64);
-            payload.selection_end = Some(end as f64);
+        emit(&self.callback, self.element_id, || EventKind::Select {
+            selection: Selection { start: start as u64, end: end as u64 },
         });
     }
 
@@ -776,9 +779,7 @@ impl TextEditorState {
 
     fn emit_submit(&self) {
         if self.emits_submit {
-            emit_event_full(&self.callback, self.element_id, "submit", |payload| {
-                payload.value = Some(self.content.clone());
-            });
+            emit(&self.callback, self.element_id, || EventKind::Submit { value: self.content.clone() });
         }
     }
 
@@ -952,7 +953,7 @@ impl TextEditorState {
         // of its own yet: without one it would share the last keystroke's, and a `stopPropagation`
         // of that one (a letter the field kept) would drop it.
         crate::renderer::next_keystroke_id();
-        emit_key_event(&self.callback, self.element_id, "keyDown", &keystroke, Some(false));
+        emit_key_event(&self.callback, self.element_id, EventKind::KeyDown, &keystroke, Some(false));
         true
     }
 
@@ -1716,12 +1717,18 @@ impl gpui::Render for TextEditorState {
             .on_scroll_wheel(cx.listener(Self::on_scroll_wheel))
             .when(self.emits_key_down, move |editor| {
                 editor.on_key_down(move |event, _window, _cx| {
-                    emit_key_event(&key_down_callback, element_id, "keyDown", &event.keystroke, Some(event.is_held));
+                    emit_key_event(
+                        &key_down_callback,
+                        element_id,
+                        EventKind::KeyDown,
+                        &event.keystroke,
+                        Some(event.is_held),
+                    );
                 })
             })
             .when(self.emits_key_up, move |editor| {
                 editor.on_key_up(move |event, _window, _cx| {
-                    emit_key_event(&key_up_callback, element_id, "keyUp", &event.keystroke, None);
+                    emit_key_event(&key_up_callback, element_id, EventKind::KeyUp, &event.keystroke, None);
                 })
             })
             .w_full()

@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use gpui::prelude::*;
 use gpui::{AccessibleAction, Role};
 
-use crate::element_tree::EventPayload;
-use crate::renderer::{emit_event_full, EventCallback};
+use crate::renderer::{emit, EventCallback};
+use pumi_ui_proto::{EventKind, Press};
 
 /// Apply `role` and `aria-*` from React, plus a default role when the app
 /// did not set one. `none` / `presentation` produce no node.
@@ -85,10 +85,13 @@ where
     }
     let callback = callback.clone();
     el.on_a11y_action(AccessibleAction::Click, move |_data, _window, _cx| {
-        emit_event_full(&callback, element_id, "click", |payload: &mut EventPayload| {
-            payload.button = Some(0);
-            payload.click_count = Some(1);
-            payload.is_right_click = Some(false);
+        emit(&callback, element_id, || {
+            EventKind::Click(Press {
+                button: Some(0),
+                click_count: Some(1),
+                is_right_click: Some(false),
+                ..Press::default()
+            })
         });
     })
 }

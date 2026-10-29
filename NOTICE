@@ -8,8 +8,8 @@ pumi is licensed in two parts:
 - The server and what is needed to build on it are licensed under the Apache License, Version
   2.0 (LICENSE-APACHE). These are crates/pumid, crates/pumi-proto, crates/pumi-api,
   crates/pumi-api-macros, crates/pumi-sys, crates/pumi-layout, crates/pumi-model and
-  crates/pumi-cli. crates/pumi-gpuix is also Apache-2.0, because it is forked from gpuix (see
-  below).
+  crates/pumi-cli. crates/pumi-gpuix and its protocol, crates/pumi-ui-proto (moved out of it),
+  are also Apache-2.0, because they are forked from gpuix (see below).
 - Everything else is licensed under the GNU General Public License, version 3 or (at your option)
   any later version (LICENSE). That covers the app (the root crate, src/), crates/pumi-host,
   crates/pumi-keys, crates/pumi-lang, crates/pumi-mirror, crates/pumi-os, crates/pumi-ui, xtask,
@@ -22,8 +22,9 @@ Third-party code
 ----------------
 
 gpuix
-  The renderer (crates/pumi-gpuix) and its React bindings (runtime/app/native,
-  runtime/app/react) are forked from gpuix, "React and Solid for GPUI":
+  The renderer (crates/pumi-gpuix, and crates/pumi-ui-proto moved out of it) and its React
+  bindings (runtime/app/native, runtime/app/react) are forked from gpuix, "React and Solid for
+  GPUI":
   https://github.com/remorses/gpuix. Licensed under the Apache License, Version 2.0
   (LICENSE-APACHE). Changed for pumi.
 

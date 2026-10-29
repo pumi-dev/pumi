@@ -191,13 +191,13 @@ impl Engine {
     /// window in front.
     #[napi]
     pub fn show_about(&self) -> Result<()> {
-        pumi_gpuix::app::update(crate::menus::about)
+        pumi_gpuix::app::update(crate::menus::about).map_err(Into::into)
     }
 
     /// Quits, puts the downloaded update in place, and opens it; nothing while none is ready.
     #[napi]
     pub fn restart_to_update(&self) -> Result<()> {
-        pumi_gpuix::app::update(crate::updater::restart)
+        pumi_gpuix::app::update(crate::updater::restart).map_err(Into::into)
     }
 
     /// Drives the `<webview>` named `handle`: `back`, `forward`, `reload`, `hardReload`, `stop`,
@@ -229,7 +229,7 @@ impl Engine {
             return Ok(());
         }
         crate::theme::set_appearance(appearance);
-        pumi_gpuix::app::update(|cx| cx.refresh_windows())
+        pumi_gpuix::app::update(|cx| cx.refresh_windows()).map_err(Into::into)
     }
 
     /// The system's appearance, `dark` or `light`: GPUI's once the app runs; before, macOS's
@@ -265,7 +265,7 @@ impl Engine {
     /// plugins: {checking, found, error}}`. An `update` event carries it each time it changes.
     #[napi]
     pub fn update_state(&self) -> Result<Value> {
-        pumi_gpuix::app::update(|cx| crate::updater::state(cx))
+        pumi_gpuix::app::update(|cx| crate::updater::state(cx)).map_err(Into::into)
     }
 
     /// Looks for a newer pumi now, and downloads it when there is one; with `plugins`, asks which
@@ -274,15 +274,15 @@ impl Engine {
     pub fn check_for_updates(&self, plugins: Option<bool>) -> Result<()> {
         if plugins == Some(true) {
             let runtime = runtime().ok_or_else(|| Error::from_reason("The engine is not running"))?;
-            return pumi_gpuix::app::update(|cx| crate::updater::plugins::check(runtime, true, cx));
+            return pumi_gpuix::app::update(|cx| crate::updater::plugins::check(runtime, true, cx)).map_err(Into::into);
         }
-        pumi_gpuix::app::update(|cx| crate::updater::check(true, cx))
+        pumi_gpuix::app::update(|cx| crate::updater::check(true, cx)).map_err(Into::into)
     }
 
     /// The plugin updates of `names` were applied (`plugin.update`): they are no longer waiting.
     #[napi]
     pub fn plugin_updates_applied(&self, names: Vec<String>) -> Result<()> {
-        pumi_gpuix::app::update(|cx| crate::updater::plugins::applied(&names, cx))
+        pumi_gpuix::app::update(|cx| crate::updater::plugins::applied(&names, cx)).map_err(Into::into)
     }
 
     /// What the server says of itself: `{version, pid, tabs, sessions, plugins}`, off the JS thread.
@@ -317,7 +317,7 @@ impl Engine {
     #[napi]
     pub fn open_diagnostics(&self, page: Option<String>) -> Result<()> {
         let page = page.as_deref().and_then(crate::ui::diagnostics::Page::named);
-        pumi_gpuix::app::update(|cx| crate::ui::diagnostics::open(page, cx))
+        pumi_gpuix::app::update(|cx| crate::ui::diagnostics::open(page, cx)).map_err(Into::into)
     }
 
     /// What the app's JS measured of itself: `{sample, startup}`, a second while the app is

@@ -3,7 +3,7 @@ name = "pumi-gpuix"
 version = "0.42.0"
 edition = "2021"
 publish = false
-description = "pumi's renderer: a retained tree fed by React, drawn by GPUI. Forked from gpuix (Apache-2.0)."
+description = "pumi's renderer: a retained tree fed by a UI's ops (pumi-ui-proto), drawn by GPUI; the napi feature adds the JS addon. Forked from gpuix (Apache-2.0)."
 license = "Apache-2.0"
 
 [lib]
@@ -30,8 +30,10 @@ gpui = { workspace = true, features = ["font-kit", "profiler", "wayland", "x11"]
 gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }
 percent-encoding = "2"
 url = { version = "2", features = ["serde"] }
-napi = { version = "3.12.7", features = ["napi8", "serde-json"] }
-napi-derive = "3.6.8"
+# The addon (`src/addon`): only with the `napi` feature.
+napi = { version = "3.12.7", features = ["napi8", "serde-json"], optional = true }
+napi-derive = { version = "3.6.8", optional = true }
+pumi-ui-proto = { path = "../pumi-ui-proto" }
 
 # The platform the app is embedded in (src/app/{macos,windows,linux}.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -47,6 +49,10 @@ windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_HiDpi"] 
 gpui_linux = { workspace = true, features = ["wayland", "x11"] }
 
 [features]
-# The GPU test renderer (`TestGpuixRenderer`, src/test_renderer.rs). Off in what ships.
+# The Node addon's classes over the renderer (`src/addon`). The app's root crate turns it on;
+# without it the crate has no JS in it.
+napi = ["dep:napi", "dep:napi-derive"]
+# The GPU test renderer (`TestGpuixRenderer`, src/addon/test_renderer.rs, with `napi`). Off in
+# what ships.
 test-support = ["gpui/test-support", "gpui_platform/test-support", "gpui_macos/test-support"]
 

@@ -10,7 +10,7 @@ name = "pumi"
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 [workspace]
-members = ["crates/pumi-proto", "crates/pumi-keys", "crates/pumid", "crates/pumi-host", "crates/pumi-mirror", "crates/pumi-cli", "crates/pumi-api", "crates/pumi-lang", "crates/pumi-layout", "crates/pumi-model", "crates/pumi-api-macros", "crates/pumi-os", "crates/pumi-gpuix", "crates/pumi-ui", "crates/pumi-sys", "xtask"]
+members = ["crates/pumi-proto", "crates/pumi-keys", "crates/pumid", "crates/pumi-host", "crates/pumi-mirror", "crates/pumi-cli", "crates/pumi-api", "crates/pumi-lang", "crates/pumi-layout", "crates/pumi-model", "crates/pumi-api-macros", "crates/pumi-os", "crates/pumi-gpuix", "crates/pumi-ui-proto", "crates/pumi-ui", "crates/pumi-sys", "xtask"]
 exclude = ["vendor/gpui", "vendor/gpui_windows", "vendor/gpui_linux", "vendor/gpui_macos"]
 [workspace.dependencies]
 gpui = { git = "https://github.com/remorses/zed.git", rev = "f77e5cfe9dad04288566f00c66ecf3c58d6f84b3", default-features = false }
@@ -23,7 +23,7 @@ default = []
 # The GPU test renderer (`TestGpuixRenderer`): `bun run addon` builds it, a release doesn't.
 test-support = ["pumi-gpuix/test-support"]
 [dependencies]
-pumi-gpuix = { path = "crates/pumi-gpuix" }
+pumi-gpuix = { path = "crates/pumi-gpuix", features = ["napi"] }
 pumi-ui = { path = "crates/pumi-ui" }
 napi = { version = "3.12.7", features = ["napi8", "serde-json"] }
 napi-derive = "3.6.8"

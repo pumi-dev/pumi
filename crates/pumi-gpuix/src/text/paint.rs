@@ -25,10 +25,10 @@ use gpui::{
 
 use super::selection::{self, SelectionState};
 
-/// Shared selection state. `GpuixView` and `GpuixRenderer` both hold clones, and
+/// Shared selection state. `GpuixView` and `Renderer` both hold clones, and
 /// so does every paint closure.
 ///
-/// `Arc<Mutex<..>>` rather than `Rc<RefCell<..>>`: napi requires `GpuixRenderer`
+/// `Arc<Mutex<..>>` rather than `Rc<RefCell<..>>`: the addon requires `Renderer`
 /// to be `Send`, and the renderer needs a handle so `getSelectedText()` works
 /// without an App context. All real access is single-threaded, so the mutex is
 /// always uncontended.

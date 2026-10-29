@@ -1,11 +1,11 @@
 /// Retained element tree — the Rust-side source of truth for the UI.
 ///
-/// React's reconciler sends mutations (create, append, remove, etc.) via napi.
+/// The UI sends mutations (`pumi_ui_proto::Op`: create, append, remove, etc.).
 /// This tree stores those mutations. GpuixView builds ephemeral GPUI elements
 /// from it, while virtual lists defer offscreen subtrees until layout requests them.
 ///
-/// All IDs are u64 — JS generates them with an incrementing counter,
-/// passes them as numbers across napi (no string allocation).
+/// All IDs are u64, picked by the UI (`pumi_ui_proto::ElementId`); a JS UI counts
+/// them up and passes them as numbers (no string allocation).
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock};

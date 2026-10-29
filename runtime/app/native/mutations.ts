@@ -1,7 +1,8 @@
 import type { MutationHost, MutationRenderer } from "./host.js"
+import { BUILT_IN_TYPES as BUILT_INS, ELEMENT_EVENTS, UNIVERSAL_PROPS as UNIVERSALS, type Op } from "./protocol.gen.js"
 
-export type MutationValue = number | string | boolean | object | null
-export type MutationTuple = [string, ...MutationValue[]]
+/** One mutation as the renderer reads it: the UI protocol's `Op` (`crates/pumi-ui-proto`). */
+export type MutationTuple = Op
 
 let appliedBatches = 0
 let appliedOps = 0
@@ -98,37 +99,10 @@ export function createMutationQueue(
   return mutations
 }
 
-export const EVENT_PROPS = [
-  ["onToggleFile", "toggleFile"],
-  ["onShowMore", "showMore"],
-  ["onLineClick", "lineClick"],
-  ["onLinkClick", "linkClick"],
-  ["onVisibleRange", "visibleRange"],
-  ["onHighlight", "highlight"],
-  ["onMotionComplete", "motionComplete"],
-  ["onMotionThrottled", "motionThrottled"],
-  ["onChange", "change"],
-  ["onSubmit", "submit"],
-  ["onSelect", "select"],
-  ["onClick", "click"],
-  ["onDoubleClick", "doubleClick"],
-  ["onContextMenu", "contextMenu"],
-  ["onAuxClick", "auxClick"],
-  ["onMouseDown", "mouseDown"],
-  ["onMouseUp", "mouseUp"],
-  ["onMouseEnter", "mouseEnter"],
-  ["onMouseLeave", "mouseLeave"],
-  ["onMouseMove", "mouseMove"],
-  ["onMouseDownOutside", "mouseDownOutside"],
-  ["onKeyDown", "keyDown"],
-  ["onKeyUp", "keyUp"],
-  ["onFocus", "focus"],
-  ["onBlur", "blur"],
-  ["onScroll", "scroll"],
-  ["onLayout", "layout"],
-  ["onScrollChange", "scrollChange"],
-  ["onFileDrop", "fileDrop"],
-] as const
+/** Each event's prop, `onClick` for `click`: one per event an element can listen for. */
+export const EVENT_PROPS: ReadonlyArray<readonly [string, string]> = ELEMENT_EVENTS.map(
+  (event) => [`on${event[0]!.toUpperCase()}${event.slice(1)}`, event] as const
+)
 
 export const EVENT_PROP_NAMES: ReadonlySet<string> = new Set(
   EVENT_PROPS.map(([name]) => name)
@@ -149,27 +123,9 @@ export const RESERVED_PROPS: ReadonlySet<string> = new Set([
   "ref",
 ])
 
-export const BUILT_IN_TYPES: ReadonlySet<string> = new Set(["div", "text"])
+export const BUILT_IN_TYPES: ReadonlySet<string> = new Set(BUILT_INS)
 
-export const UNIVERSAL_PROPS: ReadonlySet<string> = new Set([
-  "autoFocus",
-  "tabIndex",
-  "motion",
-  "cache",
-  "compartment",
-  "testId",
-  "title",
-  "highlight",
-  "textFlow",
-  "role",
-  "aria-label",
-  "aria-description",
-  "aria-id",
-  "aria-expanded",
-  "aria-selected",
-  "aria-valuetext",
-  "aria-level",
-])
+export const UNIVERSAL_PROPS: ReadonlySet<string> = new Set(UNIVERSALS)
 
 export function isReservedProp(name: string): boolean {
   return RESERVED_PROPS.has(name) || EVENT_PROP_NAMES.has(name)
