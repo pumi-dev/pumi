@@ -21,6 +21,7 @@ import { engine } from "./engine.ts"
 import { themeOff } from "./mode.ts"
 import { note, prefixOf } from "./plugins.ts"
 import { AppLayers } from "./layers.tsx"
+import { UpdateToasts } from "./update-toast.tsx"
 import { DEFAULT } from "./theme/default.tsx"
 import { appearanceOf, schemeLook, terminalScheme } from "./theme/terminal/index.ts"
 import { useThemeSpec, useThemes } from "./themes.ts"
@@ -321,6 +322,7 @@ export function Root({ safe }: { safe: boolean }) {
           {ready ? (
             <>
               <Window />
+              <UpdateToasts />
               <AppLayers />
             </>
           ) : (
