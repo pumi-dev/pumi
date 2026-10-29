@@ -1021,6 +1021,14 @@
                 "description": "What the picker's button says (`Open Local Folder`).",
                 "default": null
               },
+              "match": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Only files these globs fit (`[\"*.png\", \"*.jpg\"]`), as a renderer's `match` reads them:\none without a `/` is matched against the file's name. On macOS the picker greys out the\nrest when every glob is `*.<ext>`; elsewhere a file none fits is refused once chosen.",
+                "default": null
+              },
               "path": {
                 "type": "string",
                 "description": "Where it starts: a file's folder, or a folder. Taken but not followed: the system's\npicker opens where it last was.",
@@ -1074,6 +1082,19 @@
             }
           ],
           "result": "/tmp"
+        },
+        {
+          "args": [
+            {
+              "match": [
+                "*.png",
+                "*.jpg"
+              ],
+              "title": "Open Image"
+            }
+          ],
+          "result": "/tmp/a.png",
+          "desc": "Images only."
         }
       ],
       "source": "core"

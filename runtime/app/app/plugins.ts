@@ -43,9 +43,19 @@ export interface Manifest {
   [field: string]: unknown
 }
 
+/** The picker a slot action shows before it runs (`fs.pick`'s options). */
+export interface ActionPick {
+  kind?: "file" | "directory"
+  /** Only the files these globs fit (`*.png`). */
+  match?: string[]
+  multiple?: boolean
+  /** What the picker's button says. */
+  title?: string
+}
+
 /** What a plugin adds to one of the window's slots. */
 export interface Slot {
-  actions?: { id: string; title: string; icon?: string; command: string }[]
+  actions?: { id: string; title: string; icon?: string; command: string; pick?: ActionPick }[]
   /** An export of its `src/ui.tsx`. */
   component?: string
   title?: string

@@ -5,6 +5,14 @@ pub use pumi_os::notify::{Event, Notification};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+
+#[cfg(target_os = "macos")]
+#[path = "macos.rs"]
+mod os;
+#[cfg(not(target_os = "macos"))]
+#[path = "other.rs"]
+mod os;
+
 type Events = (UnboundedSender<Event>, Mutex<Option<UnboundedReceiver<Event>>>);
 fn events_channel() -> &'static Events {
     static EVENTS: OnceLock<Events> = OnceLock::new();
@@ -81,6 +89,16 @@ impl pumi_os::Desktop for GpuiDesktop {
         if pumi_gpuix::app::running() {
             return Err(pumi_api::Error::exception("fs.pick waits for the user: it is not asked on the main thread"));
         }
+        // The OS's own picker, when it limits itself to the files asked for (macOS: their
+        // extensions); else GPUI's, which shows every file. `fs.pick` checks what either chose.
+        if !pick.extensions.is_empty() {
+            let (done, chosen) = futures::channel::oneshot::channel();
+            let native = pick.clone();
+            if on_main(move |_| os::pick(&native, Box::new(move |paths| drop(done.send(paths)))))? {
+                // Gone unanswered (the app quit): as cancelled.
+                return Ok(futures::executor::block_on(chosen).unwrap_or(None));
+            }
+        }
         let options = gpui::PathPromptOptions {
             files: pick.kind == pumi_os::PickKind::File,
             directories: pick.kind == pumi_os::PickKind::Directory,
@@ -136,7 +154,7 @@ pub fn withdraw_message(params: &Value) {
 /// The functions only the app answers (`command.*`, `dialog.*`, …), as the export has them,
 /// wire-only ones included: `cargo xtask api` writes the file. `command.*` is React's:
 /// `answer` leaves it to the app's JS.
-const APP_FUNCTIONS: &str = include_str!("../api/app-functions.json");
+const APP_FUNCTIONS: &str = include_str!("../../api/app-functions.json");
 pub fn provided() -> Vec<Value> {
     let mut all: Vec<Value> = serde_json::from_str(APP_FUNCTIONS).expect("api/app-functions.json is JSON");
     for f in &mut all {

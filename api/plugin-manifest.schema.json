@@ -137,7 +137,22 @@
                     "id": { "type": "string", "minLength": 1 },
                     "title": { "type": "string", "minLength": 1 },
                     "icon": { "type": "string" },
-                    "command": { "description": "One of its `commands`, run with what the slot is of (`{tab}`, `{view}`).", "type": "string", "minLength": 1 }
+                    "command": { "description": "One of its `commands`, run with what the slot is of (`{tab}`, `{view}`).", "type": "string", "minLength": 1 },
+                    "pick": {
+                      "description": "Asks the user for files first (`fs.pick`): the command runs with what the slot is of and `path` (`paths` when `multiple`), and not at all when the picker is cancelled.",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": { "description": "Files, or a folder (`file`).", "enum": ["file", "directory"] },
+                        "match": {
+                          "description": "Only the files these globs fit (`*.png`), as a file renderer's `match`; every file without. On macOS the picker greys out the rest when each is `*.<ext>`; elsewhere a file none fits is refused once chosen.",
+                          "type": "array",
+                          "items": { "type": "string", "minLength": 1 }
+                        },
+                        "multiple": { "description": "Whether it takes more than one file.", "type": "boolean" },
+                        "title": { "description": "What the picker's button says (`Open Image`).", "type": "string" }
+                      }
+                    }
                   }
                 }
               }

@@ -51,7 +51,7 @@ export interface Manifest {
       methods?: string[];
     }[];
     renderers?: Record<string, string | { export: string; match: string[] }>;
-    slots?: Record<string, { actions?: { id: string; title: string; icon?: string; command: string }[]; component?: string; title?: string; icon?: string }>;
+    slots?: Record<string, { actions?: { id: string; title: string; icon?: string; command: string; pick?: { kind?: "file" | "directory"; match?: string[]; multiple?: boolean; title?: string } }[]; component?: string; title?: string; icon?: string }>;
   };
   [field: string]: unknown;
 }

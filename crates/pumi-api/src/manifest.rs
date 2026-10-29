@@ -219,8 +219,9 @@ pub struct TraitSpec {
 /// default theme's, or a UI theme's own). `sidebar.footer` is the bar at the side bar's foot: an
 /// action there is a button beside the panel buttons, for a component that opens elsewhere (a
 /// float, a view) rather than filling the side bar. `tab.new` is what a new tab can be (a pane's
-/// `+` menu, a split's list): each action is run with `{tab, place}`, the tab it goes beside and
-/// where it opens, as `tab.open` takes it.
+/// `+` menu, the Launcher's list): each action is run with `{tab, place}`, the tab it goes beside
+/// and where it opens, as `tab.open` takes it. pumi adds nothing of its own there; a file, an image
+/// or anything else picked from disk is a plugin's action with a `pick`.
 pub const SLOTS: &[&str] = &[
     "window.overlay",
     "session.header",
@@ -265,6 +266,34 @@ pub struct SlotAction {
     pub icon: Option<String>,
     /// One of its `commands`, run with what the slot is of (`{tab}`).
     pub command: String,
+    /// Asks the user for files first (`fs.pick`): the command runs with what the slot is of and
+    /// `path` (`paths` when it takes more than one), and not at all when the picker is cancelled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pick: Option<ActionPick>,
+}
+/// The picker a slot action shows before it runs, as `fs.pick` takes it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionPick {
+    /// Files, or a folder (`file`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<PickKind>,
+    /// Only the files these globs fit (`*.png`), as a file renderer's `match`; every file without.
+    #[serde(default, rename = "match", skip_serializing_if = "Vec::is_empty")]
+    pub matches: Vec<String>,
+    /// Whether it takes more than one file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multiple: Option<bool>,
+    /// What the picker's button says (`Open Image`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+/// What an [`ActionPick`] picks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PickKind {
+    File,
+    Directory,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -632,6 +661,20 @@ pub fn validate(m: &Manifest) -> Result<(), String> {
                     action.id, action.command
                 ));
             }
+            if let Some(pick) = &action.pick {
+                if pick.matches.iter().any(|g| g.trim().is_empty()) {
+                    return Err(format!(
+                        "slot {name:?}: action {:?}: `pick.match` is a list of globs (`*.png`)",
+                        action.id
+                    ));
+                }
+                if pick.kind == Some(PickKind::Directory) && !pick.matches.is_empty() {
+                    return Err(format!(
+                        "slot {name:?}: action {:?}: `pick.match` is for files, not a folder",
+                        action.id
+                    ));
+                }
+            }
         }
     }
     let settings_id = |id: &str| word(id, lower, |ch| digit_or_lower(ch) || ch == '_' || ch == '-');
@@ -835,6 +878,26 @@ mod tests {
                 .contains("not one of its `commands`")
         );
         assert!(with(r#"{ "panel": { "component": "a-b" } }"#).unwrap_err().contains("an export"));
+    }
+    #[test]
+    fn an_action_can_ask_for_files_first() {
+        let with = |pick: &str| {
+            let text = format!(
+                r#"{{ "pumi": {{ "name": "x", "api": 1, "contributes": {{
+                "commands": [{{ "id": "edit", "title": "Edit" }}],
+                "slots": {{ "tab.new": {{ "actions": [{{ "id": "image", "title": "Image…", "command": "edit", "pick": {pick} }}] }} }} }} }} }}"#
+            );
+            parse(&text, Path::new("/p"), None).map(|p| p.manifest.contributes.slots["tab.new"].actions[0].pick.clone())
+        };
+        let pick = with(r#"{ "match": ["*.png", "*.jpg"], "title": "Open Image" }"#).unwrap().unwrap();
+        assert_eq!(pick.matches, ["*.png", "*.jpg"]);
+        assert_eq!(pick.title.as_deref(), Some("Open Image"));
+        assert!(with(r#"{}"#).unwrap().is_some(), "any file");
+        assert!(with(r#"{ "kind": "directory" }"#).is_ok());
+        assert!(with(r#"{ "kind": "directory", "match": ["*.png"] }"#).unwrap_err().contains("for files"));
+        assert!(with(r#"{ "match": [""] }"#).unwrap_err().contains("list of globs"));
+        assert!(with(r#"{ "kind": "image" }"#).is_err());
+        assert!(with(r#"{ "types": ["png"] }"#).is_err(), "unknown keys are refused");
     }
     #[test]
     fn settings_pages_are_its_own_and_sections_go_on_a_built_in_page_or_one_of_them() {

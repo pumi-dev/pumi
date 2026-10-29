@@ -144,13 +144,29 @@ A slot is a place in the window. Give it a `component`, an export of `ui.tsx`, o
 | `session.header` `session.menu` | `session` |
 | `view.actions` `view.badge` `view.menu` | `view` |
 | `tab.toolbar` `tab.strip` `tab.overlay` `tab.menu` | `tab` |
-| `tab.new` | actions only, run with `{tab, place}`: the pane or tab it opens beside, and where (`tab.open`'s place) |
+| `tab.new` | actions only, run with `{tab, place}`: the pane or tab it opens beside, and where (`tab.open`'s place); with `path` or `paths` too when it has a `pick` |
 | `tab.row.controls` `tab.row.footer` `tab.row.menu` | `tab`: a tab's row in the side bar, for each tab with a `@status` |
 | `sidebar.footer` | `point` (the dock's name) |
 
 A theme draws them with `useSlot(slot, args)`, from `pumi/theme`.
 
-`tab.new` is what a new tab can be: the pane's `+` menu, and the list a split opens with. pumi has File; each plugin's actions come after it, a group of their own (the Terminal plugin's shell among them).
+`tab.new` is what a new tab can be: the pane's `+` menu, and the Launcher plugin's list. pumi adds nothing of its own; each plugin's actions are a group of their own (the Terminal plugin's shell among them). Opening a file is a plugin's too: an editor adds `File…`, an image editor `Image…`.
+
+An action with `pick` asks the user for files before its command runs, with the system's picker (`fs.pick`). `match` takes globs, as a file renderer's does; on macOS the picker greys out the other files when each glob is `*.<ext>`, and elsewhere a file none of them fits is refused once chosen, with a notification. The command gets what the slot gives it and `path`, or `paths` when `multiple` is set; a cancelled picker runs nothing. `kind: "directory"` picks a folder instead, and takes no `match`.
+
+```json
+"commands": [{ "id": "open_image", "title": "Open an image" }],
+"slots": {
+  "tab.new": { "actions": [{ "id": "image", "title": "Image…", "icon": "image", "command": "open_image",
+    "pick": { "match": ["*.png", "*.jpg", "*.jpeg", "*.webp"], "title": "Open Image" } }] }
+}
+```
+
+```ts
+// src/main.ts: the picked image, in a tab of its own block, where the `+` was pressed.
+fn.set("open_image", { desc: "Opens an image to edit." }, ({ tab, place, path }: { tab: string; place: unknown; path: string }) =>
+  call("tab.open", "me.paint.canvas", { path }, place));
+```
 
 ## Blocks
 

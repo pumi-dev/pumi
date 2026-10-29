@@ -57,19 +57,28 @@ block2 = "=0.6.2"
 objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
     "std",
+    "block2",
+    "objc2-uniform-type-identifiers",
     "NSApplication",
     "NSDockTile",
     "NSHapticFeedback",
+    "NSOpenPanel",
+    "NSPanel",
     "NSResponder",
+    "NSSavePanel",
     "NSView",
+    "NSWindow",
 ] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = [
     "std",
+    "NSArray",
     "NSString",
     "NSGeometry",
+    "NSURL",
     "NSUserDefaults",
     "objc2-core-foundation",
 ] }
+objc2-uniform-type-identifiers = { version = "=0.3.2", default-features = false, features = ["std", "UTType"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_HiDpi"] }
 [target.'cfg(target_os = "linux")'.dependencies]

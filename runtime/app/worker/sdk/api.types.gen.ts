@@ -424,6 +424,12 @@ export interface Functions {
     /** What the picker's button says (`Open Local Folder`). */
     title?: string;
     /**
+     * Only files these globs fit (`["*.png", "*.jpg"]`), as a renderer's `match` reads them:
+     * one without a `/` is matched against the file's name. On macOS the picker greys out the
+     * rest when every glob is `*.<ext>`; elsewhere a file none fits is refused once chosen.
+     */
+    match?: string[];
+    /**
      * Where it starts: a file's folder, or a folder. Taken but not followed: the system's
      * picker opens where it last was.
      */
@@ -1930,6 +1936,12 @@ export interface Nouns {
     multiple?: boolean;
     /** What the picker's button says (`Open Local Folder`). */
     title?: string;
+    /**
+     * Only files these globs fit (`["*.png", "*.jpg"]`), as a renderer's `match` reads them:
+     * one without a `/` is matched against the file's name. On macOS the picker greys out the
+     * rest when every glob is `*.<ext>`; elsewhere a file none fits is refused once chosen.
+     */
+    match?: string[];
     /**
      * Where it starts: a file's folder, or a folder. Taken but not followed: the system's
      * picker opens where it last was.

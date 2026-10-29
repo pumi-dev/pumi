@@ -52,6 +52,7 @@ import { nameOf, shortName } from "../worktrees.ts"
 import { runsTerminal } from "../terminals.ts"
 import { useStarters, type Starters } from "../starters.ts"
 import { explainNoNewTab } from "../new-tab.ts"
+import { openSettings } from "../settings/open.ts"
 
 // A new tab nothing can open (`new_tab` names no block) says so in the window; the rest go to the log.
 const swallow = (err: unknown) => {
@@ -1465,29 +1466,16 @@ function serverShortcut(tables: unknown, fn: string): string | undefined {
 }
 
 /**
- * What a new tab can be: a file always, then what the
- * plugins add to `tab.new` (a page, a simulator, the agents), each plugin's a group of its own.
- * A plugin's action is run with `{tab, place}`: the pane or tab it
- * opens beside (it names the server), and where. Each shows
- * the keys that open one elsewhere when there are any.
+ * What a new tab can be: what the plugins add to `tab.new` (a terminal, a file, an image, a page,
+ * the agents), each plugin's a group of its own. A plugin's action is run with `{tab, place}`: the
+ * pane or tab it opens beside (it names the server), and where; one with a `pick` asks for its
+ * files first. Each shows the keys that open one elsewhere when there are any.
  */
 function useNewKinds(): NewKind[] {
   const { actions } = useSlot("tab.new")
   const tables = useApp((s) => s.options.keys)
   return useMemo(() => {
-    const out: NewKind[] = [
-      {
-        id: "file",
-        title: "File…",
-        icon: "file",
-        group: "pumi",
-        open: async (on, place) => {
-          const picked = await call(via(on, "fs.pick"), { kind: "file" })
-          const path = Array.isArray(picked) ? picked[0] : picked
-          if (typeof path === "string" && path) await call(via(on, "tab.open"), "file", { path }, place)
-        },
-      },
-    ]
+    const out: NewKind[] = []
     actions.forEach((a) => {
       out.push({
         id: `${a.plugin}/${a.id}`,
@@ -1545,6 +1533,17 @@ function NewTabMenu({ pane, close, onButton }: { pane: string; close(): void; on
             />
           </Fragment>
         ))}
+        {kinds.length ? null : (
+          // Nothing is installed that opens a tab: the way to what does.
+          <MenuItem
+            icon="puzzle"
+            title="Get Plugins…"
+            onClick={() => {
+              close()
+              openSettings("store")
+            }}
+          />
+        )}
       </div>
     </anchored>
   )

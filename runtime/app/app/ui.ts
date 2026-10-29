@@ -19,6 +19,7 @@ import { frozen } from "./mode.ts"
 import * as plugins from "./plugins.ts"
 import { setThemeLoader, setThemes, type ThemeEntry } from "./themes.ts"
 import { samePath } from "../native/platform.ts"
+import { call } from "./engine.ts"
 
 const transpiler = new Bun.Transpiler({ loader: "ts" })
 /** A plugin's `main.ts`, by path: which plugin's it is. */
@@ -123,6 +124,8 @@ function register(entry: plugins.Entry) {
   const c = entry.manifest.contributes
   for (const [slot, given] of Object.entries(c?.slots ?? {})) {
     for (const action of given.actions ?? []) {
+      const fail = (err: any) => console.error(`pumi: ${entry.id}: ${action.title}:`, err?.message ?? err)
+      const run = (args: unknown) => plugins.command(entry.id, action.command, args)
       addAction(slot, {
         id: action.id,
         title: action.title,
@@ -131,7 +134,10 @@ function register(entry: plugins.Entry) {
         // The function it calls: the keys the server binds to it are its own.
         command: `${entry.prefix}${action.command}`,
         run: (args) => {
-          plugins.command(entry.id, action.command, args).catch((err) => console.error(`pumi: ${entry.id}: ${action.title}:`, err?.message ?? err))
+          if (!action.pick) return void run(args).catch(fail)
+          pickFor(action.pick, action.title, args)
+            .then((picked) => picked && run(picked))
+            .catch(fail)
         },
       })
     }
@@ -150,6 +156,25 @@ function register(entry: plugins.Entry) {
     const match = typeof given === "string" ? undefined : given.match
     addRenderer(block, { id: name, plugin: entry.id, match, Component: lazyExport(entry, name) })
   }
+}
+
+/**
+ * Asks the user for what a slot action's `pick` says, before its command runs: what its slot gave
+ * it (`{tab, place}`) and `path`, or `paths` for a `multiple` one. `undefined` when the picker
+ * was cancelled. A file none of `match` fits is refused (`fs.pick` checks it), and the user is told.
+ */
+async function pickFor(pick: plugins.ActionPick, title: string, args: unknown): Promise<Record<string, unknown> | undefined> {
+  let picked: unknown
+  try {
+    picked = await call("fs.pick", { kind: pick.kind, match: pick.match, multiple: pick.multiple, title: pick.title })
+  } catch (err: any) {
+    const detail = String(err?.message ?? err)
+    await call("request.open", { kind: "notification", title, detail, level: "warn" }).catch(() => {})
+    throw err
+  }
+  if (picked == null) return undefined
+  const given = args && typeof args === "object" ? (args as Record<string, unknown>) : {}
+  return pick.multiple ? { ...given, paths: Array.isArray(picked) ? picked : [picked] } : { ...given, path: Array.isArray(picked) ? picked[0] : picked }
 }
 
 /** Follows the plugins: what each contributes, and its themes. */

@@ -739,6 +739,6 @@ fn unknown(commands: &[Command], words: &[String]) -> Error {
     Error::not_found(format!("`{noun}` has no `{wanted}`; it has: {}", verbs.join(", ")))
 }
 
-/// The functions the app provides (`src/system.rs`), there only while it is connected: a command
+/// The functions the app provides (`src/system/mod.rs`), there only while it is connected: a command
 /// for one is unknown without it, and says why.
 const APP_FUNCTIONS: &[&str] = &["tab.cells", "app.profile"];

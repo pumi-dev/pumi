@@ -29,6 +29,10 @@ pub struct Pick {
     pub multiple: bool,
     /// The picker's prompt: on every OS GPUI makes it the button that chooses.
     pub prompt: Option<String>,
+    /// The files' extensions it may limit itself to (`png`), when `fs.pick`'s `match` is only
+    /// `*.<ext>` globs; empty for any file. A picker that can't is answered the same: `fs.pick`
+    /// checks what was chosen against `match` itself.
+    pub extensions: Vec<String>,
 }
 
 static DESKTOP: OnceLock<Box<dyn Desktop>> = OnceLock::new();
@@ -86,6 +90,11 @@ pub struct PickOpts {
     /// What the picker's button says (`Open Local Folder`).
     #[serde(default)]
     pub title: Optional<String>,
+    /// Only files these globs fit (`["*.png", "*.jpg"]`), as a renderer's `match` reads them:
+    /// one without a `/` is matched against the file's name. On macOS the picker greys out the
+    /// rest when every glob is `*.<ext>`; elsewhere a file none fits is refused once chosen.
+    #[serde(default, rename = "match")]
+    pub matches: Optional<Vec<String>>,
     /// Where it starts: a file's folder, or a folder. Taken but not followed: the system's
     /// picker opens where it last was.
     #[serde(default)]
@@ -121,13 +130,48 @@ impl schemars::JsonSchema for Picked {
     effect = "read",
     runs_on = "client",
     example(args = r#"[{"kind": "file", "multiple": true}]"#, result = r#"["/tmp/a.log"]"#),
-    example(args = r#"[{"kind": "directory", "title": "Where to clone"}]"#, result = r#""/tmp""#)
+    example(args = r#"[{"kind": "directory", "title": "Where to clone"}]"#, result = r#""/tmp""#),
+    example(
+        args = r#"[{"match": ["*.png", "*.jpg"], "title": "Open Image"}]"#,
+        result = r#""/tmp/a.png""#,
+        desc = "Images only."
+    )
 )]
 pub fn pick(_cx: &mut Cx, opts: Optional<PickOpts>) -> Result<Option<Picked>> {
     let opts = opts.into_option().unwrap_or_default();
     let kind = opts.kind.0.unwrap_or_default();
     let multiple = opts.multiple.0.unwrap_or(false);
-    Ok(picked(multiple, desktop()?.pick(Pick { kind, multiple, prompt: opts.title.0 })?))
+    let globs = opts.matches.0.unwrap_or_default();
+    if !globs.is_empty() && kind == PickKind::Directory {
+        return Err(Error::invalid_params("`match` is for files: a folder picker takes none"));
+    }
+    if globs.iter().any(|glob| glob.trim().is_empty()) {
+        return Err(Error::invalid_params("`match` has an empty glob"));
+    }
+    let extensions = extensions(&globs);
+    let chosen = desktop()?.pick(Pick { kind, multiple, prompt: opts.title.0, extensions })?;
+    if let Some(path) = chosen.iter().flatten().find(|path| !fits(&globs, path)) {
+        let name = path.file_name().map_or_else(|| path.to_string_lossy(), |name| name.to_string_lossy());
+        return Err(Error::exception(format!("{name} is not a file this takes ({})", globs.join(", "))));
+    }
+    Ok(picked(multiple, chosen))
+}
+
+/// The extensions of `globs` when each is `*.<ext>` (`*.png` is `png`), for a picker to limit
+/// itself to; empty when any is another kind of glob, which only `fs.pick`'s own check follows.
+fn extensions(globs: &[String]) -> Vec<String> {
+    let ext = |glob: &String| {
+        glob.strip_prefix("*.")
+            .filter(|ext| !ext.is_empty() && !ext.contains(['*', '?', '/', '\\', '.']))
+            .map(str::to_lowercase)
+    };
+    globs.iter().map(ext).collect::<Option<Vec<_>>>().unwrap_or_default()
+}
+
+/// Whether one of `globs` fits `path`: any path, without any.
+fn fits(globs: &[String], path: &Path) -> bool {
+    let path = path.to_string_lossy();
+    globs.is_empty() || globs.iter().any(|glob| pumi_api::manifest::glob_fit(glob, &path).is_some())
 }
 
 /// What a picker chose, as `fs.pick` answers it: none chosen is cancelled.
@@ -199,5 +243,25 @@ mod tests {
         assert_eq!(picked(true, chosen()), Some(Picked::Many(vec!["/tmp/a".into(), "/tmp/b".into()])));
         assert_eq!(picked(true, None), None);
         assert_eq!(picked(false, Some(Vec::new())), None);
+    }
+
+    #[test]
+    fn only_star_dot_globs_limit_the_picker_and_every_glob_is_checked() {
+        let globs = |list: &[&str]| list.iter().map(|g| g.to_string()).collect::<Vec<_>>();
+        assert_eq!(super::extensions(&globs(&["*.png", "*.JPG"])), vec!["png", "jpg"]);
+        assert!(super::extensions(&globs(&["*.png", "Dockerfile"])).is_empty(), "one isn't `*.<ext>`: the check alone");
+        assert!(super::extensions(&globs(&["*.tar.gz"])).is_empty());
+        assert!(super::extensions(&[]).is_empty());
+        let images = globs(&["*.png", "*.jpg"]);
+        assert!(super::fits(&images, &PathBuf::from("/tmp/A.PNG")));
+        assert!(!super::fits(&images, &PathBuf::from("/tmp/a.txt")));
+        assert!(super::fits(&[], &PathBuf::from("/tmp/a.txt")), "no `match`: any file");
+    }
+
+    #[test]
+    fn a_folder_picker_takes_no_match() {
+        let refused =
+            crate::answer("fs.pick", serde_json::json!([{ "kind": "directory", "match": ["*.png"] }])).unwrap();
+        assert_eq!(refused.unwrap_err().kind, pumi_api::ErrorKind::InvalidParams);
     }
 }
