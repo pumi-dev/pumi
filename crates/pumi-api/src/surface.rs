@@ -51,8 +51,11 @@ pub struct TabMethodInfo {
     pub returns_schema: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub example: Option<ExampleInfo>,
-    /// The blocks whose own method it is (`run` and `attach`: a terminal's); empty is every block.
+    /// The blocks whose own method it is; empty is every block (or every block on `engine`).
     pub blocks: Vec<String>,
+    /// The engine whose tabs answer it (`run` and `attach`: `terminal`'s), when it is one's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
 }
 /// A core trait and its fields: a tab has it while its option `@<name>` is set, and its fields
 /// are the options `@<name>.<field>`.

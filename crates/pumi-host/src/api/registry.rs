@@ -231,22 +231,24 @@ fn viewers(path: &str) -> Result<Vec<Value>> {
         .filter_map(|(plugin, export, fit)| Some(json!({ "plugin": plugin, "export": export, "fit": fit? })))
         .collect())
 }
-/// The methods `tab.call` answers — `read`, a terminal's `run` — with the schema of each one's
+/// The methods `tab.call` answers — `read`, a terminal tab's `run` — with the schema of each one's
 /// arguments and of its answer, and the blocks that answer it (`surface.json`'s `tabMethods`).
 fn tab_methods(caller: &pumi_api::Caller, k: &mut Kernel, wanted: Option<&str>) -> Result<Vec<Value>> {
-    let blocks: Vec<Value> = k
-        .call_core(caller, "core.blocks", json!([]))?
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|block| block.get("id").cloned())
-        .collect();
+    let listed = k.call_core(caller, "core.blocks", json!([]))?;
+    let all: Vec<&Value> = listed.as_array().into_iter().flatten().collect();
+    let ids = |on: Option<&str>| -> Vec<Value> {
+        let engine = |block: &&&Value| on.is_none_or(|e| block.get("engine").and_then(Value::as_str) == Some(e));
+        all.iter().filter(engine).filter_map(|block| block.get("id").cloned()).collect()
+    };
+    let blocks = ids(None);
     let mut out = Vec::new();
     for method in &pumi_api::surface::surface().tab_methods {
         if !names(wanted, &method.name) {
             continue;
         }
-        let answers: Vec<Value> = if method.blocks.is_empty() {
+        let answers: Vec<Value> = if let Some(engine) = &method.engine {
+            ids(Some(engine))
+        } else if method.blocks.is_empty() {
             blocks.clone()
         } else {
             method.blocks.iter().map(|id| json!(id)).filter(|id| blocks.contains(id)).collect()

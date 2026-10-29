@@ -181,6 +181,11 @@ impl Kernel {
         if let Some(block) = self.plugin_blocks.get(name) {
             return Ok(block.clone());
         }
+        if name == "terminal" {
+            return Err(Error::not_found(
+                "no block `terminal`: a shell is the Terminal plugin's `pumi_dev.terminal.shell` (`pumi plugin add pumi-dev/plugins/terminal`)",
+            ));
+        }
         Err(Error::not_found(format!("no block `{name}`: `block.list` lists them")))
     }
     pub fn tick(&mut self) -> u64 {

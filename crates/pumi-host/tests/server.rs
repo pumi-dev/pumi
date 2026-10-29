@@ -255,6 +255,21 @@ fn check_back(client: &mut Client, cwd: &Path, scrollback: bool) {
     client.wait_for_text(&terminal, "again-2");
 }
 #[test]
+fn a_terminal_s_methods_are_answered_by_the_blocks_on_the_terminal_engine() {
+    let dir = Server::dir();
+    let server = Server::start_home(dir.path());
+    let mut client = server.client();
+    client.page();
+    let answers = |client: &mut Client, method: &str| {
+        let listed = client.call("registry.list", json!(["tabMethod", {"name": method}]));
+        listed[0]["blocks"].clone()
+    };
+    assert_eq!(answers(&mut client, "run"), json!([TERM]), "a terminal's, not the page's");
+    assert_eq!(answers(&mut client, "attach"), json!([TERM]));
+    let read = answers(&mut client, "read");
+    assert!(read.as_array().unwrap().contains(&json!(PAGE)) && read.as_array().unwrap().contains(&json!(TERM)), "{read}");
+}
+#[test]
 fn a_tab_opened_with_no_block_holds_what_a_new_tab_does() {
     let dir = Server::dir();
     let server = Server::start_home(dir.path());

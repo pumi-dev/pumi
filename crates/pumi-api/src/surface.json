@@ -1509,9 +1509,8 @@
         },
         "result": null
       },
-      "blocks": [
-        "terminal"
-      ]
+      "blocks": [],
+      "engine": "terminal"
     },
     {
       "name": "wait",
@@ -1692,9 +1691,8 @@
           "stream": "stream/1"
         }
       },
-      "blocks": [
-        "terminal"
-      ]
+      "blocks": [],
+      "engine": "terminal"
     }
   ],
   "traits": [],
