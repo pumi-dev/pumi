@@ -51,6 +51,7 @@ import * as worktreeViews from "../worktree-views.ts"
 import { nameOf, shortName } from "../worktrees.ts"
 import { runsTerminal } from "../terminals.ts"
 import { useStarters, type Starters } from "../starters.ts"
+import { AgentsChoice, PluginCards, SchemeChoice, SETUP_WIDTH, WindowChoice } from "./start-plugins.tsx"
 import { explainNoNewTab } from "../new-tab.ts"
 import * as plugins from "../plugins.ts"
 import { startables } from "../startable.ts"
@@ -121,39 +122,44 @@ function Window() {
   const t = useTheme()
   const m = useMetrics()
   const C = useComponents()
-  const [shown, setShown] = useSidebar()
+  const [open, setShown] = useSidebar()
+  // While the start screen shows the first run's choices, neither the side bar nor the header over the panes.
+  const [setup, setSetup] = useState(false)
+  const shown = open && !setup
   const [width, setWidth] = useLocal(PREFS.sidebarWidth, 260)
   const swipe = useSidebarSwipe(() => setShown(false))
   const overlays = useSlot("window.overlay").components
   return (
-    <div style={{ display: "flex", flexDirection: "row", width: "100%", height: "100%", position: "relative", backgroundColor: t.window, color: t.text, fontSize: m.fontSize }}>
-      <ProjectTracker />
-      {/* Open, the side bar runs top to bottom: the title bar at its top, its tree holding the views (a section with no header), the sections plugins put there, the buttons for their groups at its foot. */}
-      {shown ? (
-        <div cache onScroll={swipe} style={{ display: "flex", flexDirection: "column", width, flexShrink: 0, minWidth: 0, backgroundColor: t.surface, borderRightWidth: 1, borderColor: t.border, position: "relative" }}>
-          <SidebarHeader />
-          <SessionHeader />
-          <C.Panel point="panel" />
-          <PanelButtons />
-          <Resizer width={width} setWidth={setWidth} />
+    <SetupContext.Provider value={setSetup}>
+      <div style={{ display: "flex", flexDirection: "row", width: "100%", height: "100%", position: "relative", backgroundColor: t.window, color: t.text, fontSize: m.fontSize }}>
+        <ProjectTracker />
+        {/* Open, the side bar runs top to bottom: the title bar at its top, its tree holding the views (a section with no header), the sections plugins put there, the buttons for their groups at its foot. */}
+        {shown ? (
+          <div cache onScroll={swipe} style={{ display: "flex", flexDirection: "column", width, flexShrink: 0, minWidth: 0, backgroundColor: t.surface, borderRightWidth: 1, borderColor: t.border, position: "relative" }}>
+            <SidebarHeader />
+            <SessionHeader />
+            <C.Panel point="panel" />
+            <PanelButtons />
+            <Resizer width={width} setWidth={setWidth} />
+          </div>
+        ) : null}
+        {/* The panes run top to bottom beside it, their title bars in the title bar's row; with it hidden, the views are a header over them. */}
+        <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, backgroundColor: t.editor }}>
+          {shown || setup ? null : <Header />}
+          <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0 }}>
+            <C.Layout />
+          </div>
         </div>
-      ) : null}
-      {/* The panes run top to bottom beside it, their title bars in the title bar's row; with it hidden, the views are a header over them. */}
-      <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, backgroundColor: t.editor }}>
-        {shown ? null : <Header />}
-        <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0 }}>
-          <C.Layout />
-        </div>
+        <MoveGhost />
+        {/* The window's top edge moves it wherever it is pressed, over the tabs too; with no title bar, the title bar's height does. */}
+        <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: setup ? TITLE_BAR : TOP_EDGE, appRegion: "drag" }} />
+        {overlays.map((v) => (
+          <div key={`${v.plugin}/${v.id}`} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+            {renderComponent(v)}
+          </div>
+        ))}
       </div>
-      <MoveGhost />
-      {/* The window's top edge moves it wherever it is pressed, over the tabs too. */}
-      <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: TOP_EDGE, appRegion: "drag" }} />
-      {overlays.map((v) => (
-        <div key={`${v.plugin}/${v.id}`} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-          {renderComponent(v)}
-        </div>
-      ))}
-    </div>
+    </SetupContext.Provider>
   )
 }
 
@@ -900,11 +906,16 @@ const tildePath = (path: string) => (HOME && (path === HOME || path.startsWith(`
 
 /** How many sessions the start screen lists under Recent. */
 const START_RECENT = 5
+/** The start screen's width, but while it shows the first run's choices (`SETUP_WIDTH`). */
+const START_WIDTH = 420
+
+/** Whether the start screen shows the first run's choices, told the window, which puts its side bar away meanwhile. */
+const SetupContext = createContext<(on: boolean) => void>(() => {})
 
 /**
  * What the panes' room shows while there are none: pumi's mark, what starts something (a view of
- * the session shown, a session, a folder), on the first run the plugins to install (`Starters`),
- * the sessions shown last, and the settings.
+ * the session shown, a session, a folder), the sessions shown last, and the settings. On the first
+ * run, until its plugins are installed, a welcome and the choices instead (`StartPlugins`).
  */
 function StartScreen() {
   const ts = useTextSize()
@@ -924,57 +935,88 @@ function StartScreen() {
   const command = (name: string) => () => runCommand(name, window.id)
   const starters = useStarters()
   const appIcon = assets.appIcon()
-  return (
-    <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0, alignItems: "center", justifyContent: "center", overflowY: "scroll" }}>
-      <motion.div
-        initial={animate ? { opacity: 0, y: 8 } : false}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
-        style={{ display: "flex", flexDirection: "column", width: 360, flexShrink: 1, minWidth: 0, paddingLeft: 24, paddingRight: 24, paddingTop: 32, paddingBottom: 32, gap: 28 }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-          {appIcon ? (
-            <img src={appIcon} objectFit="contain" alt="pumi" style={{ width: 72, height: 72, flexShrink: 0 }} />
-          ) : (
-            <div style={{ display: "flex", width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: m.radius + 8, backgroundColor: t.accent }}>
-              <Icon name="pumi" size={34} color={t.accentText} />
-            </div>
-          )}
-          <text style={{ fontSize: ts(20), fontWeight: 600, color: t.text, marginTop: 4 }}>{shown ? shown.label || "pumi" : "Welcome to pumi"}</text>
-          <text style={{ fontSize: ts(12), color: t.muted, textAlign: "center" }}>
-            {shown ? (shown.cwd ? tildePath(shown.cwd) : "Nothing is open in this session.") : "A terminal workspace for your coding agents."}
-          </text>
+  // The first run's choices take the window: the side bar is put away while they show, and the
+  // screen widens to four cards to a row.
+  const setup = !!starters.offered?.length
+  const setSetup = useContext(SetupContext)
+  useEffect(() => {
+    setSetup(setup)
+    return () => setSetup(false)
+  }, [setup, setSetup])
+  const logo = (size: number) =>
+    appIcon ? (
+      <img src={appIcon} objectFit="contain" alt="pumi" style={{ width: size, height: size, flexShrink: 0 }} />
+    ) : (
+      <div style={{ display: "flex", width: size, height: size, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: m.radius + 8, backgroundColor: t.accent }}>
+        <Icon name="pumi" size={Math.round(size * 0.6)} color={t.accentText} />
+      </div>
+    )
+  // The first run's choices are the screen, under a welcome: there is nothing to open, or to go back to, before them.
+  const body = setup ? (
+    <>
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 16, paddingLeft: 10 }}>
+        {logo(56)}
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <text style={{ fontSize: ts(22), lineHeight: ts(26), fontWeight: 600, color: t.text }}>Welcome to Pumi!</text>
+          <text style={{ fontSize: ts(13), lineHeight: ts(18), color: t.muted }}>Make it yours.</text>
         </div>
-        <StartSection title="Start">
-          {shown ? <StartRow icon="terminal" title="New View" command="new_view" onClick={command("new_view")} /> : null}
-          <StartRow icon={shown ? "square_plus" : "terminal"} title="New Session" command="new_workspace" onClick={command("new_workspace")} />
-          <StartRow icon="folder_open" title="Open Folder…" onClick={() => openFolder(window).catch(swallow)} />
+      </div>
+      <StartPlugins starters={starters} />
+    </>
+  ) : (
+    <>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        {logo(72)}
+        <text style={{ fontSize: ts(20), fontWeight: 600, color: t.text, marginTop: 4 }}>{shown ? shown.label || "pumi" : "Welcome to pumi"}</text>
+        <text style={{ fontSize: ts(12), color: t.muted, textAlign: "center" }}>
+          {shown ? (shown.cwd ? tildePath(shown.cwd) : "Nothing is open in this session.") : "A terminal workspace for your coding agents."}
+        </text>
+      </div>
+      <StartSection title="Start">
+        {shown ? <StartRow icon="terminal" title="New View" command="new_view" onClick={command("new_view")} /> : null}
+        <StartRow icon={shown ? "square_plus" : "terminal"} title="New Session" command="new_workspace" onClick={command("new_workspace")} />
+        <StartRow icon="folder_open" title="Open Folder…" onClick={() => openFolder(window).catch(swallow)} />
+      </StartSection>
+      {others.length ? (
+        <StartSection title="Recent">
+          {others.map((s) => (
+            <StartRow key={s.workspace_id} icon="folder" title={s.label || s.workspace_id} detail={s.cwd ? tildePath(s.cwd) : undefined} onClick={() => window.show(s.workspace_id)} />
+          ))}
         </StartSection>
-        {starters.offered?.length ? <StartPlugins starters={starters} /> : null}
-        {others.length ? (
-          <StartSection title="Recent">
-            {others.map((s) => (
-              <StartRow key={s.workspace_id} icon="folder" title={s.label || s.workspace_id} detail={s.cwd ? tildePath(s.cwd) : undefined} onClick={() => window.show(s.workspace_id)} />
-            ))}
-          </StartSection>
-        ) : null}
-        <div style={{ display: "flex", flexDirection: "column", borderTopWidth: 1, borderColor: t.border, paddingTop: 12 }}>
-          <StartRow icon="settings" title="Settings" command="settings" quiet onClick={command("settings")} />
-        </div>
-      </motion.div>
+      ) : null}
+      <div style={{ display: "flex", flexDirection: "column", borderTopWidth: 1, borderColor: t.border, paddingTop: 12 }}>
+        <StartRow icon="settings" title="Settings" command="settings" quiet onClick={command("settings")} />
+      </div>
+    </>
+  )
+  return (
+    // Centred while it fits; taller than the room, it starts at the top and scrolls.
+    <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, minHeight: 0, overflowY: "scroll" }}>
+      <div style={{ display: "flex", flexShrink: 0, minHeight: "100%", alignItems: "center", justifyContent: "center" }}>
+        <motion.div
+          initial={animate ? { opacity: 0, y: 8 } : false}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          style={{ display: "flex", flexDirection: "column", width: setup ? SETUP_WIDTH : START_WIDTH, flexShrink: 1, minWidth: 0, paddingLeft: 24, paddingRight: 24, paddingTop: 32, paddingBottom: 32, gap: 28 }}
+        >
+          {body}
+        </motion.div>
+      </div>
     </div>
   )
 }
 
 /**
- * The first run's plugins: pumi opens nothing by itself, so it offers Launcher, Terminal, Agents and
- * Browser, each ticked, to install at once. New tabs then open the first installed (`starters.ts`).
+ * The first run's choices. Plugins: pumi opens nothing by itself, so it offers Launcher, Terminal,
+ * Agents and Browser, as cards with a picture of each, each ticked, to install at once (with Agents,
+ * whether agents open in a chat or their terminal). New tabs then open the first installed
+ * (`starters.ts`). Look: a transparent window or not, and the colour scheme, set as picked.
  */
 function StartPlugins({ starters }: { starters: Starters }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
-  const { offered = [], picked, toggle, busy, error, install, dismiss } = starters
+  const { offered = [], picked, toggle, busy, error, install, agents, setAgents } = starters
   const count = offered.filter((s) => picked.has(s.name)).length
   const installing = offered.find((s) => s.name === busy)
   const button = (label: string, primary: boolean, enabled: boolean, onClick: () => void) => (
@@ -1005,41 +1047,32 @@ function StartPlugins({ starters }: { starters: Starters }) {
       <text style={{ fontSize: ts(13), color: primary ? t.accentText : t.muted, whiteSpace: "nowrap" }}>{label}</text>
     </div>
   )
+  const label = (text: string, first?: boolean) => <text style={{ fontSize: ts(12), color: t.muted, paddingLeft: 10, paddingTop: first ? 0 : 16, paddingBottom: 8 }}>{text}</text>
   return (
-    <StartSection title="Plugins">
-      <text style={{ fontSize: ts(12), color: t.muted, paddingLeft: 10, paddingBottom: 6 }}>pumi opens what its plugins bring. Pick the ones to install.</text>
-      {offered.map((s) => {
-        const on = picked.has(s.name)
-        return (
-          <div
-            key={s.name}
-            role="checkbox"
-            aria-label={s.title}
-            aria-checked={on}
-            tabIndex={0}
-            onClick={() => busy || toggle(s.name)}
-            onKeyDown={(e: any) => {
-              if (e.key !== "enter" && e.key !== " ") return
-              e.preventDefault?.()
-              if (!busy) toggle(s.name)
-            }}
-            style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10, height: 32, flexShrink: 0, paddingLeft: 10, paddingRight: 8, borderRadius: m.radiusSmall, cursor: "pointer", color: t.text, hover: { backgroundColor: t.hover }, active: { backgroundColor: t.active } }}
-          >
-            <div style={{ display: "flex", width: 16, height: 16, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: 4, borderWidth: 1, borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accent : "transparent" }}>
-              {on ? <Icon name="check" size={11} color={t.accentText} /> : null}
-            </div>
-            <Icon name={s.icon} size={15} color={t.accent} />
-            <text style={{ fontSize: ts(13), whiteSpace: "nowrap", flexShrink: 0 }}>{busy === s.name ? `Installing ${s.title}…` : s.title}</text>
-            <text style={{ fontSize: ts(12), color: t.faint, whiteSpace: "nowrap", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{s.detail}</text>
-          </div>
-        )
-      })}
-      {error ? <text style={{ fontSize: ts(12), color: t.error, paddingLeft: 10, paddingTop: 4 }}>{error}</text> : null}
-      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6, paddingTop: 8 }}>
-        {button("Not now", false, !busy, dismiss)}
-        {button(installing ? `Installing ${installing.title}…` : count ? `Install ${count}` : "Install", true, !busy && count > 0, install)}
+    <>
+      <StartSection title="Plugins">
+        {label("pumi opens what its plugins bring. Pick the ones to install.", true)}
+        <PluginCards offered={offered} picked={picked} busy={busy} onToggle={toggle} />
+        {picked.has("agents") ? (
+          <>
+            {label("Open agents in")}
+            <AgentsChoice value={agents} onChange={setAgents} />
+          </>
+        ) : null}
+      </StartSection>
+      <StartSection title="Look">
+        {label("Window", true)}
+        <WindowChoice />
+        {label("Color scheme")}
+        <SchemeChoice />
+      </StartSection>
+      <div style={{ display: "flex", flexDirection: "column", marginTop: -12 }}>
+        {error ? <text style={{ fontSize: ts(12), color: t.error, paddingLeft: 10, paddingBottom: 8 }}>{error}</text> : null}
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+          {button(installing ? `Installing ${installing.title}…` : count ? `Install ${count} ${count === 1 ? "plugin" : "plugins"}` : "Install", true, !busy && count > 0, install)}
+        </div>
       </div>
-    </StartSection>
+    </>
   )
 }
 
