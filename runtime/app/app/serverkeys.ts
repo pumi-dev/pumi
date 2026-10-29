@@ -3,6 +3,7 @@
 // what a key pressed at a tab becomes. A bound key is the call the table gives it; a key bound
 // nowhere is the tab's, sent there in the server's notation (`tab.call`'s `input {keys}`).
 import { call, engine, store, via } from "./engine.ts"
+import { runsTerminal } from "./terminals.ts"
 
 const NAMES: [string, string][] = [
   ["enter", "Enter"], ["escape", "Escape"], ["tab", "Tab"], ["backspace", "BSpace"], ["space", "Space"],
@@ -148,6 +149,6 @@ export async function press(chord: string, tab: string | undefined): Promise<voi
   }
   sequence = []
   // Bound nowhere: the key is the tab's.
-  const block = store.get().snapshot?.tabs.find((t) => t.tab_id === tab)?.block
-  if (tab && (!block || block === "terminal")) await call(via(tab, "tab.call"), tab, "input", { keys: seq })
+  const shown = store.get().snapshot?.tabs.find((t) => t.tab_id === tab)
+  if (tab && runsTerminal(shown)) await call(via(tab, "tab.call"), tab, "input", { keys: seq })
 }

@@ -78,7 +78,7 @@ async function openAll(manager: WindowManager, urls: string[]) {
       else {
         // A session of its own, with a terminal in it: `tab.open` answers the tab, and its
         // `session` is the one just made.
-        const tab = await call("tab.open", "terminal", {}, { kind: "session", cwd: where.create, name: basename(where.create) || where.create })
+        const tab = await call("tab.open", null, {}, { kind: "session", cwd: where.create, name: basename(where.create) || where.create })
         const opened = await call("tab.get", tab)
         session = opened.session
         made.set(where.create, session)

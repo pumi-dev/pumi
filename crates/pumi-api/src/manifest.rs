@@ -969,8 +969,8 @@ mod tests {
                 format!(r#"{{ "pumi": {{ "name": "x", "api": 1, "contributes": {{ "renderers": {renderers} }} }} }}"#);
             parse(&text, Path::new("/p"), None).map(|p| p.manifest.contributes.renderers)
         };
-        let drawn = with(r#"{ "terminal": "Terminal", "pumi_dev.marmaide.diagram": "Dark" }"#).unwrap();
-        assert_eq!(drawn["terminal"].export(), "Terminal");
+        let drawn = with(r#"{ "pumi_dev.terminal.shell": "Shell", "pumi_dev.marmaide.diagram": "Dark" }"#).unwrap();
+        assert_eq!(drawn["pumi_dev.terminal.shell"].export(), "Shell");
         let files = with(r#"{ "file": { "export": "Editor", "match": ["*.md", "docs/**"] } }"#).unwrap();
         assert_eq!((files["file"].export(), files["file"].fits("/a/README.md")), ("Editor", Some(3)));
         assert_eq!(files["file"].fits("/a/docs/x/y.txt"), Some(5), "a glob with a `/` is matched against the path");

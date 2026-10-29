@@ -79,10 +79,10 @@ function tabActions(args: Record<string, unknown>, { state }: ActionContext): Ac
   if (pane && pane.tabs.length > 1) {
     out.push(act("split_out", "Move to Pane Right", run("tab.update", id, { place: { kind: "tiled", pane: pane.pane, split: "right" } }), { icon: "split", group: "split" }))
   }
-  if (tabs && pane) out.push(act("new_tab", "New Tab", run("tab.open", "terminal", {}, { kind: "tiled", pane: pane.pane }), { command: "new_tab", icon: "plus", group: "split" }))
+  if (tabs && pane) out.push(act("new_tab", "New Tab", run("tab.open", null, {}, { kind: "tiled", pane: pane.pane }), { command: "new_tab", icon: "plus", group: "split" }))
   out.push(
-    act("split_right", "Split Right", run("tab.open", "terminal", {}, { kind: "tiled", beside: id, split: "right" }), { command: "split_vertical", icon: "split", group: "split" }),
-    act("split_down", "Split Down", run("tab.open", "terminal", {}, { kind: "tiled", beside: id, split: "down" }), { command: "split_horizontal", icon: "split_down", group: "split" }),
+    act("split_right", "Split Right", run("tab.open", null, {}, { kind: "tiled", beside: id, split: "right" }), { command: "split_vertical", icon: "split", group: "split" }),
+    act("split_down", "Split Down", run("tab.open", null, {}, { kind: "tiled", beside: id, split: "down" }), { command: "split_horizontal", icon: "split_down", group: "split" }),
   )
   if (zoomable) out.push(act("zoom", zoomed ? "Restore Layout" : "Zoom Pane", run("pane.update", pane!.pane, { zoom: !zoomed }), { command: "zoom", icon: zoomed ? "minimize" : "maximize", checked: zoomed, group: "split" }))
   if (pane && pane.tabs.length > 1) {
@@ -119,7 +119,7 @@ function sessionActions(args: Record<string, unknown>, { state, window }: Action
     act(
       "new_view",
       "New View",
-      () => call(via(id, "tab.open"), "terminal", {}, { kind: "view", session: id }).then(() => current || window?.show(id)),
+      () => call(via(id, "tab.open"), null, {}, { kind: "view", session: id }).then(() => current || window?.show(id)),
       { command: "new_view", icon: "plus", group: "open" },
     ),
   ]

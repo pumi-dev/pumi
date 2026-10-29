@@ -44,12 +44,13 @@ describe("iconSource", () => {
 })
 
 describe("tabIcon", () => {
-  const terminal = { block: "terminal" }
+  const terminal = { block: "pumi_dev.terminal.shell" }
 
   test("a tab's own icon comes first, then its block's, the core's", () => {
     expect(tabIcon({ ...terminal, options: { "@icon": SVG } })).toMatchObject({ src: SVG, from: "tab" })
+    expect(tabIcon(terminal, { icon: "terminal" })).toMatchObject({ src: assets.icon("terminal"), from: "block" })
     expect(tabIcon({ block: "me.board.board" }, { icon: "list" })).toMatchObject({ src: assets.icon("list"), from: "block" })
-    expect(tabIcon(terminal)).toMatchObject({ src: assets.icon("terminal"), from: "core" })
+    expect(tabIcon({ block: "file" })).toMatchObject({ src: assets.icon("file"), from: "core" })
     expect(tabIcon({ block: "me.board.board" })).toMatchObject({ src: assets.icon("box"), from: "core" })
   })
 

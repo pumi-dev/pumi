@@ -48,7 +48,7 @@ export async function freeBranchesFor(session: string): Promise<string[]> {
  */
 export async function open(window: { session?: string; show(session: string): void }, session: string, path: string): Promise<void> {
   const home = sessionOf(session)?.cwd
-  const tab: string = await call("tab.open", "terminal", { cwd: path }, { kind: "view", session })
+  const tab: string = await call("tab.open", null, { cwd: path }, { kind: "view", session })
   if (window.session !== session) window.show(session)
   if (samePath(home, path)) return
   const { view } = await call("tab.get", tab)

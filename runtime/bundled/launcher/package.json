@@ -2,7 +2,7 @@
   "name": "pumi-launcher",
   "version": "0.1.0",
   "license": "GPL-3.0-or-later",
-  "description": "A new pane's first tab: what to open in it (a terminal, a page, a file, a simulator…). The theme draws it and puts what is picked in its place. Turn it off and a split opens a terminal.",
+  "description": "A new pane's first tab: what to open in it (a terminal, a page, a file, a simulator…). The theme draws it and puts what is picked in its place. Turn it off and a split opens what `new_tab` names.",
   "type": "module",
   "private": true,
   "pumi": {

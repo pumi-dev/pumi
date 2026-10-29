@@ -129,7 +129,7 @@ function tab(c: Context): string | undefined {
 }
 
 const split = (direction: "right" | "down") => (c: Context) =>
-  call(via(c.tab ?? c.session, "tab.open"), "terminal", {}, { kind: "tiled", split: direction, ...(c.tab ? { beside: c.tab } : {}) })
+  call(via(c.tab ?? c.session, "tab.open"), null, {}, { kind: "tiled", split: direction, ...(c.tab ? { beside: c.tab } : {}) })
 
 const focus = (direction: "left" | "right" | "up" | "down") => (c: Context) =>
   call(via(c.tab ?? c.session, "pane.focus"), null, { direction })
@@ -155,7 +155,7 @@ function sessionAt(c: Context, offset: number): string | undefined {
  * `session` is the one just made. `server` is where it is made, when that is not this one.
  */
 export async function openSession(window: { show(session: string): void }, place: { name?: string; cwd?: string } = {}, server?: string): Promise<string | undefined> {
-  const tab = idOn(server, await call(methodOn(server, "tab.open"), "terminal", {}, { kind: "session", ...place }))
+  const tab = idOn(server, await call(methodOn(server, "tab.open"), null, {}, { kind: "session", ...place }))
   const made = await call(methodOn(server, "tab.get"), tab)
   const session: string | undefined = typeof made?.session === "string" ? made.session : undefined
   if (session) window.show(session)
@@ -185,20 +185,20 @@ const APP: [string, string, (c: Context, index?: number) => unknown][] = [
   ["previous_workspace", "Previous session", (c) => { const s = sessionAt(c, -1); if (s) c.window.show(s) }],
   ["next_workspace", "Next session", (c) => { const s = sessionAt(c, 1); if (s) c.window.show(s) }],
   ["switch_workspace", "Switch to session 1–9", (c, i) => { const s = store.get().snapshot?.workspaces[(i ?? 1) - 1]; if (s) c.window.show(s.workspace_id) }],
-  ["new_view", "New view", (c) => call(via(c.session, "tab.open"), "terminal", {}, { kind: "view", ...(c.session ? { session: c.session } : {}) })],
+  ["new_view", "New view", (c) => call(via(c.session, "tab.open"), null, {}, { kind: "view", ...(c.session ? { session: c.session } : {}) })],
   ["new_worktree", "New worktree", (c) => (c.session && worktreeViews.canHave(c.session) ? worktreeViews.createAsking(c.window, c.session) : undefined)],
   ["close_view", "Close view", (c) => (c.view ? call(via(c.view, "view.close"), c.view) : undefined)],
   ["reopen_closed", "Reopen closed tab", async () => {
     const [last] = (await call("tab.list", { closed: true })) ?? []
     // Into its pane while that is there, else beside the tab its pane was beside.
-    if (last) return call("tab.open", last.state?.block ?? "terminal", { state: last.state }, { kind: "tiled", ...(last.pane ? { pane: last.pane } : {}), ...(last.view ? { view: last.view } : {}), ...(last.beside ? { beside: last.beside } : {}) })
+    if (last) return call("tab.open", last.state?.block ?? null, { state: last.state }, { kind: "tiled", ...(last.pane ? { pane: last.pane } : {}), ...(last.view ? { view: last.view } : {}), ...(last.beside ? { beside: last.beside } : {}) })
   }],
   ["previous_view", "Previous view", (c) => call(via(c.view ?? c.session, "view.focus"), c.view ?? null, { offset: -1 })],
   ["next_view", "Next view", (c) => call(via(c.view ?? c.session, "view.focus"), c.view ?? null, { offset: 1 })],
   ["switch_view", "Switch to view 1–9", (c, i) => call(via(c.view ?? c.session, "view.focus"), c.view ?? null, { index: (i ?? 1) - 1 })],
   ["split_vertical", "Split right", split("right")],
   ["split_horizontal", "Split down", split("down")],
-  ["new_tab", "New tab in pane", (c) => call(via(c.tab ?? c.session, "tab.open"), "terminal", {}, { kind: "tiled", pane: paneOf(c) ?? "current" })],
+  ["new_tab", "New tab in pane", (c) => call(via(c.tab ?? c.session, "tab.open"), null, {}, { kind: "tiled", pane: paneOf(c) ?? "current" })],
   ["next_tab", "Next tab in pane", (c) => call(via(c.tab ?? c.session, "tab.focus"), c.tab ?? null, { offset: 1 })],
   ["previous_tab", "Previous tab in pane", (c) => call(via(c.tab ?? c.session, "tab.focus"), c.tab ?? null, { offset: -1 })],
   ["close_tab", "Close tab", (c) => (tab(c) !== undefined ? call(via(c.tab, "tab.close"), tab(c)) : undefined)],

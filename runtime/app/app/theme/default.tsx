@@ -50,6 +50,7 @@ import { FONT_DEFAULT } from "../../sdk/font.ts"
 import { AtTop, TileMotion, Tiling } from "./tiles.tsx"
 import * as worktreeViews from "../worktree-views.ts"
 import { nameOf, shortName } from "../worktrees.ts"
+import { runsTerminal } from "../terminals.ts"
 
 const swallow = (err: unknown) => console.error(String(err))
 
@@ -1188,11 +1189,11 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
   if (!tab || !front) return null
   const zoomable = zoomed || (!!tree && "axis" in tree)
   // A split starts as a new pane's list of what to open in it (the bundled `pumi/launcher`'s
-  // block); a terminal, while that plugin is off.
+  // block); what a new tab holds (`new_tab`), while that plugin is off.
   const split = (side: SplitSide) => {
     const place = { kind: "tiled", pane: id, split: side }
     call(via(id, "tab.open"), NEW_TAB, {}, place)
-      .catch(() => call(via(id, "tab.open"), "terminal", {}, place))
+      .catch(() => call(via(id, "tab.open"), null, {}, place))
       .catch(swallow)
   }
   const zoom = () => call(via(id, "pane.update"), id, { zoom: !zoomed }).catch(swallow)
@@ -1386,7 +1387,7 @@ function serverShortcut(tables: unknown, fn: string): string | undefined {
 }
 
 /**
- * What a new tab can be: a terminal and a file always, then what the
+ * What a new tab can be: a file always, then what the
  * plugins add to `tab.new` (a page, a simulator, the agents), each plugin's a group of its own,
  * numbered for a new pane's list. A plugin's action is run with `{tab, place}`: the pane or tab it
  * opens beside (it names the server), and where. Each shows
@@ -1397,7 +1398,6 @@ function useNewKinds(): NewKind[] {
   const tables = useApp((s) => s.options.keys)
   return useMemo(() => {
     const out: NewKind[] = [
-      { id: "terminal", title: "Terminal", icon: "terminal", letter: "T", keys: shortcut("new_tab"), group: "pumi", open: (on, place) => call(via(on, "tab.open"), "terminal", {}, place) },
       {
         id: "file",
         title: "File…",
@@ -1814,12 +1814,11 @@ function usePaneHoverPart(part: string): { onMouseEnter(): void; onMouseLeave():
 }
 
 /** The core's terminal block. */
-const TERMINAL = "terminal"
 
 /**
  * The `TabBody` part: what plugins put at `tab.strip`, then the tab's block as its renderer
- * draws it (`useRenderer`; the terminal's is the bundled `pumi/terminal`), with the `tab.overlay`
- * components over it. A file no renderer fits says so, with a way to open it elsewhere. A terminal
+ * draws it (`useRenderer`), with the `tab.overlay` components over it. A file no renderer fits says
+ * so, with a way to open it elsewhere; a terminal nothing draws is drawn plain. A terminal
  * fades a little while another pane has the focus (the theme's `paneFade`).
  */
 function TabBody({ tab: id, focused }: { tab: string; focused: boolean }) {
@@ -1841,6 +1840,9 @@ function TabBody({ tab: id, focused }: { tab: string; focused: boolean }) {
     renderComponent(renderer, { tab: model, block: tab.block, focused })
   ) : tab.block === FILE ? (
     <FilePlaceholder tab={id} path={String(tab.options?.path ?? "")} />
+  ) : runsTerminal(tab) ? (
+    // A terminal whose block nothing draws (its plugin off, or not yet back after a restart).
+    <terminal tab={id} autoFocus={focused} style={{ flexGrow: 1, minWidth: 0, minHeight: 0 }} />
   ) : (
     <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
       <text style={{ color: t.faint }}>{`Nothing draws ${tab.block} blocks`}</text>
@@ -1849,7 +1851,7 @@ function TabBody({ tab: id, focused }: { tab: string; focused: boolean }) {
   return (
     <>
       {components.map((v) => renderComponent(v, { tab: id }))}
-      <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0, position: "relative", opacity: !focused && fade > 0 && tab?.block === TERMINAL ? 1 - fade : undefined }}>
+      <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0, position: "relative", opacity: !focused && fade > 0 && runsTerminal(tab) ? 1 - fade : undefined }}>
         {body}
         {overlays.map((v) => (
           // An overlay draws over the body and leaves its mouse to it. To take a tab over, a
@@ -3091,7 +3093,7 @@ const SessionRow = memo(function SessionRow({ session: id, label, folded, toggle
   const { open, show, menu, shown } = useMenu("session.menu", { session: id })
   const [adding, setAdding] = useState<{ x: number; y: number } | undefined>()
   const newView = () => {
-    call(via(id, "tab.open"), "terminal", {}, { kind: "view", session: id })
+    call(via(id, "tab.open"), null, {}, { kind: "view", session: id })
       .then(() => current || window.show(id))
       .catch(swallow)
   }

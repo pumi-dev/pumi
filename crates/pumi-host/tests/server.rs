@@ -670,24 +670,24 @@ fn a_linked_plugin_is_refreshed_where_it_is_and_removing_it_keeps_its_directory(
     assert!(client.try_call("plugin.update", json!([id, {}])).is_err(), "its directory is gone");
 }
 #[test]
-fn the_bundled_terminal_plugin_is_listed_turned_off_and_never_removed() {
+fn a_bundled_plugin_is_listed_turned_off_and_never_removed() {
     let dir = Server::dir();
     let server = Server::start_home(dir.path());
     let mut client = server.client();
-    let terminal = |client: &mut Client| {
-        let list = client.call("registry.list", json!(["plugin", {"name": "terminal"}]));
-        list.as_array().unwrap().iter().find(|p| p["spec"]["name"] == "terminal").cloned().expect("listed")
+    let launcher = |client: &mut Client| {
+        let list = client.call("registry.list", json!(["plugin", {"name": "launcher"}]));
+        list.as_array().unwrap().iter().find(|p| p["spec"]["name"] == "launcher").cloned().expect("listed")
     };
-    let listed = terminal(&mut client);
-    assert_eq!((listed["id"].clone(), listed["bundled"].clone()), (json!("pumi/terminal"), json!(true)));
-    assert_eq!(listed["manifest"]["contributes"]["renderers"]["terminal"], "Terminal");
+    let listed = launcher(&mut client);
+    assert_eq!((listed["id"].clone(), listed["bundled"].clone()), (json!("pumi/launcher"), json!(true)));
+    assert_eq!(listed["manifest"]["contributes"]["blocks"][0]["id"], "new");
     assert_eq!(listed["active"], true);
-    let err = client.try_call("plugin.remove", json!(["pumi/terminal", {}])).unwrap_err();
+    let err = client.try_call("plugin.remove", json!(["pumi/launcher", {}])).unwrap_err();
     assert!(err["message"].as_str().unwrap().contains("bundled"), "{err}");
-    client.call("plugin.update", json!(["pumi/terminal", {"enabled": false}]));
-    assert_eq!(terminal(&mut client)["active"], false, "turned off, and still listed");
-    client.call("plugin.update", json!(["pumi/terminal", {"enabled": true}]));
-    assert_eq!(terminal(&mut client)["active"], true);
+    client.call("plugin.update", json!(["pumi/launcher", {"enabled": false}]));
+    assert_eq!(launcher(&mut client)["active"], false, "turned off, and still listed");
+    client.call("plugin.update", json!(["pumi/launcher", {"enabled": true}]));
+    assert_eq!(launcher(&mut client)["active"], true);
 }
 /// A bundled plugin is listed as one, and its block is there while it is on and gone when it is
 /// turned off.

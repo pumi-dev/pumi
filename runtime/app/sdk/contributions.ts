@@ -110,10 +110,8 @@ export const TAB_RENDERER = "@tab_renderer"
  * The app keeps it equal to what it draws the tab with.
  */
 export const VIEWER = "@viewer"
-/** The global option that names the plugin drawing each core block (`{ terminal: "me/term" }`). */
+/** The global option that names the plugin drawing a block another plugin declares (`{ "pumi_dev.terminal.shell": "me/term" }`). */
 export const RENDERERS = "renderers"
-/** The plugin that draws a core block when nothing else is chosen. */
-const BUNDLED: Record<string, string> = { terminal: "pumi/terminal" }
 
 /** The core's block for a file, which the renderer whose `match` fits the file best draws. */
 export const FILE = "file"
@@ -134,8 +132,7 @@ function fileRenderer(list: ComponentItem[], path: string, chosen: unknown): Com
 /**
  * What draws `tab`'s block: the plugin its `@tab_renderer` names, else the block's own plugin
  * (`owner.name.id` is `owner/name`'s), else for a file the one whose `match` fits it best, else
- * for a core block the one `renderers` names and then the bundled one; else any plugin that draws
- * it. `undefined` when no enabled plugin does (a file no renderer fits draws the placeholder).
+ * the one `renderers` names; else any plugin that draws it. `undefined` when no enabled plugin does (a file no renderer fits draws the placeholder).
  */
 export function useRenderer(tab: string | undefined): ComponentItem | undefined {
   useSyncExternalStore(subscribe, () => version)
@@ -171,7 +168,7 @@ export function rendererFor(p: { block: string; options?: Record<string, unknown
   const by = (plugin: unknown) => (typeof plugin === "string" && plugin ? list.find((r) => r.plugin === plugin) : undefined)
   const own = list.find((r) => ownsBlock(r.plugin, p.block))
   if (p.block === FILE) return by(p.options?.[TAB_RENDERER]) ?? by(p.options?.[VIEWER]) ?? fileRenderer(list, String(p.options?.path ?? ""), chosen?.[FILE])
-  return by(p.options?.[TAB_RENDERER]) ?? own ?? by(chosen?.[p.block]) ?? by(BUNDLED[p.block]) ?? list[0]
+  return by(p.options?.[TAB_RENDERER]) ?? by(chosen?.[p.block]) ?? own ?? list[0]
 }
 
 /**
