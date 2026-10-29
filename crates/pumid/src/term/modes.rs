@@ -76,6 +76,8 @@ pub enum Seen {
     Query(Vec<u8>),
     Bell,
 }
+/// Where the tracker is in a sequence. Only 7-bit controls start and end one: the output is
+/// UTF-8, whose continuation bytes are the 8-bit C1 controls (`✳` is `e2 9c b3`, and `9c` is ST).
 #[derive(Clone, Debug, Default)]
 enum State {
     #[default]
@@ -108,8 +110,6 @@ impl Tracker {
             State::Ground => match b {
                 0x1b => self.state = State::Esc,
                 0x07 => seen.push(Seen::Bell),
-                0x9b => self.begin(State::Csi),
-                0x9d => self.begin(State::Osc),
                 _ => {}
             },
             State::Esc => match b {
@@ -138,7 +138,6 @@ impl Tracker {
             State::Osc => match b {
                 0x07 => self.osc_end(seen),
                 0x1b => self.state = State::OscEsc,
-                0x9c => self.osc_end(seen),
                 _ if self.buf.len() < OSC_LIMIT => self.buf.push(b),
                 _ => {}
             },
@@ -153,7 +152,7 @@ impl Tracker {
             }
             State::Str => match b {
                 0x1b => self.state = State::StrEsc,
-                0x9c | 0x07 => self.state = State::Ground,
+                0x07 => self.state = State::Ground,
                 _ => {}
             },
             State::StrEsc => self.state = if b == b'\\' { State::Ground } else { State::Str },
@@ -286,6 +285,12 @@ mod tests {
         assert_eq!(fresh.modes, t.modes, "the diff reproduces the modes");
         feed(&mut t, b"\x1bc");
         assert_eq!(t.modes, Modes::default());
+    }
+    #[test]
+    fn a_title_s_utf8_is_not_read_as_c1_controls() {
+        let mut t = Tracker::default();
+        let seen = feed(&mut t, "\x1b]0;\u{2733} Claude Code\x07\u{271d}\x1b]2;after\x07".as_bytes());
+        assert_eq!(seen, vec![Seen::Title("\u{2733} Claude Code".into()), Seen::Title("after".into())]);
     }
     #[test]
     fn title_cwd_forwarded_and_queries() {

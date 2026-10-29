@@ -35,6 +35,8 @@ struct Pending {
     body: String,
 }
 const MAX_PAYLOAD: usize = crate::status::MAX_SEQUENCE;
+/// Where the scanner is in a sequence. Only 7-bit controls start and end one: the output is
+/// UTF-8, whose continuation bytes are the 8-bit C1 controls (`✳` is `e2 9c b3`, and `9c` is ST).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum Mode {
     #[default]
@@ -55,7 +57,6 @@ impl Scanner {
         for &byte in bytes {
             match (self.mode, byte) {
                 (Mode::Ground, 0x1b) => self.mode = Mode::Escape,
-                (Mode::Ground, 0x9d) => self.begin(),
                 (Mode::Ground, _) => {}
                 (Mode::Escape, b']') => self.begin(),
                 (Mode::Escape, b'c') => {
@@ -64,7 +65,7 @@ impl Scanner {
                 }
                 (Mode::Escape, 0x1b) => {}
                 (Mode::Escape, _) => self.mode = Mode::Ground,
-                (Mode::Payload, 0x07) | (Mode::Payload, 0x9c) => self.end(out),
+                (Mode::Payload, 0x07) => self.end(out),
                 (Mode::Payload, 0x1b) => self.mode = Mode::PayloadEscape,
                 (Mode::Payload, byte) => self.push(byte),
                 (Mode::PayloadEscape, b'\\') => self.end(out),
@@ -188,6 +189,14 @@ mod tests {
             scanner.feed(chunk, &mut out);
         }
         out
+    }
+    #[test]
+    fn a_title_s_utf8_is_not_read_as_c1_controls() {
+        let bytes = "\x1b]0;\u{2733} Claude Code\x07\u{271d}\x1b]2;after\x07";
+        assert_eq!(
+            scan(&[bytes.as_bytes()]),
+            vec![Osc::Title("\u{2733} Claude Code".into()), Osc::Title("after".into())]
+        );
     }
     #[test]
     fn titles_and_notifications_survive_split_reads() {
