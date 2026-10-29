@@ -111,7 +111,7 @@ function useLook(spec: ThemeSpec, prefix: string | undefined): Appearance {
  * the parts that hold tabs (`Window`, `Layout`, `Split`, `Pane`, `Float`): a terminal's output
  * draws its tab again, and a part around it on a budget would hold the output back.
  */
-const COMPARTMENTED = ["Starting", "ViewBar", "View", "Panel", "Agent", "AgentControls", "Action"] as const
+const COMPARTMENTED = ["Starting", "ViewBar", "View", "Panel", "TabRow", "TabRowControls", "Action"] as const
 
 /**
  * A theme's own parts: the ones that hold no tab each in a compartment, and every one drawn with

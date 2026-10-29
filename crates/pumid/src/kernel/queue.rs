@@ -162,7 +162,7 @@ pub fn remove(kernel: &mut Kernel, id: u64, why: Gone) -> Option<QueuedItem> {
 /// Whether `tab` waits on the user: a permission or a question open, or a result (`error`) not
 /// yet seen, or its program says it is `blocked`.
 pub fn holds(kernel: &Kernel, tab: TabId) -> bool {
-    kernel.requests.holds(tab) || matches!(kernel.tab_option(tab, "@agent.status").as_str(), Some("blocked" | "error"))
+    kernel.requests.holds(tab) || matches!(kernel.tab_option(tab, "@status").as_str(), Some("blocked" | "error"))
 }
 /// The oldest item for `tab`'s `session`, taken out; none while the tab holds.
 pub fn take(kernel: &mut Kernel, tab: TabId, session: &str) -> Option<QueuedItem> {

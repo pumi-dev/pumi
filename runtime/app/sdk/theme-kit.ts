@@ -125,7 +125,7 @@ export { useBinding } from "../app/commands.ts"
 export * as commands from "../app/commands.ts"
 export { getLocal, setLocal, useLocal } from "../app/local.ts"
 export { run, setContextResolver, windowContext } from "./context.ts"
-export { useAgentStatus } from "./elements.tsx"
+export { useStatus } from "./elements.tsx"
 export {
   DismissableLayer,
   useIsPresent,

@@ -935,7 +935,7 @@ fn a_program_without_osc_7501_falls_back_to_its_title_and_notifications() {
     let tab = client.call("tab.open", json!(["terminal", {"command": ["/bin/sh"]}, {"kind": "session", "name": "a"}]));
     let wait = |client: &mut Client, want: Value, why: &str| {
         let deadline = Instant::now() + Duration::from_secs(10);
-        while client.option("@agent.status", &tab) != want {
+        while client.option("@status", &tab) != want {
             assert!(Instant::now() < deadline, "{why}: {}", client.option("@program_status", &tab));
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -948,13 +948,13 @@ fn a_program_without_osc_7501_falls_back_to_its_title_and_notifications() {
     let records = client.option("@program_status", &tab);
     assert_eq!(records[0]["msg"], json!("toy: finished"), "{records}");
     client.call("tab.update", json!([&tab, {"seen": true}]));
-    assert_ne!(client.option("@agent.status", &tab), json!("done"), "seen, it stops asking");
+    assert_ne!(client.option("@status", &tab), json!("done"), "seen, it stops asking");
     // A program that reports for itself is heard, not its title.
     let real = "sh -c \"printf '\\033]7501;state=idle:app=real\\007\\033]2;\u{2819} real\\007'; sleep 1\"\r";
     client.call("tab.call", json!([tab, "input", {"text": real}]));
     wait(&mut client, json!("idle"), "the real report never counted");
     std::thread::sleep(Duration::from_millis(300));
-    assert_eq!(client.option("@agent.status", &tab), json!("idle"), "its spinner is not a fallback any more");
+    assert_eq!(client.option("@status", &tab), json!("idle"), "its spinner is not a fallback any more");
 }
 #[test]
 fn a_programs_own_report_is_its_tabs_status() {
@@ -965,67 +965,67 @@ fn a_programs_own_report_is_its_tabs_status() {
     let report = "printf '\\033]7501;state=working:app=toy\\033\\\\'\r";
     client.call("tab.call", json!([tab, "input", {"text": report}]));
     let deadline = Instant::now() + Duration::from_secs(10);
-    while client.option("@agent.status", &tab) != json!("working") {
-        assert!(Instant::now() < deadline, "the tab never took the report: {:?}", client.option("@agent.status", &tab));
+    while client.option("@status", &tab) != json!("working") {
+        assert!(Instant::now() < deadline, "the tab never took the report: {:?}", client.option("@status", &tab));
         std::thread::sleep(Duration::from_millis(50));
     }
     let records = client.option("@program_status", &tab);
     assert_eq!((records[0]["state"].clone(), records[0]["app"].clone()), (json!("working"), json!("toy")), "{records}");
     let prompt = "printf '\\033]133;A\\007'\r";
     client.call("tab.call", json!([tab, "input", {"text": prompt}]));
-    while client.option("@agent.status", &tab) != json!(null) {
+    while client.option("@status", &tab) != json!(null) {
         assert!(Instant::now() < deadline, "the prompt never dropped the running report");
         std::thread::sleep(Duration::from_millis(50));
     }
     assert_eq!(client.option("@program_status", &tab), json!(null), "and its records went with it");
     let failed = "printf '\\033]7501;state=error\\033\\\\'\r";
     client.call("tab.call", json!([tab, "input", {"text": failed}]));
-    while client.option("@agent.status", &tab) != json!("error") {
+    while client.option("@status", &tab) != json!("error") {
         assert!(Instant::now() < deadline, "a failed program never said so");
         std::thread::sleep(Duration::from_millis(50));
     }
     client.call("tab.call", json!([tab, "input", {"text": prompt}]));
     std::thread::sleep(Duration::from_millis(200));
-    assert_eq!(client.option("@agent.status", &tab), json!("error"), "a result stays until it is seen");
+    assert_eq!(client.option("@status", &tab), json!("error"), "a result stays until it is seen");
     assert_eq!(client.call("tab.update", json!([&tab, {"seen": true}])), json!(null));
-    assert_eq!(client.option("@agent.status", &tab), json!("idle"));
+    assert_eq!(client.option("@status", &tab), json!("idle"));
     client.call("tab.update", json!([&tab, {"seen": true}]));
-    assert_eq!(client.option("@agent.status", &tab), json!("idle"), "nothing more to see");
+    assert_eq!(client.option("@status", &tab), json!("idle"), "nothing more to see");
     let deadline = Instant::now() + Duration::from_secs(10);
     let job = "sh -c \"printf '\\033]7501;state=working:id=job:app=job\\007\\033]133;A\\007'; sleep 2\"\r";
     client.call("tab.call", json!([tab, "input", {"text": job}]));
-    while client.option("@agent.status", &tab) != json!("working") {
+    while client.option("@status", &tab) != json!("working") {
         assert!(Instant::now() < deadline, "the job never said it was working");
         std::thread::sleep(Duration::from_millis(50));
     }
     std::thread::sleep(Duration::from_millis(300));
-    assert_eq!(client.option("@agent.status", &tab), json!("working"), "a program's 133 is not a prompt");
+    assert_eq!(client.option("@status", &tab), json!("working"), "a program's 133 is not a prompt");
     let deadline = Instant::now() + Duration::from_secs(10);
-    while client.option("@agent.status", &tab) != json!("idle") {
+    while client.option("@status", &tab) != json!("idle") {
         assert!(Instant::now() < deadline, "the job's report outlived it: {}", client.option("@program_status", &tab));
         std::thread::sleep(Duration::from_millis(50));
     }
     let done = "sh -c \"printf '\\033]7501;state=done:id=build\\007'; sleep 1\"\r";
     client.call("tab.call", json!([tab, "input", {"text": done}]));
     let deadline = Instant::now() + Duration::from_secs(10);
-    while client.option("@agent.status", &tab) != json!("done") {
+    while client.option("@status", &tab) != json!("done") {
         assert!(Instant::now() < deadline, "the job's result never came");
         std::thread::sleep(Duration::from_millis(50));
     }
     std::thread::sleep(Duration::from_millis(1500));
-    assert_eq!(client.option("@agent.status", &tab), json!("done"), "a result outlives its program");
+    assert_eq!(client.option("@status", &tab), json!("done"), "a result outlives its program");
     assert_eq!(client.call("tab.update", json!([&tab, {"seen": true}])), json!(null));
     let left = client.option("@program_status", &tab);
     assert!(left.as_array().is_some_and(|l| l.iter().all(|r| r["id"] != "build")), "{left}");
     let blocked = client.call("tab.call", json!([tab, "report", {"body": "state=blocked:id=ext:kind=question:app=x"}]));
     assert_eq!(blocked, json!(true));
     let deadline = Instant::now() + Duration::from_secs(10);
-    while client.option("@agent.status", &tab) != json!("blocked") {
+    while client.option("@status", &tab) != json!("blocked") {
         assert!(Instant::now() < deadline, "a report from outside never counted");
         std::thread::sleep(Duration::from_millis(50));
     }
     client.call("tab.call", json!([tab, "report", {"body": "state=clear:id=ext"}]));
-    while client.option("@agent.status", &tab) != json!("idle") {
+    while client.option("@status", &tab) != json!("idle") {
         assert!(Instant::now() < deadline, "its clear never counted");
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -1046,7 +1046,7 @@ fn a_package_tab_is_an_agent_and_its_requests_block_it_until_answered() {
     assert_eq!(client.call("tab.call", json!([tab, "report", {"body": "state=working:app=codex"}])), json!(true));
     let until = |client: &mut Client, want: &str| {
         let deadline = Instant::now() + Duration::from_secs(10);
-        while client.option("@agent.status", &tab) != json!(want) {
+        while client.option("@status", &tab) != json!(want) {
             assert!(Instant::now() < deadline, "never {want}: {}", client.option("@program_status", &tab));
             std::thread::sleep(Duration::from_millis(30));
         }

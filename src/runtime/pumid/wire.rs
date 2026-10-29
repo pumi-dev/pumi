@@ -138,7 +138,7 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
             terminal_title_stripped: title.as_deref().map(strip_title).filter(|t| !t.is_empty()),
             label: text("@label"),
             agent: text("@agent"),
-            agent_status: text("@agent.status").unwrap_or_default(),
+            status: text("@status").unwrap_or_default(),
             agent_session: text("@agent.session"),
             agent_model: text("@agent.model"),
             agent_transcript: text("@agent.transcript"),

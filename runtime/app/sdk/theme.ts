@@ -25,12 +25,12 @@ export interface Tokens {
   error: string
   success: string
   overlay: string
-  "agent.working": string
-  "agent.blocked": string
-  "agent.error": string
-  "agent.done": string
-  "agent.idle": string
-  "agent.unknown": string
+  "status.working": string
+  "status.blocked": string
+  "status.error": string
+  "status.done": string
+  "status.idle": string
+  "status.unknown": string
   [token: string]: string
 }
 
@@ -212,12 +212,12 @@ export const DARK: Tokens = {
   error: "#cc6666",
   success: "#a6e3a1",
   overlay: "#26282bf2",
-  "agent.working": "#89b4fa",
-  "agent.blocked": "#fab387",
-  "agent.error": "#f38ba8",
-  "agent.done": "#a6e3a1",
-  "agent.idle": "#9399b2",
-  "agent.unknown": "#6c7086",
+  "status.working": "#89b4fa",
+  "status.blocked": "#fab387",
+  "status.error": "#f38ba8",
+  "status.done": "#a6e3a1",
+  "status.idle": "#9399b2",
+  "status.unknown": "#6c7086",
 }
 
 export const LIGHT: Tokens = {
@@ -237,12 +237,12 @@ export const LIGHT: Tokens = {
   error: "#db3b4b",
   success: "#40a02b",
   overlay: "#f7f8faf2",
-  "agent.working": "#1e66f5",
-  "agent.blocked": "#d35e00",
-  "agent.error": "#d20f39",
-  "agent.done": "#2f8a1e",
-  "agent.idle": "#7c7f93",
-  "agent.unknown": "#9ca0b0",
+  "status.working": "#1e66f5",
+  "status.blocked": "#d35e00",
+  "status.error": "#d20f39",
+  "status.done": "#2f8a1e",
+  "status.idle": "#7c7f93",
+  "status.unknown": "#9ca0b0",
 }
 
 export const METRICS: Metrics = { fontSize: 13, radius: 6, radiusSmall: 4, paneFade: 0.25, backgroundOpacity: 1 }
@@ -377,10 +377,10 @@ export interface Components {
   Panel: ComponentType<{ point: string }>
   /** Every session, its views and their tabs, as a tree: the default side bar's own, heading the first page of its sections. */
   Sessions: ComponentType
-  /** An agent, as a list of them shows it. */
-  Agent: ComponentType<{ tab: string }>
-  /** An agent's actions: the `agent.controls` contributions, given the agent. */
-  AgentControls: ComponentType<{ tab: string }>
+  /** A tab with a status (`@status`), as a list of tabs (the `Sessions` tree) shows it. */
+  TabRow: ComponentType<{ tab: string }>
+  /** A tab row's actions: the `tab.row.controls` contributions, given the tab. */
+  TabRowControls: ComponentType<{ tab: string }>
   /** One action, as a button. */
   Action: ComponentType<{ action: Action; args?: unknown }>
   /**

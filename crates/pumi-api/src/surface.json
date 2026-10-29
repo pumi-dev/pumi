@@ -1820,22 +1820,6 @@
           }
         },
         {
-          "name": "status",
-          "type": "string",
-          "desc": "What the agent is doing.",
-          "watch": true,
-          "schema": {
-            "type": "string",
-            "enum": [
-              "working",
-              "blocked",
-              "done",
-              "idle",
-              "error"
-            ]
-          }
-        },
-        {
           "name": "session",
           "type": "string | null",
           "desc": "The agent's own session id.",

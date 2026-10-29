@@ -22,24 +22,24 @@ pub const STATES: &[&str] = &["blocked", "error", "done", "working", "idle"];
 pub fn mark(status: &str, marks: Marks) -> Mark {
     let mark = |icon, color, motion| Mark { icon, color, motion };
     match (marks, status) {
-        (Marks::Icons, "working") => mark("status-spinner", "agent.working", "spin"),
-        (Marks::Icons, "blocked") => mark("status-alert", "agent.blocked", "pulse"),
-        (Marks::Icons, "error") => mark("status-x", "agent.error", ""),
-        (Marks::Icons, "done") => mark("status-check", "agent.done", ""),
-        (Marks::Dots, "working") => mark("status-dot", "agent.working", "pulse"),
-        (Marks::Dots, "blocked" | "error" | "done") => mark("status-dot", agent_token(status), ""),
+        (Marks::Icons, "working") => mark("status-spinner", "status.working", "spin"),
+        (Marks::Icons, "blocked") => mark("status-alert", "status.blocked", "pulse"),
+        (Marks::Icons, "error") => mark("status-x", "status.error", ""),
+        (Marks::Icons, "done") => mark("status-check", "status.done", ""),
+        (Marks::Dots, "working") => mark("status-dot", "status.working", "pulse"),
+        (Marks::Dots, "blocked" | "error" | "done") => mark("status-dot", status_token(status), ""),
         (_, "idle") => mark("status-ring", "muted", ""),
         _ => mark("status-unknown", "faint", ""),
     }
 }
-pub fn agent_token(status: &str) -> &'static str {
+pub fn status_token(status: &str) -> &'static str {
     match status {
-        "blocked" => "agent.blocked",
-        "error" => "agent.error",
-        "done" => "agent.done",
-        "working" => "agent.working",
-        "idle" => "agent.idle",
-        _ => "agent.unknown",
+        "blocked" => "status.blocked",
+        "error" => "status.error",
+        "done" => "status.done",
+        "working" => "status.working",
+        "idle" => "status.idle",
+        _ => "status.unknown",
     }
 }
 #[cfg(test)]

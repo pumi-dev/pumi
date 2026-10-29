@@ -12,9 +12,9 @@ export interface Snapshot {
   focused_workspace_id?: string | null
   focused_view_id?: string | null
   focused_tab_id?: string | null
-  workspaces: { workspace_id: string; label: string; active_view_id?: string | null; agent_status: string; cwd?: string }[]
-  views: { view_id: string; workspace_id: string; number: number; label: string | null; agent_status: string; worktree?: string }[]
-  tabs: { tab_id: string; block: string; traits?: string[]; view_id: string; workspace_id: string; agent_status: string; cwd?: string | null; terminal_title?: string | null; label?: string; agent?: string; agent_session?: string; agent_model?: string; agent_transcript?: string; agent_conversation?: string; place?: unknown; options?: Record<string, unknown> }[]
+  workspaces: { workspace_id: string; label: string; active_view_id?: string | null; status: string; cwd?: string }[]
+  views: { view_id: string; workspace_id: string; number: number; label: string | null; status: string; worktree?: string }[]
+  tabs: { tab_id: string; block: string; traits?: string[]; view_id: string; workspace_id: string; status: string; cwd?: string | null; terminal_title?: string | null; label?: string; agent?: string; agent_session?: string; agent_model?: string; agent_transcript?: string; agent_conversation?: string; place?: unknown; options?: Record<string, unknown> }[]
   layouts: { view_id: string; zoomed: boolean; focused_tab_id?: string | null }[]
 }
 

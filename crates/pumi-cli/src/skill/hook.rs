@@ -173,7 +173,7 @@ pub fn run(address: &Address, args: &[String]) -> i32 {
         }
         Event::Resume => {
             // Run after every tool: only a `blocked` tab is told, so a tool call costs one read.
-            let status = client.call("option.get", json!(["@agent.status", { "id": format!("%{tab}") }]));
+            let status = client.call("option.get", json!(["@status", { "id": format!("%{tab}") }]));
             if status.ok().as_ref().and_then(Value::as_str) == Some("blocked") {
                 report(&mut client, tab, agent, name, "working", None);
             }

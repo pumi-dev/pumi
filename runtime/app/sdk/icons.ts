@@ -111,8 +111,8 @@ export function useTabIcon(tab: string | undefined): TabIconInfo {
  */
 export function useTabStatus(tab: string | undefined): string | undefined {
   const agent = useAgentOf(tab)
-  const own = useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.agent_status)
-  return agent ? agent.agent_status || "unknown" : own || undefined
+  const own = useApp((s) => s.snapshot?.tabs.find((p) => p.tab_id === tab)?.status)
+  return agent ? agent.status || "unknown" : own || undefined
 }
 
 /** A status that says something happened (working, done, blocked, error): what a tab's icon gives way to. */

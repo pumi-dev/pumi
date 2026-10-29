@@ -400,7 +400,7 @@ impl Kernel {
             match change.name.as_str() {
                 "@agent.session" => queue::session_changed(self, tab),
                 // The tab may hold no more: what waits for it may go.
-                "@agent.status" => queue::deliver(self),
+                "@status" => queue::deliver(self),
                 _ => {}
             }
             let _ = self.with_instance(tab, |instance, kernel| {

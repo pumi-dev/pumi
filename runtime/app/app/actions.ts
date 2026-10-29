@@ -136,6 +136,6 @@ function sessionActions(args: Record<string, unknown>, { state, window }: Action
 }
 
 addActions("tab.menu", tabActions)
-addActions("agent.menu", tabActions)
+addActions("tab.row.menu", tabActions)
 addActions("view.menu", viewActions)
 addActions("session.menu", sessionActions)

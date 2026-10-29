@@ -6,7 +6,7 @@ import type { Appearance, Metrics, Tokens } from "./theme.ts"
 const UI_FONT = `-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Ubuntu, Cantarell, sans-serif`
 const MONO_FONT = `ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace`
 
-/** `accentText` -> `accent-text`, `agent.working` -> `agent-working`: a token's name in CSS. */
+/** `accentText` -> `accent-text`, `status.working` -> `status-working`: a token's name in CSS. */
 function kebab(name: string): string {
   return name.replace(/\./g, "-").replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)
 }

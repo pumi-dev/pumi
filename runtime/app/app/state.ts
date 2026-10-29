@@ -11,7 +11,7 @@ export type Tab = Snapshot["tabs"][number]
 
 /**
  * An agent: a tab that says it is one (`@agent`), a terminal's program or a plugin's own tab.
- * Each field is a tab option's copy: `agent_status` `@agent.status`, `session` `@agent.session`,
+ * Each field is a tab option's copy: `status` `@status`, `session` `@agent.session`,
  * `model` `@agent.model`, `transcript` `@agent.transcript` (the session file's absolute path),
  * `conversation` `@agent.conversation` (the plugin, `owner/name`, that serves its conversation).
  */
@@ -19,7 +19,7 @@ export interface Agent {
   tab_id: string
   view_id: string
   workspace_id: string
-  agent_status: string
+  status: string
   agent: string
   /** The block its tab holds: `terminal`, or a plugin's (`owner.name.id`). */
   block: string
@@ -59,7 +59,7 @@ export function agentsOf(snapshot: Snapshot | undefined): Agent[] {
           tab_id: p.tab_id,
           view_id: p.view_id,
           workspace_id: p.workspace_id,
-          agent_status: p.agent_status,
+          status: p.status,
           agent: p.agent!,
           block: p.block,
           name: p.label,

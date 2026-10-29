@@ -232,9 +232,9 @@ pub const SLOTS: &[&str] = &[
     "tab.overlay",
     "tab.menu",
     "tab.new",
-    "agent.controls",
-    "agent.footer",
-    "agent.menu",
+    "tab.row.controls",
+    "tab.row.footer",
+    "tab.row.menu",
     "panel",
     "sidebar.footer",
     "palette.actions",
@@ -811,11 +811,11 @@ mod tests {
         .unwrap();
         assert_eq!(slots["panel"].component.as_deref(), Some("Files"));
         assert!(with(r#"{ "sidebar": { "component": "Files" } }"#).unwrap_err().contains("not one of the window's"));
-        for gone in ["status", "window.titlebar"] {
+        for gone in ["status", "window.titlebar", "agent.controls"] {
             let err = with(&format!(r#"{{ "{gone}": {{ "component": "Bar" }} }}"#)).unwrap_err();
             assert!(err.contains("not one of the window's"), "{gone}: {err}");
         }
-        assert!(with(r#"{ "agent.controls": { "component": "Stop" } }"#).is_ok(), "an agent's row");
+        assert!(with(r#"{ "tab.row.controls": { "component": "Stop" } }"#).is_ok(), "a tab's row");
         assert!(with(r#"{ "palette.actions": { "component": "Menu" } }"#).unwrap_err().contains("holds actions"));
         assert!(with(r#"{ "tab.toolbar": {} }"#).unwrap_err().contains("no `actions`"));
         assert!(

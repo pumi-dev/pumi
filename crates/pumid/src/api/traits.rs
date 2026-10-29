@@ -69,7 +69,7 @@ pub fn of(kernel: &Kernel, tab: TabId) -> Vec<String> {
     effect = "read",
     example(
         args = "[]",
-        result = r#"[{"id": "agent", "provider": "core", "desc": "An agent transport attached to a tab.", "fields": ["name", "status", "session", "model", "transcript", "conversation", "accepts", "queue"]}]"#
+        result = r#"[{"id": "agent", "provider": "core", "desc": "An agent transport attached to a tab.", "fields": ["name", "session", "model", "transcript", "conversation", "accepts", "queue"]}]"#
     )
 )]
 pub fn pumi_trait_list(cx: &mut Cx) -> Result<Vec<TraitInfo>> {

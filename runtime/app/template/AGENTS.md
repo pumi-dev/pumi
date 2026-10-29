@@ -17,8 +17,8 @@ async functions.
 - `contributes.slots.<slot>`: `actions` (each runs a command) and a `component` (an export of
   `ui.tsx`). Slots: `panel`, `sidebar.footer` (a button at the side bar's foot, running a
   command), `window.overlay`, `session.header`, `view.actions`, `view.badge`, `tab.strip`,
-  `tab.overlay`, `tab.toolbar`, `agent.controls`, `agent.footer`, the menus `session.menu`,
-  `view.menu`, `tab.menu` and `agent.menu`, and `palette.actions` (actions only).
+  `tab.overlay`, `tab.toolbar`, `tab.row.controls`, `tab.row.footer`, the menus `session.menu`,
+  `view.menu`, `tab.menu` and `tab.row.menu`, and `palette.actions` (actions only).
 - `contributes.blocks`: what a tab can hold, drawn by the `ui.tsx` export named for the id
   (`board` → `Board`, given `{ tab, block, focused }`). Its own methods are the plugin's
   functions `<block>.<method>`, so `tab.call("%3", "back")` on a `owner.name.browser` tab calls

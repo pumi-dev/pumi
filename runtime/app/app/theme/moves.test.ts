@@ -9,15 +9,15 @@ const snapshot = {
   workspaces: [],
   layouts: [],
   views: [
-    { view_id: "@1", workspace_id: "$1", number: 0, label: "", agent_status: "" },
-    { view_id: "@2", workspace_id: "$1", number: 1, label: "", agent_status: "" },
-    { view_id: "@3", workspace_id: "$2", number: 4, label: "", agent_status: "" },
+    { view_id: "@1", workspace_id: "$1", number: 0, label: "", status: "" },
+    { view_id: "@2", workspace_id: "$1", number: 1, label: "", status: "" },
+    { view_id: "@3", workspace_id: "$2", number: 4, label: "", status: "" },
   ],
   tabs: [
-    { tab_id: "%1", block: "terminal", view_id: "@1", workspace_id: "$1", agent_status: "" },
-    { tab_id: "%2", block: "terminal", view_id: "@1", workspace_id: "$1", agent_status: "" },
-    { tab_id: "%3", block: "terminal", view_id: "@2", workspace_id: "$1", agent_status: "" },
-    { tab_id: "%4", block: "terminal", view_id: "@3", workspace_id: "$2", agent_status: "" },
+    { tab_id: "%1", block: "terminal", view_id: "@1", workspace_id: "$1", status: "" },
+    { tab_id: "%2", block: "terminal", view_id: "@1", workspace_id: "$1", status: "" },
+    { tab_id: "%3", block: "terminal", view_id: "@2", workspace_id: "$1", status: "" },
+    { tab_id: "%4", block: "terminal", view_id: "@3", workspace_id: "$2", status: "" },
   ],
 } as Snapshot
 const where = whereIn(snapshot)

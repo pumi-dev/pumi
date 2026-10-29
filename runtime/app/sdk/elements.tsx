@@ -42,10 +42,10 @@ export function IconButton(props: IconButtonProps) {
   return <C.IconButton {...props} />
 }
 
-/** How an agent's status is drawn: its colour and an icon of the app's set. */
-export function useAgentStatus(status: string | undefined): { color: string; icon: string } {
+/** How a tab's status (`@status`) is drawn: its colour and an icon of the app's set. */
+export function useStatus(status: string | undefined): { color: string; icon: string } {
   const t = useTheme()
-  return { color: t[`agent.${status || "unknown"}`] ?? t["agent.unknown"], icon: `status_${status && status !== "unknown" ? status : "unknown"}` }
+  return { color: t[`status.${status || "unknown"}`] ?? t["status.unknown"], icon: `status_${status && status !== "unknown" ? status : "unknown"}` }
 }
 
 /**

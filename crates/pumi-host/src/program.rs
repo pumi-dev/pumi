@@ -155,7 +155,7 @@ fn publish(kernel: &mut Kernel, tab: u64) {
     let Some(core) = kernel.core.clone() else { return };
     let program = if records.is_empty() { Value::Null } else { json!(records) };
     core.notify("core.setOptionValue", json!(["@program_status", program, { "tab": tab }]));
-    core.notify("core.setOptionValue", json!(["@agent.status", status, { "tab": tab }]));
+    core.notify("core.setOptionValue", json!(["@status", status, { "tab": tab }]));
 }
 #[cfg(test)]
 mod tests {

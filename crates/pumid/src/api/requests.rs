@@ -41,7 +41,7 @@ pub fn pumi_request_get(cx: &mut Cx, request: RequestRef) -> Result<Request> {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RequestOpenOpts {
-    /// The tab it is for: an agent's, for a permission.
+    /// The tab it is for; a permission has one.
     #[serde(default)]
     pub tab: Option<TabRef>,
     /// When it closes unanswered (`timeout`), RFC 3339. A permission or a question expires in
@@ -53,10 +53,10 @@ pub struct RequestOpenOpts {
     pub source: Option<String>,
 }
 /// Put something to the user: a notification (`kind: "notification"`, no `options`), a
-/// permission for the agent in `tab` (the `tool` and the `options` to allow or reject it), or a
+/// permission for what runs in `tab` (the `tool` and the `options` to allow or reject it), or a
 /// question. Whoever listens to `request.opened` shows it, and anyone may answer it with
 /// `request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.
-/// While a permission or a question is open its tab's agent takes no queued message. pumi-host
+/// While a permission or a question is open its tab takes no queued message. pumi-host
 /// posts notifications to the OS's notification centre and takes them back when they close.
 /// Answers the request's id.
 #[api(
@@ -65,7 +65,7 @@ pub struct RequestOpenOpts {
     example(
         args = r#"[{"kind": "permission", "title": "Run `make deploy`?", "tool": "Bash", "options": [{"id": "allow", "label": "Allow", "kind": "allow_once"}, {"id": "deny", "label": "Deny", "kind": "reject_once"}]}, {"tab": "%3"}]"#,
         result = r#""+8""#,
-        desc = "Ask whether the agent in tab 3 may deploy; wait for `request.closed` with `match: \"+8\"`."
+        desc = "Ask whether what runs in tab 3 may deploy; wait for `request.closed` with `match: \"+8\"`."
     ),
     example(
         args = r#"[{"kind": "notification", "title": "Tests", "detail": "All 212 passed", "notification": {"group": "tests", "sound": "default"}}]"#,
@@ -88,7 +88,7 @@ pub fn pumi_request_open(cx: &mut Cx, request: RequestAsk, opts: Option<RequestO
     }
     let tab = opts.tab.map(|p| k.model.tab_id(&caller, p.0)).transpose()?;
     if request.kind == RequestKind::Permission && tab.is_none() {
-        return Err(Error::invalid_params("a permission is asked for an agent's tab: give its `tab`"));
+        return Err(Error::invalid_params("a permission is asked for a tab: give its `tab`"));
     }
     let now = requests::now_ms();
     let expires = match opts.expires.as_deref() {

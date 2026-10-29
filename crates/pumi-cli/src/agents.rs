@@ -197,7 +197,7 @@ fn tab_list(address: &Address, rest: &[String]) -> Result<i32, Error> {
                 place_cell(&tab["place"]),
                 text(&tab["block"]),
                 text(&agent["name"]),
-                text(&agent["status"]),
+                text(&tab["options"]["@status"]),
                 text(&agent["model"]),
                 text(&tab["title"]),
                 home(&text(&tab["cwd"])),
@@ -229,7 +229,7 @@ fn agent_list(address: &Address, rest: &[String], json: bool) -> Result<i32, Err
             vec![
                 id_cell(tab),
                 text(&agent["name"]),
-                text(&agent["status"]),
+                text(&tab["options"]["@status"]),
                 text(&agent["model"]),
                 if waiting == 0 { String::new() } else { waiting.to_string() },
                 text(&tab["title"]),
@@ -270,7 +270,8 @@ fn status(address: &Address, rest: &[String], json: bool) -> Result<i32, Error> 
 /// `%3 claude working claude-opus-4 (2 waiting)`
 fn status_line(tab: &Value) -> String {
     let agent = &tab["traits"]["agent"];
-    let mut line = format!("{} {} {}", text(&tab["id"]), text(&agent["name"]), or(&text(&agent["status"]), "unknown"));
+    let mut line =
+        format!("{} {} {}", text(&tab["id"]), text(&agent["name"]), or(&text(&tab["options"]["@status"]), "unknown"));
     if let Some(model) = agent["model"].as_str().filter(|m| !m.is_empty()) {
         line.push(' ');
         line.push_str(model);
@@ -307,7 +308,7 @@ fn wait(address: &Address, rest: &[String], json: bool) -> Result<i32, Error> {
             }
             Err(err) => return Err(err),
         };
-        let now = got["traits"]["agent"]["status"].as_str().unwrap_or("").to_string();
+        let now = got["options"]["@status"].as_str().unwrap_or("").to_string();
         if until.contains(&now) {
             if json {
                 println!("{}", json!({ "tab": got["id"], "status": now, "agent": got["traits"]["agent"] }));

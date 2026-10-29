@@ -23,9 +23,6 @@ import * as sidebar from "./sidebar.ts"
 import * as moves from "./moves.ts"
 import { confirm } from "../../sdk/dialogs.ts"
 import {
-  agentsOf,
-  useAgentOf,
-  useAgents,
   useApp,
   useFloats,
   useFocusedTab,
@@ -483,15 +480,14 @@ const VIEW_ICON_STEP = 12
 
 /**
  * A view's tabs as overlapping icons, in the order the side bar lists them (as the layout has them,
- * then floats): an agent by its status, anything else by its kind; the count is in the colour of
- * the most urgent agent it hides. `ring` is the view's colour, what each icon is cut out of the one
- * before it with.
+ * then floats): each as its `TabIcon` draws it; the count is in the colour of the most urgent
+ * status among the tabs it hides. `ring` is the view's colour, what each icon is cut out of the
+ * one before it with.
  */
 function ViewIcons({ view, ring }: { view: string; ring: string }) {
   const ts = useTextSize()
   const t = useTheme()
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
-  const agents = useAgents()
   const tree = useLayout(view)
   // The most it shows (Settings' "Tab icons per view"); past them the last is a count, unless it shows only one.
   const [most] = useViewIcons()
@@ -503,9 +499,8 @@ function ViewIcons({ view, ring }: { view: string; ring: string }) {
   const more = most > 1 ? held.length - most : 0
   const shown = held.slice(0, more > 0 ? most - 1 : most)
   const count = shown.length + (more > 0 ? 1 : 0)
-  const hidden = new Set(held.slice(shown.length).map((p) => p.tab_id))
-  const worst = lead(agents.filter((a) => hidden.has(a.tab_id)))
-  const countColor = worst === "unknown" ? t.muted : (t[`agent.${worst}`] ?? t.muted)
+  const worst = lead(held.slice(shown.length))
+  const countColor = worst === "unknown" ? t.muted : (t[`status.${worst}`] ?? t.muted)
   // The stack's own width, given outright, with each icon placed in it: the label starts after
   // the last one, never under them.
   const width = VIEW_ICON + (count - 1) * VIEW_ICON_STEP
@@ -1284,15 +1279,15 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
 }
 
 /**
- * Closes a pane and its tabs: at once, unless an agent in them is working, when it asks first
- * (naming the one, or counting them).
+ * Closes a pane and its tabs: at once, unless a tab in them is working (`@status`), when it asks
+ * first (naming the one, or counting them).
  */
 async function closePane(pane: string, tabs: string[]) {
-  const working = agentsOf(store.get().snapshot).filter((a) => a.agent_status === "working" && tabs.includes(a.tab_id))
+  const working = (store.get().snapshot?.tabs ?? []).filter((p) => p.status === "working" && tabs.includes(p.tab_id))
   if (working.length) {
     const one = working.length === 1 ? working[0]! : undefined
     const yes = await confirm({
-      title: one ? `${one.name || one.agent} is still working` : `${working.length} agents are still working`,
+      title: one ? `${tabTitle(one)} is still working` : `${working.length} tabs are still working`,
       detail: "Closing the pane stops them and closes its tabs.",
       confirm: "Close Pane",
       danger: true,
@@ -2678,8 +2673,8 @@ function SessionHeader() {
   )
 }
 
-// ── The agents tree ──────────────────────────────────────────────────
-// Sessions, their views, and the agents in them, as a file tree draws folders: a chevron to fold a
+// ── The sessions tree ────────────────────────────────────────────────
+// Sessions, their views, and the tabs in them, as a file tree draws folders: a chevron to fold a
 // level, and a rail under each open level down the left of what it holds.
 
 const TREE_ROW = 28
@@ -2689,7 +2684,7 @@ const TREE_PAD = 8
 /** The chevron's box: a level's rail runs down its middle. */
 const CHEVRON = 12
 
-/** How deep in the tree an agent's row is drawn (0 outside one: a theme's own list). */
+/** How deep in the tree a tab's row is drawn (0 outside one: a theme's own list). */
 const TreeDepth = createContext(0)
 /** Where a tab's row is in the tree, as a drop target; none outside it, or for a float. */
 const TreeSpot = createContext<moves.Row | undefined>(undefined)
@@ -2839,19 +2834,20 @@ function goTo(window: ReturnType<typeof useWindow>, session: string, view?: stri
 }
 
 
-/** The most urgent first: what a folded level says of the agents in it. */
+/** The most urgent first: what a folded level says of the tabs in it. */
 const URGENCY = ["error", "blocked", "working", "done", "idle", "unknown"]
 
-/** What wants a look: an agent waiting on the user, failed, or done with a result not yet seen. */
+/** What wants a look: a tab waiting on the user, failed, or done with a result not yet seen. */
 const wantsLook = (status: string) => status === "blocked" || status === "error" || status === "done"
 
-/** What needs the user to act: an agent waiting on them, or failed. A done one only wants a look. */
+/** What needs the user to act: a tab waiting on them, or failed. A done one only wants a look. */
 const needsAttention = (status: string) => status === "blocked" || status === "error"
 
-function lead(agents: { agent_status: string }[]): string {
+/** The most urgent of their statuses (`URGENCY`); `unknown` when none says anything. */
+function lead(of: { status: string }[]): string {
   let best = "unknown"
-  for (const a of agents) {
-    const status = a.agent_status || "unknown"
+  for (const a of of) {
+    const status = a.status || "unknown"
     if (URGENCY.indexOf(status) >= 0 && URGENCY.indexOf(status) < URGENCY.indexOf(best)) best = status
   }
   return best
@@ -2941,10 +2937,10 @@ const STATUS_ICON: Record<string, string> = {
   unknown: "status_unknown",
 }
 
-/** An agent's state as a mark: a check, a ring, or, while it works, an arc turning round one. */
+/** A tab's status as a mark: a check, a ring, or, while it works, an arc turning round one. */
 const StatusIcon = memo(function StatusIcon({ status, size = 14 }: { status: string; size?: number }) {
   const t = useTheme()
-  const color = t[`agent.${status}`] ?? t["agent.unknown"]
+  const color = t[`status.${status}`] ?? t["status.unknown"]
   if (status !== "working") return <Icon name={STATUS_ICON[status] ?? "status_unknown"} size={size} color={color} />
   const src = assets.icon("status_spinner")
   if (!src) return null
@@ -2973,7 +2969,6 @@ function Sessions() {
   const [query, setQuery] = useState("")
   const [expanded] = useLocal(AGENTS_EXPANDED, false)
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
-  const agents = useAgents()
   const layouts = useApp((s) => s.trees)
   if (!sessions.length) {
     return <text style={{ padding: 10, fontSize: ts(12), color: t.faint }}>No sessions</text>
@@ -2988,7 +2983,6 @@ function Sessions() {
     return path ? shortName(path) : undefined
   }
   const viewHit = (view: string) => has(viewName(snapshot, trees, view), worktreeOf(view), ...(snapshot?.tabs ?? []).filter((p) => p.view_id === view).flatMap((p) => [tabTitle(p), p.agent]))
-  const isAgent = new Set(agents.map((a) => a.tab_id))
   // Expanded: a view's tabs pane by pane as its layout has them, then its floats.
   const laidOut = (view: string) => {
     const tree = layouts[view]
@@ -2999,12 +2993,12 @@ function Sessions() {
   const leaves = (session: string, held: typeof tabs, view: string, whole: boolean) => {
     // Searching, a view that matches by its own name (or its session's) keeps all its tabs.
     const shown = whole ? held : held.filter((p) => has(tabTitle(p), p.agent))
-    return shown.map((p) => <TreeLeaf key={p.tab_id} tab={p.tab_id} depth={1} agent={isAgent.has(p.tab_id)} session={session} view={view} alone={false} />)
+    return shown.map((p) => <TreeLeaf key={p.tab_id} tab={p.tab_id} depth={1} status={!!p.status} session={session} view={view} alone={false} />)
   }
   let shownAny = false
   return (
     <div style={{ display: "flex", flexDirection: "column", paddingBottom: 4 }}>
-      <AgentSearch query={query} setQuery={setQuery} />
+      <TreeSearch query={query} setQuery={setQuery} />
       {q ? null : <NeedsAttention />}
       {moves.sortSessions(sessions, order).map((session) => {
         const id = session.workspace_id
@@ -3039,17 +3033,17 @@ function Sessions() {
 }
 
 /**
- * The tabs that need attention (`needsAttention`), the most urgent first, on a yellow band over the
- * sessions; a click brings one up. Nothing is drawn while none do. Any tab counts, not only an
- * agent's (`@agent`): a program with no integration (Codex, say) reports its status by a fallback
- * (OSC 7501, OSC 9;4, a spinning title, a notification), as its icon in the tree shows.
+ * The tabs that need attention (`needsAttention`, by their `@status`), the most urgent first, on a
+ * yellow band over the sessions; a click brings one up. Nothing is drawn while none do. A block
+ * sets its own tabs' status; a terminal's comes from its program, which reports it (OSC 7501) or
+ * is read by a fallback (OSC 9;4, a spinning title, a notification), as its icon in the tree shows.
  */
 function NeedsAttention() {
   const ts = useTextSize()
   const t = useTheme()
   const window = useWindow()
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
-  const loud = tabs.filter((p) => needsAttention(p.agent_status)).sort((a, b) => URGENCY.indexOf(a.agent_status) - URGENCY.indexOf(b.agent_status))
+  const loud = tabs.filter((p) => needsAttention(p.status)).sort((a, b) => URGENCY.indexOf(a.status) - URGENCY.indexOf(b.status))
   if (!loud.length) return null
   // On the yellow, the window's colour reads: dark on the dark theme's light yellow, light on the light theme's amber.
   const ink = t.window
@@ -3063,7 +3057,7 @@ function NeedsAttention() {
           style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6, minHeight: TREE_ROW, flexShrink: 0, paddingLeft: ROW_PAD, paddingRight: 8, cursor: "pointer", userSelect: "none", hover: { backgroundColor: "#0000001f" } }}
         >
           {/* In the ink, not the status's colour, which washes out on yellow: the shape tells them apart. */}
-          <Icon name={STATUS_ICON[a.agent_status] ?? "status_unknown"} size={14} color={ink} />
+          <Icon name={STATUS_ICON[a.status] ?? "status_unknown"} size={14} color={ink} />
           <text style={{ fontSize: ts(12), fontWeight: 600, color: ink, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabTitle(a)}</text>
         </div>
       ))}
@@ -3085,7 +3079,7 @@ function useViewName(view: string): string {
 /**
  * A session's row, as Zed's project header: a click folds its views; its name, and on hover a
  * chevron by it (the same fold), a `+` (a new view in it; in a repository, `NewViewMenu`: in which worktree) and a `…` (its menu: `session.menu`, the
- * app's Rename, New View, Open in New Window, Close); a right click opens the menu too. Folded, it says what its agents
+ * app's Rename, New View, Open in New Window, Close); a right click opens the menu too. Folded, it says what its views
  * say (`status`) and how many views it has. Memoized: a change to one of its views does not draw it.
  */
 const SessionRow = memo(function SessionRow({ session: id, label, folded, toggle, status, views }: { session: string; label: string; folded: boolean; toggle(id: string): void; status?: string; views: number }) {
@@ -3332,7 +3326,7 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
   const background = front ? t.selected : hovered ? t.hover : t.surface
   return (
     <>
-      {/* A compartment of its own: a working agent's spinner draws its row again, not the list. */}
+      {/* A compartment of its own: a working tab's spinner draws its row again, not the list. */}
       <div compartment>
         <div
           {...draggable.props}
@@ -3362,22 +3356,22 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
 })
 
 /**
- * A tab's row under its view, in the expanded tree: the theme's `Agent` for an agent, else a plain
- * row. Where it is makes it a drop target (`moves.Row`). Memoized on those, so a change to another
- * tab does not draw it again.
+ * A tab's row under its view, in the expanded tree: the theme's `TabRow` for a tab with a status
+ * (`@status`), else a plain row. Where it is makes it a drop target (`moves.Row`). Memoized on
+ * those, so a change to another tab does not draw it again.
  */
-const TreeLeaf = memo(function TreeLeaf({ tab, depth, agent, session, view, alone }: { tab: string; depth: number; agent: boolean; session: string; view: string; alone: boolean }) {
+const TreeLeaf = memo(function TreeLeaf({ tab, depth, status, session, view, alone }: { tab: string; depth: number; status: boolean; session: string; view: string; alone: boolean }) {
   const C = useComponents()
   const spot = useMemo<moves.Row>(() => ({ kind: "tab", session, view, tab, alone }), [session, view, tab, alone])
   return (
     <TreeDepth.Provider value={depth}>
-      <TreeSpot.Provider value={spot}>{agent ? <C.Agent tab={tab} /> : <TabRow tab={tab} />}</TreeSpot.Provider>
+      <TreeSpot.Provider value={spot}>{status ? <C.TabRow tab={tab} /> : <PlainTabRow tab={tab} />}</TreeSpot.Provider>
     </TreeDepth.Provider>
   )
 })
 
-/** A tab that is not an agent, in the expanded tree: its kind's icon and its title; a click goes to it. */
-function TabRow({ tab }: { tab: string }) {
+/** A tab with no status, in the expanded tree: its kind's icon and its title; a click goes to it. */
+function PlainTabRow({ tab }: { tab: string }) {
   const ts = useTextSize()
   const t = useTheme()
   const window = useWindow()
@@ -3418,10 +3412,10 @@ function TabRow({ tab }: { tab: string }) {
 }
 
 /**
- * The field over the agents tree, as Zed's: a strip the side bar's width, under the title bar's
+ * The field over the sessions tree, as Zed's: a strip the side bar's width, under the title bar's
  * edge and over its own. What it types narrows the tree; Escape (or the ×) clears it.
  */
-function AgentSearch({ query, setQuery }: { query: string; setQuery(q: string): void }) {
+function TreeSearch({ query, setQuery }: { query: string; setQuery(q: string): void }) {
   const ts = useTextSize()
   const t = useTheme()
   const [focused, setFocused] = useState(false)
@@ -3430,8 +3424,8 @@ function AgentSearch({ query, setQuery }: { query: string; setQuery(q: string): 
       <Icon name="magnifying_glass" size={14} color={focused ? t.muted : t.faint} />
       <input
         value={query}
-        placeholder="Search agents…"
-        aria-label="Search agents"
+        placeholder="Search sessions…"
+        aria-label="Search sessions"
         onChange={(e: any) => setQuery(e.value ?? "")}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -3448,25 +3442,30 @@ function AgentSearch({ query, setQuery }: { query: string; setQuery(q: string): 
   )
 }
 
-function Agent({ tab }: { tab: string }) {
+/**
+ * The `TabRow` part: a tab with a status (`@status`) in the tree, named by its title or its label,
+ * bold while it wants a look. Under the name its `tab.row.footer`; on hover its
+ * `tab.row.controls` (the `TabRowControls` part), its menu (`tab.row.menu`) and its close.
+ */
+function TabRow({ tab }: { tab: string }) {
   const ts = useTextSize()
   const t = useTheme()
   const C = useComponents()
   const window = useWindow()
   const depth = useContext(TreeDepth)
-  const agent = useAgentOf(tab)
+  const p = useTab(tab)
   const focused = useFocusedTab()
   const front = useView()?.view_id
-  const controls = useSlot("agent.controls")
+  const controls = useSlot("tab.row.controls")
   const [hovered, setHovered] = useState(false)
   const close = () => call(via(tab, "tab.close"), tab).catch(swallow)
-  const { open, show, menu, shown } = useMenu("agent.menu", { tab })
+  const { open, show, menu, shown } = useMenu("tab.row.menu", { tab })
   const draggable = useDraggable<moves.Carried>({ kind: "pumi.tab", tab })
   const spot = useContext(TreeSpot)
   const footer = useMemo(() => ({ tab }), [tab])
-  if (!agent) return null
-  const status = agent.agent_status || "unknown"
-  const label = agent.title || agent.name || agent.agent || tab
+  if (!p) return null
+  const status = p.status || "unknown"
+  const label = p.terminal_title || p.label || tabTitle(p)
   // What wants a look is bold, as unread mail is.
   const loud = wantsLook(status)
   const hasControls = controls.actions.length + controls.components.length > 0
@@ -3478,19 +3477,19 @@ function Agent({ tab }: { tab: string }) {
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onAuxClick={open}
-          onClick={() => draggable.wasDragged() || goTo(window, agent.workspace_id, agent.view_id, tab)}
-          title={agent.name && agent.title && agent.name !== agent.title ? `${agent.name} · ${agent.title}` : undefined}
-          style={treeRow(depth, tab === focused && agent.view_id === front, t)}
+          onClick={() => draggable.wasDragged() || goTo(window, p.workspace_id, p.view_id, tab)}
+          title={p.label && p.terminal_title && p.label !== p.terminal_title ? `${p.label} · ${p.terminal_title}` : undefined}
+          style={treeRow(depth, tab === focused && p.view_id === front, t)}
         >
           <Guides depth={depth} />
           <TabIcon tab={tab} />
           <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0 }}>
             <text style={{ fontSize: ts(12), fontWeight: loud ? 600 : 400, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{label}</text>
-            <Slot slot="agent.footer" args={footer} />
+            <Slot slot="tab.row.footer" args={footer} />
           </div>
           {hovered || shown ? (
             <RowButtons menu={show} close={close}>
-              {hasControls ? <C.AgentControls tab={tab} /> : null}
+              {hasControls ? <C.TabRowControls tab={tab} /> : null}
             </RowButtons>
           ) : null}
           {spot ? <RowDrop row={spot} /> : null}
@@ -3501,9 +3500,9 @@ function Agent({ tab }: { tab: string }) {
   )
 }
 
-function AgentControls({ tab }: { tab: string }) {
+function TabRowControls({ tab }: { tab: string }) {
   const C = useComponents()
-  const { components, actions } = useSlot("agent.controls")
+  const { components, actions } = useSlot("tab.row.controls")
   return (
     <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 2 }}>
       {actions.map((a) => (
@@ -3553,8 +3552,8 @@ export const DEFAULT: Components = {
   Panel,
   Sessions,
   Float,
-  Agent,
-  AgentControls,
+  TabRow,
+  TabRowControls,
   Action,
   Menu,
   Dialog,

@@ -52,7 +52,7 @@ pub struct Workspace {
     pub workspace_id: String,
     pub label: String,
     pub active_view_id: Option<String>,
-    pub agent_status: String,
+    pub status: String,
     /// The folder it was opened at: where what starts in it starts (`session_path`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
@@ -76,7 +76,7 @@ pub struct View {
     pub number: usize,
     /// What the user named it; none (`null`) while it goes by its tabs.
     pub label: Option<String>,
-    pub agent_status: String,
+    pub status: String,
     /// The git worktree it works in (its `worktree` option), when it has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree: Option<String>,
@@ -96,7 +96,7 @@ pub struct Tab {
     pub options: serde_json::Map<String, serde_json::Value>,
     pub view_id: String,
     pub workspace_id: String,
-    pub agent_status: String,
+    pub status: String,
     pub cwd: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub foreground_cwd: Option<String>,

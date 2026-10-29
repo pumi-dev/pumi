@@ -77,12 +77,12 @@ export function schemeLook(scheme: TerminalPalette): { appearance: Appearance; t
       error: ansi[1]!,
       success: ansi[2]!,
       overlay: `${surface}f2`,
-      "agent.working": accent,
-      "agent.blocked": ansi[3]!,
-      "agent.error": ansi[1]!,
-      "agent.done": ansi[2]!,
-      "agent.idle": mix(fg, bg, 0.4),
-      "agent.unknown": faint,
+      "status.working": accent,
+      "status.blocked": ansi[3]!,
+      "status.error": ansi[1]!,
+      "status.done": ansi[2]!,
+      "status.idle": mix(fg, bg, 0.4),
+      "status.unknown": faint,
     },
   }
 }

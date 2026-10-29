@@ -387,7 +387,7 @@ export class Tab extends Model<TabData, TabKey> {
     zoom?: boolean | "toggle" | null;
     /**
      * The user has seen it: what its program left for them (`done`, `error`, OSC 7501) goes, so
-     * its `@agent.status` stops asking. The app says so when the tab is in front of the user.
+     * its `@status` stops asking. The app says so when the tab is in front of the user.
      */
     seen?: boolean | null;
     /** Options to set on it; `null` unsets one. */

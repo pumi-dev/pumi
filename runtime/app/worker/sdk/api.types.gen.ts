@@ -147,8 +147,6 @@ export type QueuedMessage = {
 export interface AgentTrait {
   /** Which agent it is. */
   name: string;
-  /** What the agent is doing. */
-  status: "working" | "blocked" | "done" | "idle" | "error";
   /** The agent's own session id. */
   session: string | null;
   /** The model it uses. */
@@ -812,10 +810,10 @@ export interface Functions {
   } | null]; returns: RequestId[] };
   /**
    * Put something to the user: a notification (`kind: "notification"`, no `options`), a
-   * permission for the agent in `tab` (the `tool` and the `options` to allow or reject it), or a
+   * permission for what runs in `tab` (the `tool` and the `options` to allow or reject it), or a
    * question. Whoever listens to `request.opened` shows it, and anyone may answer it with
    * `request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.
-   * While a permission or a question is open its tab's agent takes no queued message. pumi-host
+   * While a permission or a question is open its tab takes no queued message. pumi-host
    * posts notifications to the OS's notification centre and takes them back when they close.
    * Answers the request's id.
    */
@@ -852,7 +850,7 @@ export interface Functions {
       data?: unknown;
     } | null;
   }, opts?: {
-    /** The tab it is for: an agent's, for a permission. */
+    /** The tab it is for; a permission has one. */
     tab?: TabId | null;
     /**
      * When it closes unanswered (`timeout`), RFC 3339. A permission or a question expires in
@@ -1529,7 +1527,7 @@ export interface Functions {
     zoom?: boolean | "toggle" | null;
     /**
      * The user has seen it: what its program left for them (`done`, `error`, OSC 7501) goes, so
-     * its `@agent.status` stops asking. The app says so when the tab is in front of the user.
+     * its `@status` stops asking. The app says so when the tab is in front of the user.
      */
     seen?: boolean | null;
     /** Options to set on it; `null` unsets one. */
@@ -2543,10 +2541,10 @@ export interface Nouns {
   } | null): Promise<RequestId[]>;
     /**
      * Put something to the user: a notification (`kind: "notification"`, no `options`), a
-     * permission for the agent in `tab` (the `tool` and the `options` to allow or reject it), or a
+     * permission for what runs in `tab` (the `tool` and the `options` to allow or reject it), or a
      * question. Whoever listens to `request.opened` shows it, and anyone may answer it with
      * `request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.
-     * While a permission or a question is open its tab's agent takes no queued message. pumi-host
+     * While a permission or a question is open its tab takes no queued message. pumi-host
      * posts notifications to the OS's notification centre and takes them back when they close.
      * Answers the request's id.
      *
@@ -2586,7 +2584,7 @@ export interface Nouns {
       data?: unknown;
     } | null;
   }, opts?: {
-    /** The tab it is for: an agent's, for a permission. */
+    /** The tab it is for; a permission has one. */
     tab?: TabId | null;
     /**
      * When it closes unanswered (`timeout`), RFC 3339. A permission or a question expires in
@@ -3307,7 +3305,7 @@ export interface Nouns {
     zoom?: boolean | "toggle" | null;
     /**
      * The user has seen it: what its program left for them (`done`, `error`, OSC 7501) goes, so
-     * its `@agent.status` stops asking. The app says so when the tab is in front of the user.
+     * its `@status` stops asking. The app says so when the tab is in front of the user.
      */
     seen?: boolean | null;
     /** Options to set on it; `null` unsets one. */

@@ -90,7 +90,7 @@ pub struct TabPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zoom: Option<Zoom>,
     /// The user has seen it: what its program left for them (`done`, `error`, OSC 7501) goes, so
-    /// its `@agent.status` stops asking. The app says so when the tab is in front of the user.
+    /// its `@status` stops asking. The app says so when the tab is in front of the user.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seen: Option<bool>,
     /// Options to set on it; `null` unsets one.

@@ -3496,7 +3496,7 @@
       "provider": "core",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Put something to the user: a notification (`kind: \"notification\"`, no `options`), a\npermission for the agent in `tab` (the `tool` and the `options` to allow or reject it), or a\nquestion. Whoever listens to `request.opened` shows it, and anyone may answer it with\n`request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.\nWhile a permission or a question is open its tab's agent takes no queued message. pumi-host\nposts notifications to the OS's notification centre and takes them back when they close.\nAnswers the request's id.",
+      "desc": "Put something to the user: a notification (`kind: \"notification\"`, no `options`), a\npermission for what runs in `tab` (the `tool` and the `options` to allow or reject it), or a\nquestion. Whoever listens to `request.opened` shows it, and anyone may answer it with\n`request.close(id, {answer})`; the first answer wins, and `request.closed` says how it ended.\nWhile a permission or a question is open its tab takes no queued message. pumi-host\nposts notifications to the OS's notification centre and takes them back when they close.\nAnswers the request's id.",
       "parameters": [
         [
           "Dict",
@@ -3694,7 +3694,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "The tab it is for: an agent's, for a permission.",
+                    "description": "The tab it is for; a permission has one.",
                     "default": null
                   },
                   "expires": {
@@ -3765,7 +3765,7 @@
             }
           ],
           "result": "+8",
-          "desc": "Ask whether the agent in tab 3 may deploy; wait for `request.closed` with `match: \"+8\"`."
+          "desc": "Ask whether what runs in tab 3 may deploy; wait for `request.closed` with `match: \"+8\"`."
         },
         {
           "args": [
@@ -8393,7 +8393,7 @@
                   "boolean",
                   "null"
                 ],
-                "description": "The user has seen it: what its program left for them (`done`, `error`, OSC 7501) goes, so\nits `@agent.status` stops asking. The app says so when the tab is in front of the user."
+                "description": "The user has seen it: what its program left for them (`done`, `error`, OSC 7501) goes, so\nits `@status` stops asking. The app says so when the tab is in front of the user."
               },
               "options": {
                 "type": [
@@ -12502,22 +12502,6 @@
           "watch": true,
           "schema": {
             "type": "string"
-          }
-        },
-        {
-          "name": "status",
-          "type": "string",
-          "desc": "What the agent is doing.",
-          "watch": true,
-          "schema": {
-            "type": "string",
-            "enum": [
-              "working",
-              "blocked",
-              "done",
-              "idle",
-              "error"
-            ]
           }
         },
         {

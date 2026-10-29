@@ -735,9 +735,9 @@ fn a_tab_waiting_on_the_user_holds_its_messages() {
     let request = f.call("request.open", json!([{"kind": "question", "title": "Which?"}, {"tab": tab(1)}]));
     assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}])), json!(null), "a request is pending");
     f.call("request.close", json!([request, {}]));
-    f.call("core.setOptionValue", json!(["@agent.status", "error", {"tab": 1}]));
+    f.call("core.setOptionValue", json!(["@status", "error", {"tab": 1}]));
     assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}])), json!(null), "an error not yet seen");
-    f.call("core.setOptionValue", json!(["@agent.status", "idle", {"tab": 1}]));
+    f.call("core.setOptionValue", json!(["@status", "idle", {"tab": 1}]));
     assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1"}]))["text"], "later");
 }
 #[test]
@@ -747,10 +747,10 @@ fn a_waiting_take_is_answered_when_a_message_comes_and_goes_with_its_caller() {
     assert_eq!(f.call("agent.take", json!([tab(1), {"session": "s-1", "wait": true}])), json!(null));
     let taker = f.kernel.queue.held.take().expect("held");
     f.kernel.queue.takers.get_mut(&taker).unwrap().waiter = Some((CHAN, json!(9)));
-    f.call("core.setOptionValue", json!(["@agent.status", "blocked", {"tab": 1}]));
+    f.call("core.setOptionValue", json!(["@status", "blocked", {"tab": 1}]));
     f.call("agent.queue", json!([tab(1), "wake up"]));
     assert!(f.replies(CHAN, 9).is_empty(), "held while blocked");
-    f.call("core.setOptionValue", json!(["@agent.status", "idle", {"tab": 1}]));
+    f.call("core.setOptionValue", json!(["@status", "idle", {"tab": 1}]));
     let reply = f.replies(CHAN, 9);
     assert_eq!(reply.len(), 1);
     assert_eq!(reply[0]["text"], "wake up");

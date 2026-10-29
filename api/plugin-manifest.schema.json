@@ -119,7 +119,7 @@
         "slots": {
           "description": "What it adds to the window's slots, by slot: actions (each runs one of its commands) and a component (an export of src/ui.tsx, loaded when the slot is on screen). `palette.actions` holds actions only.",
           "type": "object",
-          "propertyNames": { "enum": ["window.overlay", "session.header", "session.menu", "view.actions", "view.badge", "view.menu", "tab.toolbar", "tab.strip", "tab.overlay", "tab.menu", "tab.new", "agent.controls", "agent.footer", "agent.menu", "panel", "palette.actions"] },
+          "propertyNames": { "enum": ["window.overlay", "session.header", "session.menu", "view.actions", "view.badge", "view.menu", "tab.toolbar", "tab.strip", "tab.overlay", "tab.menu", "tab.new", "tab.row.controls", "tab.row.footer", "tab.row.menu", "panel", "palette.actions"] },
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,

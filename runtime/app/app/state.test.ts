@@ -14,7 +14,7 @@ const tab = (id: string, extra: Record<string, unknown> = {}) => ({
   block: "terminal",
   view_id: "@1",
   workspace_id: "$1",
-  agent_status: "idle",
+  status: "idle",
   agent: "claude",
   terminal_title: "zsh",
   ...extra,
@@ -31,11 +31,11 @@ describe("agentsOf", () => {
 
   test("only the agent that changed is a new object", () => {
     const first = agentsOf(snapshot([tab("%1"), tab("%2")]))
-    const second = agentsOf(snapshot([tab("%1"), tab("%2", { agent_status: "working" })]))
+    const second = agentsOf(snapshot([tab("%1"), tab("%2", { status: "working" })]))
     expect(second).not.toBe(first)
     expect(second[0]).toBe(first[0]!)
     expect(second[1]).not.toBe(first[1]!)
-    expect(second[1]!.agent_status).toBe("working")
+    expect(second[1]!.status).toBe("working")
   })
 
   test("a plugin's tab is an agent, with what it says of itself", () => {
