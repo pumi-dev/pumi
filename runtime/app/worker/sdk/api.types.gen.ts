@@ -1245,8 +1245,10 @@ export interface Functions {
     at: string;
   })[] };
   /**
-   * Open a tab holding `block` (`null`: what a new tab holds, the block the `new_tab` option names;
-   * refused while it names none, as pumi has no block of its own for one), placed as `place` says:
+   * Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a
+   * block or a plugin's `tab.new` action; while it names nothing installed, the Launcher's list, a
+   * shell or the first thing installed that starts one; refused while nothing is, as pumi has no
+   * block of its own for one), placed as `place` says:
    * in a pane split from a tab's, into a pane
    * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
    * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
@@ -2879,8 +2881,10 @@ export interface Nouns {
     at: string;
   })[]>;
     /**
-     * Open a tab holding `block` (`null`: what a new tab holds, the block the `new_tab` option names;
-     * refused while it names none, as pumi has no block of its own for one), placed as `place` says:
+     * Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a
+     * block or a plugin's `tab.new` action; while it names nothing installed, the Launcher's list, a
+     * shell or the first thing installed that starts one; refused while nothing is, as pumi has no
+     * block of its own for one), placed as `place` says:
      * in a pane split from a tab's, into a pane
      * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
      * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which

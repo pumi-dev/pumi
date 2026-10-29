@@ -267,20 +267,80 @@ fn a_terminal_s_methods_are_answered_by_the_blocks_on_the_terminal_engine() {
     assert_eq!(answers(&mut client, "run"), json!([TERM]), "a terminal's, not the page's");
     assert_eq!(answers(&mut client, "attach"), json!([TERM]));
     let read = answers(&mut client, "read");
-    assert!(read.as_array().unwrap().contains(&json!(PAGE)) && read.as_array().unwrap().contains(&json!(TERM)), "{read}");
+    assert!(
+        read.as_array().unwrap().contains(&json!(PAGE)) && read.as_array().unwrap().contains(&json!(TERM)),
+        "{read}"
+    );
 }
 #[test]
 fn a_tab_opened_with_no_block_holds_what_a_new_tab_does() {
     let dir = Server::dir();
     let server = Server::start_home(dir.path());
     let mut client = server.client();
-    // pumi has no block of its own for a new tab: until `new_tab` names one, nothing opens.
+    // pumi has no block of its own for a new tab: until a plugin that starts one is installed, nothing opens.
     let refused = client.try_call("tab.open", json!([null, {}, {"kind": "session"}])).unwrap_err();
     assert!(refused.to_string().contains("no plugin opens new tabs"), "{refused}");
     client.term();
     client.call("option.set", json!(["new_tab", TERM, {"scope": "global"}]));
     let chosen = client.call("tab.open", json!([null, {}, {"kind": "session", "name": "chosen"}]));
     assert_eq!(client.call("tab.get", json!([&chosen]))["block"], json!(TERM), "the option names what it holds");
+    // Naming nothing installed, it is a shell when there is one.
+    let shell = "pumi_dev.terminal.shell";
+    client
+        .call("core.setBlocks", blocks(json!([{"id": shell, "provider": "pumi_dev/terminal", "engine": "terminal"}])));
+    client.call("option.set", json!(["new_tab", "gone.plugin.block", {"scope": "global"}]));
+    let fallen = client.call("tab.open", json!([null, {}, {"kind": "session", "name": "fallen"}]));
+    assert_eq!(
+        client.call("tab.get", json!([&fallen]))["block"],
+        json!(shell),
+        "a shell, as nothing named is installed"
+    );
+}
+/// `new_tab` naming a plugin's `tab.new` action: a new tab is what its function opens, given
+/// where it goes, as the `+` menu runs it.
+#[test]
+fn a_new_tab_can_be_what_a_plugin_s_tab_new_action_opens() {
+    let dir = Server::dir();
+    let root = dir.path();
+    let pkg = root.join("starter");
+    std::fs::create_dir_all(&pkg).unwrap();
+    let manifest = r#"{ "name": "starter", "pumi": { "name": "starter", "owner": "me", "api": 1, "contributes": {
+      "commands": [{ "id": "open", "title": "Open" }],
+      "slots": { "tab.new": { "actions": [{ "id": "open", "title": "Starter", "command": "open" }] } } } } }"#;
+    std::fs::write(pkg.join("package.json"), manifest).unwrap();
+    let server = Server::start_home(root);
+    let mut client = server.client();
+    client.call("plugin.add", json!([pkg.to_str().unwrap(), {}]));
+    client.term();
+    // Its worker, as the app runs it: the function its action calls opens a terminal where it is told.
+    let mut plugin = server.client();
+    plugin.call("fn.set", json!(["me.starter.open", {"desc": "Open one."}]));
+    // Named, and with nothing named: it is the first, and only, thing installed that starts a tab.
+    for (named, session) in [("me.starter.open", "named"), ("", "unnamed")] {
+        client.call("option.set", json!(["new_tab", named, {"scope": "global"}]));
+        let id = client.next;
+        client.next += 1;
+        let request = json!({ "jsonrpc": "2.0", "id": id, "method": "tab.open", "params": [null, {"cwd": "/"}, {"kind": "session", "name": session}] });
+        writeln!(client.writer, "{request}").unwrap();
+        let asked = loop {
+            let message = plugin.try_read().expect("the action's function is called");
+            if message["method"] == "me.starter.open" {
+                break message;
+            }
+        };
+        let given = &asked["params"][0];
+        assert_eq!(given["cwd"], "/", "{given}");
+        assert_eq!(given["place"]["kind"], "session", "{given}");
+        let tab = plugin.call("tab.open", json!([TERM, {}, given["place"]]));
+        writeln!(plugin.writer, "{}", json!({ "jsonrpc": "2.0", "id": asked["id"], "result": tab })).unwrap();
+        let opened = loop {
+            let message = client.try_read().expect("tab.open answers");
+            if message.get("id") == Some(&json!(id)) {
+                break message;
+            }
+        };
+        assert_eq!(opened["result"], tab, "{opened}");
+    }
 }
 #[test]
 fn a_session_survives_the_server_stopping() {
