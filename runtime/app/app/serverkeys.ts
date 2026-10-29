@@ -4,6 +4,7 @@
 // nowhere is the tab's, sent there in the server's notation (`tab.call`'s `input {keys}`).
 import { call, engine, store, via } from "./engine.ts"
 import { runsTerminal } from "./terminals.ts"
+import { explainNoNewTab } from "./new-tab.ts"
 
 const NAMES: [string, string][] = [
   ["enter", "Enter"], ["escape", "Escape"], ["tab", "Tab"], ["backspace", "BSpace"], ["space", "Space"],
@@ -115,9 +116,9 @@ function run(binding: Binding, tab: string | undefined): Promise<unknown> | unde
   const name = binding.call
   if (!name) return undefined
   const args = binding.args === undefined ? [] : (Array.isArray(binding.args) ? binding.args : [binding.args])
-  return Promise.resolve(engine.call(via(tab, name), args, tab ? { tab } : undefined)).catch((err) =>
-    console.error(`pumi: ${name}:`, (err as Error)?.message ?? err),
-  )
+  return Promise.resolve(engine.call(via(tab, name), args, tab ? { tab } : undefined)).catch((err) => {
+    if (!explainNoNewTab(err)) console.error(`pumi: ${name}:`, (err as Error)?.message ?? err)
+  })
 }
 
 /** Hands `chord`, pressed at `tab`, to the server's key tables. */

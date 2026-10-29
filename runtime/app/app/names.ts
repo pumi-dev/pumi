@@ -5,12 +5,8 @@ import { basename } from "node:path"
 import type { Snapshot, Tree } from "./engine.ts"
 import { shownOf } from "./layout.ts"
 
-/** The bundled `pumi/launcher`'s block: a new pane's first tab, until what goes in it is picked. */
-export const NEW_TAB = "pumi.launcher.new"
-
 /** A tab by what it shows: its name, its title, its directory, its type. */
 export function tabLabel(p: { block: string; label?: string; terminal_title?: string | null; cwd?: string | null }): string {
-  if (p.block === NEW_TAB) return p.label || "New Tab"
   const dir = p.cwd ? basename(p.cwd) : undefined
   return p.label || p.terminal_title || dir || p.block
 }

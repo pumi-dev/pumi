@@ -12,6 +12,7 @@ import { pathOf, repoOf, route } from "./open-route.ts"
 import { call, engine, on, serverOf, store } from "./engine.ts"
 import { openSettings } from "./settings/open.ts"
 import type { WindowManager } from "./windows.tsx"
+import { explainNoNewTab } from "./new-tab.ts"
 
 /** A session's current tab, as the server has it now (one made a moment ago included). */
 async function currentTab(session: string): Promise<string | undefined> {
@@ -89,7 +90,7 @@ async function openAll(manager: WindowManager, urls: string[]) {
       }
       window.show(session)
     } catch (err) {
-      console.error(`pumi: opening ${path}:`, (err as Error)?.message ?? err)
+      if (!explainNoNewTab(err)) console.error(`pumi: opening ${path}:`, (err as Error)?.message ?? err)
     }
   }
   window.renderer.activateWindow()

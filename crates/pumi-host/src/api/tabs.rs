@@ -6,8 +6,9 @@ use crate::kernel::options::Key;
 use pumi_api::{Cx, Error, Result, TabRef, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-/// Open a tab holding `block` (`null`: what a new tab holds, the `new_tab` option, else the
-/// launcher), placed as `place` says: in a pane split from a tab's, into a pane
+/// Open a tab holding `block` (`null`: what a new tab holds, the block the `new_tab` option names;
+/// refused while it names none, as pumi has no block of its own for one), placed as `place` says:
+/// in a pane split from a tab's, into a pane
 /// as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
 /// instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
 /// keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
@@ -57,7 +58,10 @@ pub fn pumi_tab_open(
     place: Option<TabPlace>,
 ) -> Result<TabRef> {
     let (caller, k) = kernel(cx)?;
-    let block = block.unwrap_or_else(|| new_tab(k));
+    let block = match block {
+        Some(block) => block,
+        None => new_tab(k)?,
+    };
     let place = match place {
         Some(place) => place.spec()?,
         None => PlaceSpec::default(),
@@ -69,12 +73,17 @@ pub fn pumi_tab_open(
     let tab = k.call_core(&caller, "core.openTab", json!([block, args, place]))?;
     tab.as_u64().map(TabRef).ok_or_else(|| Error::exception(format!("the core opened {tab}, not a tab")))
 }
-/// The launcher's block: what a new tab holds while `new_tab` names none.
-pub const LAUNCHER: &str = "pumi.launcher.new";
-/// The block a new tab holds: the `new_tab` option's, else the launcher.
-pub fn new_tab(k: &crate::kernel::Kernel) -> String {
+/// What a refusal to open a new tab says while `new_tab` names no block: the app knows it by this.
+pub const NO_NEW_TAB: &str = "no plugin opens new tabs";
+/// The block a new tab holds: the `new_tab` option's. Nothing is opened while it names none.
+pub fn new_tab(k: &crate::kernel::Kernel) -> Result<String> {
     let named = k.global_option("new_tab");
-    named.as_str().filter(|b| !b.is_empty()).unwrap_or(LAUNCHER).to_string()
+    match named.as_str().filter(|b| !b.is_empty()) {
+        Some(block) => Ok(block.to_string()),
+        None => Err(Error::invalid_params(format!(
+            "{NO_NEW_TAB}: install one (Terminal, Launcher, Browser, Agents: `pumi plugin add pumi-dev/plugins/terminal`) and pick it in Settings ▸ General ▸ New tabs open (the `new_tab` option)"
+        ))),
+    }
 }
 /// How far a tab's border moves (`tab.update`'s `size`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]

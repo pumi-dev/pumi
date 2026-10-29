@@ -197,7 +197,7 @@ await call("option.set", "@icon", { src: favicon, tint: false }, { scope: "tab",
 pumi option set @icon sparkle --scope tab --id %3
 ```
 
-`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `session`, and leaving the place out puts the tab below the caller's. A `null` block is what a new tab holds: the block the `new_tab` option names (the Terminal plugin sets it to its shell), else the launcher.
+`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `session`, and leaving the place out puts the tab below the caller's. A `null` block is what a new tab holds: the block the `new_tab` option names (`pumi_dev.launcher.new`, `pumi_dev.terminal.shell`, …). While it names none, `tab.open` refuses with `no plugin opens new tabs`.
 
 ```ts
 await call("tab.open", "pumi_dev.terminal.shell", { command: ["make", "test"] }, { kind: "tiled", split: "right", size: "30%" });

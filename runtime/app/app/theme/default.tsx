@@ -43,7 +43,6 @@ import { showsStatus, useTabIcon, useTabStatus } from "../../sdk/icons.ts"
 import { useHover } from "../../sdk/kit.tsx"
 import { useTab as useTabModel } from "../../sdk/state.ts"
 import { fromServer } from "../serverkeys.ts"
-import { NEW_TAB } from "../names.ts"
 import { useLocal } from "../local.ts"
 import { tabLabel, viewName } from "../names.ts"
 import { FONT_DEFAULT } from "../../sdk/font.ts"
@@ -51,9 +50,13 @@ import { AtTop, TileMotion, Tiling } from "./tiles.tsx"
 import * as worktreeViews from "../worktree-views.ts"
 import { nameOf, shortName } from "../worktrees.ts"
 import { runsTerminal } from "../terminals.ts"
-import { useStarters } from "../starters.ts"
+import { useStarters, type Starters } from "../starters.ts"
+import { explainNoNewTab } from "../new-tab.ts"
 
-const swallow = (err: unknown) => console.error(String(err))
+// A new tab nothing can open (`new_tab` names no block) says so in the window; the rest go to the log.
+const swallow = (err: unknown) => {
+  if (!explainNoNewTab(err)) console.error(String(err))
+}
 
 /**
  * The default's text sizes at the theme's `fontSize` (`ui_font_size` for pumi's own): each part
@@ -897,8 +900,8 @@ const START_RECENT = 5
 
 /**
  * What the panes' room shows while there are none: pumi's mark, what starts something (a view of
- * the session shown, a session, a folder), the plugins it offers to install (a terminal, the
- * agents, a browser) until they are, the sessions shown last, and the settings.
+ * the session shown, a session, a folder), on the first run the plugins to install (`Starters`),
+ * the sessions shown last, and the settings.
  */
 function StartScreen() {
   const ts = useTextSize()
@@ -916,7 +919,7 @@ function StartScreen() {
     return ids.slice(0, START_RECENT).map((id) => byId.get(id)!)
   }, [sessions, recent, window.session])
   const command = (name: string) => () => runCommand(name, window.id)
-  const { offered, busy, error, install } = useStarters()
+  const starters = useStarters()
   const appIcon = assets.appIcon()
   return (
     <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0, alignItems: "center", justifyContent: "center", overflowY: "scroll" }}>
@@ -944,14 +947,7 @@ function StartScreen() {
           <StartRow icon={shown ? "square_plus" : "terminal"} title="New Session" command="new_workspace" onClick={command("new_workspace")} />
           <StartRow icon="folder_open" title="Open Folder…" onClick={() => openFolder(window).catch(swallow)} />
         </StartSection>
-        {offered?.length ? (
-          <StartSection title="Install">
-            {offered.map((p) => (
-              <StartRow key={p.name} icon={p.icon} title={busy === p.name ? `Installing ${p.title}…` : p.title} detail={p.detail} onClick={() => install(p)} />
-            ))}
-            {error ? <text style={{ fontSize: ts(12), color: t.error, paddingLeft: 10, paddingTop: 4 }}>{error}</text> : null}
-          </StartSection>
-        ) : null}
+        {starters.offered?.length ? <StartPlugins starters={starters} /> : null}
         {others.length ? (
           <StartSection title="Recent">
             {others.map((s) => (
@@ -964,6 +960,83 @@ function StartScreen() {
         </div>
       </motion.div>
     </div>
+  )
+}
+
+/**
+ * The first run's plugins: pumi opens nothing by itself, so it offers Launcher, Terminal, Agents and
+ * Browser, each ticked, to install at once. New tabs then open the first installed (`starters.ts`).
+ */
+function StartPlugins({ starters }: { starters: Starters }) {
+  const ts = useTextSize()
+  const t = useTheme()
+  const m = useMetrics()
+  const { offered = [], picked, toggle, busy, error, install, dismiss } = starters
+  const count = offered.filter((s) => picked.has(s.name)).length
+  const installing = offered.find((s) => s.name === busy)
+  const button = (label: string, primary: boolean, enabled: boolean, onClick: () => void) => (
+    <div
+      role="button"
+      aria-label={label}
+      tabIndex={enabled ? 0 : -1}
+      onClick={() => enabled && onClick()}
+      onKeyDown={(e: any) => {
+        if (!enabled || (e.key !== "enter" && e.key !== " ")) return
+        e.preventDefault?.()
+        onClick()
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: 28,
+        paddingLeft: 12,
+        paddingRight: 12,
+        borderRadius: m.radiusSmall,
+        cursor: enabled ? "pointer" : "default",
+        opacity: enabled ? 1 : 0.5,
+        backgroundColor: primary ? t.accent : "transparent",
+        ...(enabled ? { hover: { backgroundColor: primary ? withOpacity(t.accent, 0.85) : t.hover } } : {}),
+      }}
+    >
+      <text style={{ fontSize: ts(13), color: primary ? t.accentText : t.muted, whiteSpace: "nowrap" }}>{label}</text>
+    </div>
+  )
+  return (
+    <StartSection title="Plugins">
+      <text style={{ fontSize: ts(12), color: t.muted, paddingLeft: 10, paddingBottom: 6 }}>pumi opens what its plugins bring. Pick the ones to install.</text>
+      {offered.map((s) => {
+        const on = picked.has(s.name)
+        return (
+          <div
+            key={s.name}
+            role="checkbox"
+            aria-label={s.title}
+            aria-checked={on}
+            tabIndex={0}
+            onClick={() => busy || toggle(s.name)}
+            onKeyDown={(e: any) => {
+              if (e.key !== "enter" && e.key !== " ") return
+              e.preventDefault?.()
+              if (!busy) toggle(s.name)
+            }}
+            style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10, height: 32, flexShrink: 0, paddingLeft: 10, paddingRight: 8, borderRadius: m.radiusSmall, cursor: "pointer", color: t.text, hover: { backgroundColor: t.hover }, active: { backgroundColor: t.active } }}
+          >
+            <div style={{ display: "flex", width: 16, height: 16, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: 4, borderWidth: 1, borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accent : "transparent" }}>
+              {on ? <Icon name="check" size={11} color={t.accentText} /> : null}
+            </div>
+            <Icon name={s.icon} size={15} color={t.accent} />
+            <text style={{ fontSize: ts(13), whiteSpace: "nowrap", flexShrink: 0 }}>{busy === s.name ? `Installing ${s.title}…` : s.title}</text>
+            <text style={{ fontSize: ts(12), color: t.faint, whiteSpace: "nowrap", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{s.detail}</text>
+          </div>
+        )
+      })}
+      {error ? <text style={{ fontSize: ts(12), color: t.error, paddingLeft: 10, paddingTop: 4 }}>{error}</text> : null}
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6, paddingTop: 8 }}>
+        {button("Not now", false, !busy, dismiss)}
+        {button(installing ? `Installing ${installing.title}…` : count ? `Install ${count}` : "Install", true, !busy && count > 0, install)}
+      </div>
+    </StartSection>
   )
 }
 
@@ -1199,13 +1272,9 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
   const color = focused ? t.text : undefined
   if (!tab || !front) return null
   const zoomable = zoomed || (!!tree && "axis" in tree)
-  // A split starts as a new pane's list of what to open in it (the bundled `pumi/launcher`'s
-  // block); what a new tab holds (`new_tab`), while that plugin is off.
+  // A split holds what a new tab does (`new_tab`: the Launcher's list, a shell, …).
   const split = (side: SplitSide) => {
-    const place = { kind: "tiled", pane: id, split: side }
-    call(via(id, "tab.open"), NEW_TAB, {}, place)
-      .catch(() => call(via(id, "tab.open"), null, {}, place))
-      .catch(swallow)
+    call(via(id, "tab.open"), null, {}, { kind: "tiled", pane: id, split: side }).catch(swallow)
   }
   const zoom = () => call(via(id, "pane.update"), id, { zoom: !zoomed }).catch(swallow)
   const close = () => closePane(id, tabs).catch(swallow)
@@ -1364,19 +1433,17 @@ function SplitMenu({ split, close, onButton }: { split(side: SplitSide): void; c
   )
 }
 
-/** Where a new tab goes: into a pane, as one of its tabs; or in a new pane's list's place. */
-type NewPlace = { kind: "tiled"; pane: string } | { kind: "tiled"; replace: string }
+/** Where a new tab goes: into a pane, as one of its tabs. */
+type NewPlace = { kind: "tiled"; pane: string }
 
 /**
- * One thing a new tab can be: a row of the `+` menu, and of a new pane's list. `at` is what the
- * call goes through (the pane, or the list's tab: it names the server).
+ * One thing a new tab can be: a row of the `+` menu. `at` is what the call goes through (the
+ * pane: it names the server).
  */
 interface NewKind {
   id: string
   title: string
   icon: string
-  /** The key a new pane's list opens it with. */
-  letter: string
   /** The keys that open one elsewhere, when they are bound: the app's command, or the server's. */
   keys?: string
   /** A menu draws a rule between groups: the app's own, then each plugin's (`tab.new`). */
@@ -1399,8 +1466,8 @@ function serverShortcut(tables: unknown, fn: string): string | undefined {
 
 /**
  * What a new tab can be: a file always, then what the
- * plugins add to `tab.new` (a page, a simulator, the agents), each plugin's a group of its own,
- * numbered for a new pane's list. A plugin's action is run with `{tab, place}`: the pane or tab it
+ * plugins add to `tab.new` (a page, a simulator, the agents), each plugin's a group of its own.
+ * A plugin's action is run with `{tab, place}`: the pane or tab it
  * opens beside (it names the server), and where. Each shows
  * the keys that open one elsewhere when there are any.
  */
@@ -1413,7 +1480,6 @@ function useNewKinds(): NewKind[] {
         id: "file",
         title: "File…",
         icon: "file",
-        letter: "F",
         group: "pumi",
         open: async (on, place) => {
           const picked = await call(via(on, "fs.pick"), { kind: "file" })
@@ -1422,12 +1488,11 @@ function useNewKinds(): NewKind[] {
         },
       },
     ]
-    actions.forEach((a, i) => {
+    actions.forEach((a) => {
       out.push({
         id: `${a.plugin}/${a.id}`,
         title: a.title,
         icon: a.icon ?? "plus",
-        letter: i < 9 ? String(i + 1) : "",
         keys: a.keys ?? (a.command ? serverShortcut(tables, a.command) : undefined),
         group: a.plugin,
         open: async (on, place) => a.run({ tab: on, place }),
@@ -1482,93 +1547,6 @@ function NewTabMenu({ pane, close, onButton }: { pane: string; close(): void; on
         ))}
       </div>
     </anchored>
-  )
-}
-
-/**
- * A new pane's first tab (`NEW_TAB`), as the split button opens it: a list of what to open in it,
- * the same as the `+` menu's, each with its key. A press on a row, its key, or Enter on the one
- * the arrows chose opens it in the list's place (`replace`); Escape closes the pane.
- */
-function NewTabPane({ tab, focused }: { tab: string; focused: boolean }) {
-  const ts = useTextSize()
-  const t = useTheme()
-  const m = useMetrics()
-  const kinds = useNewKinds()
-  const [chosen, setChosen] = useState(0)
-  const opening = useRef(false)
-  const pick = (k: NewKind | undefined) => {
-    if (!k || opening.current) return
-    opening.current = true
-    k.open(tab, { kind: "tiled", replace: tab })
-      .catch(swallow)
-      .finally(() => (opening.current = false))
-  }
-  return (
-    <div
-      // Mounted again as the pane takes the focus, so the keys come here and not to the last one.
-      key={focused ? "focused" : "unfocused"}
-      autoFocus={focused}
-      tabIndex={0}
-      onMouseDown={() => {
-        if (!focused) call(via(tab, "tab.focus"), tab).catch(swallow)
-      }}
-      onKeyDown={(e: any) => {
-        const mods = e.modifiers ?? {}
-        if (mods.cmd || mods.ctrl || mods.alt) return
-        const key = String(e.key ?? "").toLowerCase()
-        let handled = true
-        if (key === "up") setChosen((i) => (i + kinds.length - 1) % Math.max(kinds.length, 1))
-        else if (key === "down") setChosen((i) => (i + 1) % Math.max(kinds.length, 1))
-        else if (key === "enter") pick(kinds[chosen])
-        else if (key === "escape") call(via(tab, "tab.close"), tab).catch(swallow)
-        else {
-          const k = kinds.find((k) => k.letter.toLowerCase() === key)
-          if (k) pick(k)
-          else handled = false
-        }
-        if (handled) {
-          e.preventDefault?.()
-          e.stopPropagation?.()
-        }
-      }}
-      style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, minHeight: 0, alignItems: "center", justifyContent: "center", padding: 24, overflowY: "scroll", keyboardFocusDim: false }}
-    >
-      <div style={{ display: "flex", flexDirection: "column", width: "100%", maxWidth: 360, gap: 2 }}>
-        {kinds.map((k, i) => (
-          <Fragment key={k.id}>
-            {i > 0 && kinds[i - 1]!.group !== k.group ? <div style={{ height: 1, flexShrink: 0, marginTop: 6, marginBottom: 6, marginLeft: 10, marginRight: 10, backgroundColor: t.border }} /> : null}
-            <div
-              role="button"
-              aria-label={k.title}
-              onClick={() => pick(k)}
-              onMouseEnter={() => setChosen(i)}
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-                height: 34,
-                flexShrink: 0,
-                paddingLeft: 10,
-                paddingRight: 8,
-                borderRadius: m.radius,
-                cursor: "pointer",
-                backgroundColor: i === chosen ? t.hover : "transparent",
-              }}
-            >
-              <Icon name={k.icon} size={16} color={t.text} />
-              <text style={{ fontSize: ts(14), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{k.title}</text>
-              <div style={{ flexGrow: 1, minWidth: 16 }} />
-              {k.keys ? <text style={{ fontSize: ts(12), color: t.faint, whiteSpace: "nowrap", flexShrink: 0 }}>{k.keys}</text> : null}
-              <div style={{ display: "flex", width: 22, height: 22, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: m.radiusSmall, backgroundColor: t.active }}>
-                <text style={{ fontSize: ts(12), color: t.muted }}>{k.letter}</text>
-              </div>
-            </div>
-          </Fragment>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -1842,10 +1820,7 @@ function TabBody({ tab: id, focused }: { tab: string; focused: boolean }) {
   const model = useTabModel(id)
   const { components } = useSlot("tab.strip")
   const overlays = useSlot("tab.overlay").components
-  const body: ReactNode = !tab ? null : tab.block === NEW_TAB ? (
-    // The theme's own: it lists what the new pane can be, as the `+` menu does.
-    <NewTabPane tab={id} focused={focused} />
-  ) : renderer ? (
+  const body: ReactNode = !tab ? null : renderer ? (
     renderComponent(renderer, { tab: model, block: tab.block, focused })
   ) : tab.block === FILE ? (
     <FilePlaceholder tab={id} path={String(tab.options?.path ?? "")} />

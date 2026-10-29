@@ -72,9 +72,11 @@ pub fn builtin() -> Vec<Decl> {
             String,
             json!(""),
             Global,
-            "The block a new tab, split, view or session holds (`pumi_dev.terminal.shell`); empty is the launcher, which lists what can be opened.",
+            "The block a new tab, split, view or session holds (`pumi_dev.terminal.shell`, `pumi_dev.launcher.new`). Empty: nothing opens until a plugin is installed and picked here.",
         )
-        .label("New tabs open"),
+        .label("New tabs open")
+        .group("General")
+        .control("new_tab"),
         Decl::new(
             "pane_tabs",
             Boolean,

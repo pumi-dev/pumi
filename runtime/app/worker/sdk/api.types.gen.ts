@@ -1239,8 +1239,9 @@ export interface Functions {
     at: string;
   })[] };
   /**
-   * Open a tab holding `block` (`null`: what a new tab holds, the `new_tab` option, else the
-   * launcher), placed as `place` says: in a pane split from a tab's, into a pane
+   * Open a tab holding `block` (`null`: what a new tab holds, the block the `new_tab` option names;
+   * refused while it names none, as pumi has no block of its own for one), placed as `place` says:
+   * in a pane split from a tab's, into a pane
    * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
    * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
    * keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
@@ -2866,8 +2867,9 @@ export interface Nouns {
     at: string;
   })[]>;
     /**
-     * Open a tab holding `block` (`null`: what a new tab holds, the `new_tab` option, else the
-     * launcher), placed as `place` says: in a pane split from a tab's, into a pane
+     * Open a tab holding `block` (`null`: what a new tab holds, the block the `new_tab` option names;
+     * refused while it names none, as pumi has no block of its own for one), placed as `place` says:
+     * in a pane split from a tab's, into a pane
      * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
      * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
      * keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything

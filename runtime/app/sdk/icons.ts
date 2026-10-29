@@ -6,7 +6,6 @@ import { existsSync } from "node:fs"
 import { isAbsolute, relative, resolve } from "node:path"
 import { useMemo } from "react"
 import { assets } from "../app/assets.ts"
-import { NEW_TAB } from "../app/names.ts"
 import { useApp } from "../app/state.ts"
 import { useBlockOwner } from "./contributions.ts"
 
@@ -29,7 +28,7 @@ export interface TabIconInfo extends IconSource {
 }
 
 /** The core blocks' icons, and the one for a block without any. */
-const CORE: Record<string, string> = { file: "file", browser: "tool_web", files: "folder", image: "image", [NEW_TAB]: "plus" }
+const CORE: Record<string, string> = { file: "file", browser: "tool_web", files: "folder", image: "image" }
 const FALLBACK = "box"
 
 const IMAGE = /^data:image\/(svg\+xml|png|jpeg|webp|gif)[;,]/i

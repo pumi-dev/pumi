@@ -1,8 +1,9 @@
-// Settings → General: the server, the updates, and the app's other groups of options.
+// Settings → General: the server, the updates, what new tabs open, and the app's other groups of options.
 import { useEffect, useState } from "react"
-import { Button, Note, Page, Row, Section, StatusDot } from "../../../sdk/settings/index.ts"
+import { Button, Note, Page, Row, Section, StatusDot, useSettings } from "../../../sdk/settings/index.ts"
 import { useTheme } from "../../../sdk/theme.ts"
 import { engine } from "../../engine.ts"
+import { NewTabRow } from "../new-tab.tsx"
 import { GroupSection, openPath, useGroup, useUpdates } from "../shared.tsx"
 
 /** How often the server's state is asked again while General shows. */
@@ -103,11 +104,14 @@ function UpdatesSection() {
 }
 
 export function GeneralPage({ others }: { others: string[] }) {
+  const settings = useSettings()
   return (
     <Page title="General">
       <ServerSection />
       <UpdatesSection />
-      <GroupSection group="General" />
+      <GroupSection group="General" skip={["new_tab"]}>
+        <NewTabRow open={(page, link) => settings?.open(page, link)} />
+      </GroupSection>
       {others.map((group) => (
         <GroupSection key={group} group={group} />
       ))}

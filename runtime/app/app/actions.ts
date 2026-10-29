@@ -10,8 +10,12 @@ import { startRename } from "../sdk/rename.ts"
 import { leavesOf, paneOfTab } from "./layout.ts"
 import { tabLabel, viewName } from "./names.ts"
 import * as worktreeViews from "./worktree-views.ts"
+import { explainNoNewTab } from "./new-tab.ts"
 
-const swallow = (err: unknown) => console.error(String(err))
+// A new tab nothing can open (`new_tab` names no block) says so in the window; the rest go to the log.
+const swallow = (err: unknown) => {
+  if (!explainNoNewTab(err)) console.error(String(err))
+}
 const PUMI = "pumi"
 
 /** An action of the app's. */

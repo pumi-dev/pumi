@@ -59,7 +59,7 @@ session ─ view ─ pane ─ tab      %3 is a tab, :4 a pane, @2 a view, $1 a s
 
 A view is what the window shows: its panes, split side by side. A pane holds tabs, with a strip of them on top and one in front; a tab holds a terminal, an agent, a page or a file. Set `pane_tabs` to `false` for one tab to a pane, as in tmux.
 
-The server runs terminals, but a shell in a tab is the [Terminal](https://github.com/pumi-dev/plugins/tree/main/terminal) plugin, and agents are the [Agents](https://github.com/pumi-dev/plugins/tree/main/agents) plugin. The start screen offers both, and Browser, until they are installed. While the `new_tab` option names no block (the Terminal plugin sets it to its shell), a new tab is the launcher, a list of what the installed plugins can open.
+pumi opens nothing by itself: every tab is a plugin's. The server runs terminals, but a shell in a tab is the [Terminal](https://github.com/pumi-dev/plugins/tree/main/terminal) plugin, agents are the [Agents](https://github.com/pumi-dev/plugins/tree/main/agents) plugin, and the list of what to open is the [Launcher](https://github.com/pumi-dev/plugins/tree/main/launcher) plugin. On the first run the start screen offers Launcher, Terminal, Agents and Browser, all ticked; untick what you don't want. New tabs then open the first of them you installed, in that order. Settings ▸ General ▸ New tabs open (the `new_tab` option) changes it. While it names no block, a new tab doesn't open, and pumi says to install a plugin.
 
 ## Files
 

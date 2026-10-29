@@ -274,18 +274,9 @@ fn a_tab_opened_with_no_block_holds_what_a_new_tab_does() {
     let dir = Server::dir();
     let server = Server::start_home(dir.path());
     let mut client = server.client();
-    let blocks = client.call("registry.list", json!(["block"]));
-    if blocks.as_array().unwrap().iter().any(|b| b["id"] == "pumi.launcher.new") {
-        let launcher = client.call("tab.open", json!([null, {}, {"kind": "session", "name": "launcher"}]));
-        assert_eq!(
-            client.call("tab.get", json!([&launcher]))["block"],
-            json!("pumi.launcher.new"),
-            "no option, the launcher"
-        );
-    } else {
-        let refused = client.try_call("tab.open", json!([null, {}, {"kind": "session"}])).unwrap_err();
-        assert!(refused.to_string().contains("pumi.launcher.new"), "{refused}");
-    }
+    // pumi has no block of its own for a new tab: until `new_tab` names one, nothing opens.
+    let refused = client.try_call("tab.open", json!([null, {}, {"kind": "session"}])).unwrap_err();
+    assert!(refused.to_string().contains("no plugin opens new tabs"), "{refused}");
     client.term();
     client.call("option.set", json!(["new_tab", TERM, {"scope": "global"}]));
     let chosen = client.call("tab.open", json!([null, {}, {"kind": "session", "name": "chosen"}]));
@@ -684,43 +675,46 @@ fn a_linked_plugin_is_refreshed_where_it_is_and_removing_it_keeps_its_directory(
     std::fs::remove_dir_all(&pkg).unwrap();
     assert!(client.try_call("plugin.update", json!([id, {}])).is_err(), "its directory is gone");
 }
+/// A runtime whose `bundled/` holds one plugin, `sample` (owner `pumi`, block `pumi.sample.thing`):
+/// pumi ships none, so the tests of what a bundled plugin is bring their own.
+fn runtime_with_a_bundled_plugin(root: &Path) -> PathBuf {
+    let runtime = root.join("runtime");
+    let plugin = runtime.join("bundled/sample");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let manifest = json!({
+        "name": "pumi-sample",
+        "version": "0.1.0",
+        "pumi": {"name": "sample", "owner": "pumi", "api": 1, "contributes": {"blocks": [{"id": "thing", "title": "Thing"}]}}
+    });
+    std::fs::write(plugin.join("package.json"), manifest.to_string()).unwrap();
+    std::fs::create_dir_all(runtime.join("app")).unwrap();
+    runtime
+}
 #[test]
 fn a_bundled_plugin_is_listed_turned_off_and_never_removed() {
     let dir = Server::dir();
-    let server = Server::start_home(dir.path());
+    let runtime = runtime_with_a_bundled_plugin(dir.path());
+    let server = Server::spawn_with(None, dir.path(), &[], true, &[("PUMI_RUNTIME", &runtime)]);
     let mut client = server.client();
-    let launcher = |client: &mut Client| {
-        let list = client.call("registry.list", json!(["plugin", {"name": "launcher"}]));
-        list.as_array().unwrap().iter().find(|p| p["spec"]["name"] == "launcher").cloned().expect("listed")
+    let sample = |client: &mut Client| {
+        let list = client.call("registry.list", json!(["plugin", {"name": "sample"}]));
+        list.as_array().unwrap().iter().find(|p| p["spec"]["name"] == "sample").cloned().expect("listed")
     };
-    let listed = launcher(&mut client);
-    assert_eq!((listed["id"].clone(), listed["bundled"].clone()), (json!("pumi/launcher"), json!(true)));
-    assert_eq!(listed["manifest"]["contributes"]["blocks"][0]["id"], "new");
-    assert_eq!(listed["active"], true);
-    let err = client.try_call("plugin.remove", json!(["pumi/launcher", {}])).unwrap_err();
-    assert!(err["message"].as_str().unwrap().contains("bundled"), "{err}");
-    client.call("plugin.update", json!(["pumi/launcher", {"enabled": false}]));
-    assert_eq!(launcher(&mut client)["active"], false, "turned off, and still listed");
-    client.call("plugin.update", json!(["pumi/launcher", {"enabled": true}]));
-    assert_eq!(launcher(&mut client)["active"], true);
-}
-/// A bundled plugin is listed as one, and its block is there while it is on and gone when it is
-/// turned off.
-#[test]
-fn a_bundled_plugin_s_block_goes_when_it_is_turned_off() {
-    let dir = Server::dir();
-    let server = Server::start_home(dir.path());
-    let mut client = server.client();
     let blocks = |client: &mut Client| -> Vec<Value> {
         client.call("registry.list", json!(["block"])).as_array().unwrap().iter().map(|b| b["id"].clone()).collect()
     };
-    let listed = client.call("registry.list", json!(["plugin", {"name": "launcher"}]));
-    let launcher =
-        listed.as_array().unwrap().iter().find(|p| p["spec"]["name"] == "launcher").cloned().expect("listed");
-    assert_eq!((launcher["id"].clone(), launcher["bundled"].clone()), (json!("pumi/launcher"), json!(true)));
-    assert!(blocks(&mut client).contains(&json!("pumi.launcher.new")), "its block, while it is on");
-    client.call("plugin.update", json!(["pumi/launcher", {"enabled": false}]));
-    assert!(!blocks(&mut client).contains(&json!("pumi.launcher.new")), "off, the block goes");
+    let listed = sample(&mut client);
+    assert_eq!((listed["id"].clone(), listed["bundled"].clone()), (json!("pumi/sample"), json!(true)));
+    assert_eq!(listed["manifest"]["contributes"]["blocks"][0]["id"], "thing");
+    assert_eq!(listed["active"], true);
+    assert!(blocks(&mut client).contains(&json!("pumi.sample.thing")), "its block, while it is on");
+    let err = client.try_call("plugin.remove", json!(["pumi/sample", {}])).unwrap_err();
+    assert!(err["message"].as_str().unwrap().contains("bundled"), "{err}");
+    client.call("plugin.update", json!(["pumi/sample", {"enabled": false}]));
+    assert_eq!(sample(&mut client)["active"], false, "turned off, and still listed");
+    assert!(!blocks(&mut client).contains(&json!("pumi.sample.thing")), "off, the block goes");
+    client.call("plugin.update", json!(["pumi/sample", {"enabled": true}]));
+    assert_eq!(sample(&mut client)["active"], true);
 }
 #[test]
 fn a_plugin_from_a_repository_installs_at_the_ref_it_follows_and_goes() {

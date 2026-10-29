@@ -14,6 +14,7 @@ import { openSettings } from "./settings/open.ts"
 import type { AppWindow } from "./windows.tsx"
 import { setCapturedKeys } from "../native/addon.js"
 import { FONT_DEFAULT, FONT_SIZE_RANGE, guifont, parseFont } from "../sdk/font.ts"
+import { explainNoNewTab } from "./new-tab.ts"
 
 /** Where a command runs: the window it was asked in, and what of it is in front. */
 export interface Context {
@@ -121,7 +122,10 @@ const DEFAULTS_OTHER: [string, string][] = [
   ["toggle_panel", "ctrl+shift+j"],
 ]
 
-const swallow = (err: unknown) => console.error(String(err))
+// A new tab nothing can open (`new_tab` names no block) says so in the window; the rest go to the log.
+const swallow = (err: unknown) => {
+  if (!explainNoNewTab(err)) console.error(String(err))
+}
 
 /** Where the tab in front of `context` is, or the view's. */
 function tab(c: Context): string | undefined {
