@@ -1776,7 +1776,8 @@ function Pane({ pane: id, tabs, active, focused, zoomed }: { pane: string; tabs:
       onAuxClick={open}
       onMouseEnter={() => hoverPart("pane", true)}
       onMouseLeave={() => hoverPart("pane", false)}
-      style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, minHeight: 0, position: "relative" }}
+      // A drag that starts in the pane selects in the pane only, not across its neighbours.
+      style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, minHeight: 0, position: "relative", userSelect: "contain" }}
     >
       {titled ? (
         <PaneHover.Provider value={hoverPart}>
