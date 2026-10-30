@@ -30,12 +30,16 @@ function shallowEqual(a: unknown, b: unknown): boolean {
   return ka.every((k) => Object.is((a as any)[k], (b as any)[k]))
 }
 
-/** The window a tree draws: its id, the session it shows, and its own controls. */
+/** The window a tree draws: its id, the session and view it shows, and its own controls. */
 export interface WindowInfo {
   id: number
   /** The session shown (`$1`), if any. */
   session?: string
-  show(session: string): void
+  /** The view it shows of it (`@2`): its own, whichever view the server's focus is in. */
+  view?: string
+  show(session: string, view?: string): void
+  /** Shows `view`, in whichever session holds it. */
+  showView(view: string): void
   close(): void
   minimize(): void
   zoom(): void
@@ -120,10 +124,11 @@ export function useViews(session?: string): View[] {
   return useApp((s) => s.snapshot?.views.filter((v) => v.workspace_id === shown) ?? EMPTY)
 }
 
-/** A view: `id`, or the one in front of the window's session. */
+/** A view: `id`, or the one the window shows, else the one in front of its session. */
 export function useView(id?: string): View | undefined {
+  const window = useContext(WindowContext)
   const session = useSession()
-  const want = id ?? session?.active_view_id ?? undefined
+  const want = id ?? window?.view ?? session?.active_view_id ?? undefined
   return useApp((s) => s.snapshot?.views.find((v) => v.view_id === want))
 }
 
@@ -137,7 +142,7 @@ export function useTab(id: string | undefined): Tab | undefined {
   return useApp((s) => s.snapshot?.tabs.find((t) => t.tab_id === id))
 }
 
-/** The tab in focus in a view (the window's front view by default). */
+/** The tab in focus in a view (the window's own view by default). */
 export function useFocusedTab(view?: string): string | undefined {
   const shown = useView(view)?.view_id
   return useApp((s) => s.snapshot?.layouts.find((l) => l.view_id === shown)?.focused_tab_id ?? undefined)

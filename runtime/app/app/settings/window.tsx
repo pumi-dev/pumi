@@ -94,8 +94,10 @@ export class SettingsWindow {
     const info: WindowInfo = {
       id: 0,
       session: undefined,
+      view: undefined,
       active: this.active,
       show: () => {},
+      showView: () => {},
       close: () => this.close(),
       minimize: () => this.renderer.minimizeWindow(),
       zoom: () => this.renderer.zoomWindow(),

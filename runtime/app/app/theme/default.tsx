@@ -7,6 +7,7 @@ import { basename } from "node:path"
 import { assets } from "../assets.ts"
 import { call, store, via } from "../engine.ts"
 import { openSession } from "../commands.ts"
+import { openView } from "../new-view.ts"
 import { FILE, renderComponent, useRenderer, useSlot } from "../../sdk/contributions.ts"
 import { grouped, heldShortcut, keyGlyphs, shortcut, type Action as ActionItem } from "../../sdk/actions.ts"
 import { run as runCommand } from "../../sdk/context.ts"
@@ -407,9 +408,10 @@ async function openFolder(window: { id: number; show(session: string): void }) {
 function ViewBar({ session }: { session?: string }) {
   const t = useTheme()
   const C = useComponents()
+  const window = useWindow()
   // By index, as the side bar has them: dragging a view there trades its index with its neighbours'.
   const views = [...useViews(session)].sort((a, b) => a.number - b.number)
-  const front = useSession(session)?.active_view_id
+  const front = window.view ?? useSession(session)?.active_view_id
   return (
     <div style={{ display: "flex", flexDirection: "row", alignSelf: "stretch", alignItems: "stretch", minWidth: 0, flexShrink: 1, overflowX: "scroll", borderLeftWidth: 1, borderColor: t.border }}>
       {views.map((view, index) => (
@@ -423,6 +425,7 @@ function View({ view: id, active }: { view: string; active: boolean; index: numb
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
+  const window = useWindow()
   const front = t.editor
   const view = useView(id)
   const { actions } = useSlot("view.actions")
@@ -434,7 +437,7 @@ function View({ view: id, active }: { view: string; active: boolean; index: numb
   if (!view) return null
   return (
     <div
-      onClick={() => call(via(id, "view.focus"), id).catch(swallow)}
+      onClick={() => window.showView(id)}
       onAuxClick={open}
       title={view.worktree ? `${label} · ${view.worktree}` : undefined}
       {...hover}
@@ -858,6 +861,7 @@ function Contributed({ action, args }: { action: ActionItem; args?: unknown }) {
 const drawnPanes = new Map<string, string>()
 
 function Layout({ view }: { view?: string }) {
+  const window = useWindow()
   const tree = useLayout(view)
   const shown = useView(view)?.view_id
   const focused = useFocusedTab(view)
@@ -885,7 +889,9 @@ function Layout({ view }: { view?: string }) {
     else if (even) setEven(undefined)
   }
   const drawn = tree && even && even.from === JSON.stringify(tree) ? even.to : tree
-  if (!tree || !drawn) return <StartScreen />
+  // A view the window has and the snapshot has yet to draw (the server just made it): nothing,
+  // not the start screen, which is for a window with no view at all.
+  if (!tree || !drawn) return (view ?? window.view) !== undefined ? null : <StartScreen />
   // Keyed by the view: another view's panes are drawn as they are, not grown out of this one's.
   const zoom = zoomed ? paneOfTab(drawn, focused)?.pane : undefined
   const body = <Tiles key={shown} tree={drawn} view={shown} focused={focused} zoomed={zoom} />
@@ -2761,11 +2767,12 @@ function NewViewDropZone({ session }: { session: string }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
+  const window = useWindow()
   const zone = drop.useDropBox(
     (data): data is moves.Carried => !!newViewDrop(data, session),
     (it) => {
       const move = newViewDrop(it, session)
-      if (move) runMove(move)
+      if (move) runMove(move, window)
     },
   )
   const lit = zone.isOver
@@ -2799,6 +2806,7 @@ function NewViewDropZone({ session }: { session: string }) {
 function RowDropZone({ row, across }: { row: moves.Row; across?: boolean }) {
   const t = useTheme()
   const m = useMetrics()
+  const window = useWindow()
   const where = () => moves.whereIn(store.get().snapshot)
   const along = (at: { x: number; y: number }, box?: drop.Bounds) => {
     const { fx, fy } = drop.within(at, box)
@@ -2811,7 +2819,7 @@ function RowDropZone({ row, across }: { row: moves.Row; across?: boolean }) {
     },
     (it, at, box) => {
       const move = moves.rowDrop(it, row, along(at, box), where())
-      if (move) runMove(move)
+      if (move) runMove(move, window)
     },
   )
   const it = moves.carried(zone.drag?.data)
@@ -2862,9 +2870,8 @@ const NO_SNAPSHOT_TABS: never[] = []
  * session it is given, so a view or tab of another session switches it first.
  */
 function goTo(window: ReturnType<typeof useWindow>, session: string, view?: string, tab?: string) {
-  if (window.session !== session) window.show(session)
-  const shown = view ? call(via(view, "view.focus"), view) : Promise.resolve()
-  shown.then(() => tab && call(via(tab, "tab.focus"), tab)).catch(swallow)
+  window.show(session, view)
+  if (tab) call(via(tab, "tab.focus"), tab).catch(swallow)
 }
 
 
@@ -3125,8 +3132,8 @@ const SessionRow = memo(function SessionRow({ session: id, label, folded, toggle
   const { open, show, menu, shown } = useMenu("session.menu", { session: id })
   const [adding, setAdding] = useState<{ x: number; y: number } | undefined>()
   const newView = () => {
-    call(via(id, "tab.open"), null, {}, { kind: "view", session: id })
-      .then(() => current || window.show(id))
+    openView(id)
+      .then(({ view }) => (current ? view && window.showView(view) : window.show(id, view)))
       .catch(swallow)
   }
   const { renaming, input } = useRename({ session: id }, label)
@@ -3212,7 +3219,7 @@ function NewViewRows({ session, close }: { session: string; close(): void }) {
   const menu = useContext(MenuContext)
   const worktrees = worktreeViews.useWorktrees(session)
   const home = useApp((s) => s.snapshot?.workspaces.find((w) => w.workspace_id === session))
-  const frontView = useApp((s) => (window.session === session && home?.active_view_id ? s.snapshot?.views.find((x) => x.view_id === home.active_view_id) : undefined))
+  const frontView = useApp((s) => (window.session === session && window.view ? s.snapshot?.views.find((x) => x.view_id === window.view) : undefined))
   const here = frontView ? (frontView.worktree ?? home?.cwd) : home?.cwd
   const [free, setFree] = useState<string[] | undefined>()
   useEffect(() => {
@@ -3347,7 +3354,7 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
   const window = useWindow()
   const label = useViewName(id)
   const worktree = useApp((s) => s.snapshot?.views.find((x) => x.view_id === id)?.worktree)
-  const front = useApp((s) => window.session === session && s.snapshot?.workspaces.find((w) => w.workspace_id === session)?.active_view_id === id)
+  const front = window.session === session && window.view === id
   // ⌘1…⌘9 go to the views of the session the window shows, by number: only its rows have them.
   const number = useApp((s) => (window.session === session ? s.snapshot?.views.find((x) => x.view_id === id)?.number : undefined))
   const keys = useHeldKeys("switch_view", number ?? -1)
