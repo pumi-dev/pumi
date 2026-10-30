@@ -267,6 +267,8 @@ What a tab is, in one read: `tab.block`, `tab.traits`, `tab.place`, `tab.title`,
 
 The focus is the server's, and every client showing a session shares it: a view's `activeTab` and `activePane`, a session's `activeView`, and `isFocused` (a client is in that tab) are the same for all of them, and `tab.focus` and `view.focus` move them for all. A component that draws where its window's focus is takes it from the window (a theme's `focused` prop, `useFocusedTab`), not from these.
 
+A window shows a view of its own: `useView()` in a `ui.tsx` is that window's view, and `useWindow().view` names it (`showView(view)` switches it). Two windows on one session can show two views of it, so a session's `activeView` — which `view.focus` moves — is not what a window draws.
+
 ## Tab methods
 
 Every tab answers these; `tab.call(tab, method, args)` runs one, and the SDK has each as a method on `Tab`. `run` and `attach` are a terminal's alone (a tab whose block runs on the terminal engine), and a block has its own besides (see [Blocks](#blocks)).
