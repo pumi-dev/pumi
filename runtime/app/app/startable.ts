@@ -68,3 +68,46 @@ export function named(list: Startable[], value: string): Startable | undefined {
 export function newTabOf(list: Startable[], value: string): Startable | undefined {
   return named(list, value) ?? PREFERRED.map((b) => named(list, b)).find(Boolean) ?? list.find(settable)
 }
+
+/**
+ * The letter that picks each of `titles` while its list has the keys (the Launcher's tab, the `+`
+ * menu), in the same order: the same title in the same list gets the same letter wherever it is
+ * shown, whatever order the list is drawn in. Each takes its first letter if no title before it
+ * has; those left take the first letter of another of their words (`Cursor Agent`'s `A`,
+ * `OpenCode`'s `C`), then any other of their letters or digits, in order; past those, a digit. One
+ * of `reserved` (a list's own rows: the Launcher's `File…`) is no one's. `""` once all are taken.
+ */
+export function letters(titles: string[], reserved: Iterable<string> = []): string[] {
+  const taken = new Set([...reserved].map((k) => k.toLowerCase()))
+  const out = titles.map(() => "")
+  const tiers = titles.map((title) => {
+    const words = title.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+    const first = words[0]?.[0]
+    const initials = words.slice(1).map((w) => w[0]!)
+    const rest = [...words.join("")]
+    return [first ? [first] : [], initials, rest]
+  })
+  for (let tier = 0; tier < 3; tier++) {
+    tiers.forEach((t, i) => {
+      if (out[i]) return
+      const k = t[tier]!.find((c) => !taken.has(c))
+      if (k === undefined) return
+      out[i] = k
+      taken.add(k)
+    })
+  }
+  const digits = [..."1234567890"].filter((d) => !taken.has(d))
+  return out.map((k) => (k || digits.shift() || "").toUpperCase())
+}
+
+/** How many times each was opened from a list, by its id: what `byUse` orders them by. */
+export type Uses = Record<string, number>
+
+/** `list` the most used first (`uses`, by `id`); those used as often keep the order they had. */
+export function byUse<T extends { id: string }>(list: T[], uses: Uses): T[] {
+  const n = (t: T) => (typeof uses[t.id] === "number" ? uses[t.id]! : 0)
+  return list
+    .map((t, i) => [t, i] as const)
+    .sort(([a, i], [b, j]) => n(b) - n(a) || i - j)
+    .map(([t]) => t)
+}

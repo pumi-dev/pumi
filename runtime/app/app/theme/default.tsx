@@ -8,7 +8,7 @@ import { assets } from "../assets.ts"
 import { call, store, via } from "../engine.ts"
 import { openSession } from "../commands.ts"
 import { FILE, renderComponent, useRenderer, useSlot } from "../../sdk/contributions.ts"
-import { grouped, heldShortcut, keyGlyphs, shortcut, type Action as ActionItem } from "../../sdk/actions.ts"
+import { grouped, heldShortcut, shortcut, type Action as ActionItem } from "../../sdk/actions.ts"
 import { run as runCommand } from "../../sdk/context.ts"
 import { homedir } from "node:os"
 import { useMenu } from "../../sdk/menu.ts"
@@ -42,7 +42,6 @@ import { IconImage, TabIcon } from "../../sdk/elements.tsx"
 import { showsStatus, useTabIcon, useTabStatus } from "../../sdk/icons.ts"
 import { useHover } from "../../sdk/kit.tsx"
 import { useTab as useTabModel } from "../../sdk/state.ts"
-import { fromServer } from "../serverkeys.ts"
 import { useLocal } from "../local.ts"
 import { tabLabel, viewName } from "../names.ts"
 import { FONT_DEFAULT } from "../../sdk/font.ts"
@@ -53,8 +52,7 @@ import { runsTerminal } from "../terminals.ts"
 import { useStarters, type Starters } from "../starters.ts"
 import { AgentsChoice, PluginCards, SchemeChoice, SETUP_WIDTH, WindowChoice } from "./start-plugins.tsx"
 import { explainNoNewTab } from "../new-tab.ts"
-import * as plugins from "../plugins.ts"
-import { startables } from "../startable.ts"
+import { byLetter, useNewTabs, type NewTab } from "../../sdk/new-tabs.ts"
 import { openSettings } from "../settings/open.ts"
 
 // A new tab nothing can open (`new_tab` names no block) says so in the window; the rest go to the log.
@@ -739,9 +737,10 @@ function SubMenu({ title, lit, onEnter, children }: { title: string; lit?: boole
  * A menu's row: its title, and at the far end its keys (`⇧ ⌘ D`), a check, or the chevron of a
  * row that opens more (`SubMenu`'s, which is `active` while open). Hovering any other row closes
  * its card's open submenu. `lit`, given: a menu the keys move through says which row is lit (and
- * scrolled to), so the mouse's hover draws none of its own.
+ * scrolled to), so the mouse's hover draws none of its own. `letter`: the key that picks it while
+ * its menu has the keys (the `+` menu's), in a box at the far end.
  */
-function MenuItem({ title, icon, keys, checked, disabled, more, active, lit, detail, onEnter, onLeave, onClick }: { title: string; icon?: string; keys?: string; checked?: boolean; disabled?: boolean; more?: boolean; active?: boolean; lit?: boolean; detail?: string; onEnter?(): void; onLeave?(): void; onClick(): void }) {
+function MenuItem({ title, icon, keys, letter, checked, disabled, more, active, lit, detail, onEnter, onLeave, onClick }: { title: string; icon?: string; keys?: string; letter?: string; checked?: boolean; disabled?: boolean; more?: boolean; active?: boolean; lit?: boolean; detail?: string; onEnter?(): void; onLeave?(): void; onClick(): void }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
@@ -763,8 +762,13 @@ function MenuItem({ title, icon, keys, checked, disabled, more, active, lit, det
     >
       {icon ? <Icon name={icon} size={13} color={t.muted} /> : null}
       <text style={{ fontSize: ts(13), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{title}</text>
-      {keys || checked !== undefined || more ? <div style={{ flexGrow: 1, minWidth: 16 }} /> : null}
+      {keys || letter || checked !== undefined || more ? <div style={{ flexGrow: 1, minWidth: 16 }} /> : null}
       {keys ? <text style={{ fontSize: ts(12), color: t.muted, whiteSpace: "nowrap", flexShrink: 0 }}>{keys}</text> : null}
+      {letter ? (
+        <div style={{ display: "flex", width: 16, height: 16, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: m.radiusSmall, backgroundColor: t.active }}>
+          <text style={{ fontSize: ts(11), color: t.muted }}>{letter}</text>
+        </div>
+      ) : null}
       {checked ? <Icon name="check" size={12} color={t.accent} /> : null}
       {more ? <Icon name="chevron_right" size={12} color={t.muted} /> : null}
     </div>
@@ -1469,78 +1473,8 @@ function SplitMenu({ split, close, onButton }: { split(side: SplitSide): void; c
   )
 }
 
-/** Where a new tab goes: into a pane, as one of its tabs. */
-type NewPlace = { kind: "tiled"; pane: string }
-
 /**
- * One thing a new tab can be: a row of the `+` menu. `at` is what the call goes through (the
- * pane: it names the server).
- */
-interface NewKind {
-  id: string
-  title: string
-  icon: string
-  /** The keys that open one elsewhere, when they are bound: the app's command, or the server's. */
-  keys?: string
-  /** A menu draws a rule between groups: the app's own, then each plugin's (`tab.new`). */
-  group: string
-  open(at: string, place: NewPlace): Promise<unknown>
-}
-
-/** The keys the server's tables (`keys`) bind to `fn`, as the OS writes them (`⇧ ⌘ E`). */
-function serverShortcut(tables: unknown, fn: string): string | undefined {
-  if (!tables || typeof tables !== "object") return undefined
-  for (const name of ["root", "global"]) {
-    const table = (tables as Record<string, unknown>)[name]
-    if (!table || typeof table !== "object") continue
-    for (const [key, binding] of Object.entries(table as Record<string, { call?: unknown } | null>)) {
-      if (binding?.call === fn) return keyGlyphs(key.split(" ").map((k) => fromServer(k) ?? k).join(" "))
-    }
-  }
-  return undefined
-}
-
-let pluginsVersion = 0
-plugins.subscribe(() => pluginsVersion++)
-
-/** An icon of the app's by name, for a menu row: a block's own file (`plugin:icon.svg`) is a box. */
-const menuIcon = (icon: string | undefined) => (icon && /^[a-z0-9_]{1,64}$/.test(icon) ? icon : "box")
-
-/**
- * What a new tab can be: the list Settings ▸ General ▸ New tabs open picks from too
- * (`startable.ts`), each plugin's a group of its own. An action is run with `{tab, place}`: the
- * pane or tab it opens beside (it names the server), and where; one with a `pick` asks for its
- * files first. A block opens there with no arguments. Each shows the keys that open one elsewhere
- * when there are any.
- */
-function useNewKinds(): NewKind[] {
-  const { actions } = useSlot("tab.new")
-  const tables = useApp((s) => s.options.keys)
-  const version = useSyncExternalStore(plugins.subscribe, () => pluginsVersion)
-  return useMemo(() => {
-    const slotted = new Map(actions.map((a) => [`${a.plugin}/${a.id}`, a]))
-    return startables(plugins.entries.values()).map((s): NewKind => {
-      const id = s.action ? `${s.plugin}/${s.action.id}` : `${s.plugin}/${s.value}`
-      const slot = slotted.get(id)
-      const command = s.action ? s.value : undefined
-      return {
-        id,
-        title: s.title,
-        icon: menuIcon(s.icon ?? (s.action ? "plus" : undefined)),
-        keys: slot?.keys ?? (command ? serverShortcut(tables, command) : undefined),
-        group: s.plugin,
-        open: async (on, place) => {
-          if (slot) return slot.run({ tab: on, place })
-          if (s.action) return plugins.command(s.plugin, s.action.command, { tab: on, place })
-          return call(via(on, "tab.open"), s.value, {}, place)
-        },
-      }
-    })
-  }, [actions, tables, version])
-}
-
-/**
- * A pane bar's `+`: a press opens a menu under it of what the new tab can be (`useNewKinds`),
+ * A pane bar's `+`: a press opens a menu under it of what the new tab can be (`NewTabMenu`),
  * which opens into the pane as one of its tabs. A press on the button while it is open closes it.
  */
 function NewTabButton({ pane, color, onOpen }: { pane: string; color?: string; onOpen(open: boolean): void }) {
@@ -1561,26 +1495,48 @@ function NewTabButton({ pane, color, onOpen }: { pane: string; color?: string; o
   )
 }
 
+/**
+ * The `+` menu: what a new tab can be (`useNewTabs`), the most used first, as one list. It has the
+ * keys while it is open: a row's letter (the same as in the Launcher's list) opens it, the arrows
+ * light one and Enter opens that, Escape closes the menu.
+ */
 function NewTabMenu({ pane, close, onButton }: { pane: string; close(): void; onButton: { current: boolean } }) {
   const t = useTheme()
   const m = useMetrics()
-  const kinds = useNewKinds()
+  const kinds = useNewTabs()
+  const [lit, setLit] = useState(0)
+  const open = (k: NewTab | undefined) => {
+    if (!k) return
+    close()
+    k.open(pane, { kind: "tiled", pane }).catch(swallow)
+  }
   return (
     <anchored side="bottom" align="end" gap={4} fit="snap" snapMargin={8} deferred occlude priority={1} style={{ backgroundColor: "transparent" }}>
-      <div onMouseDownOutside={() => onButton.current || close()} style={menuCard(t, m)}>
+      <div
+        autoFocus
+        tabIndex={0}
+        onMouseDownOutside={() => onButton.current || close()}
+        onKeyDown={(e: any) => {
+          const mods = e.modifiers ?? {}
+          if (mods.cmd || mods.ctrl || mods.alt) return
+          const key = String(e.key ?? "").toLowerCase()
+          const count = Math.max(kinds.length, 1)
+          if (key === "down") setLit((i) => (i + 1) % count)
+          else if (key === "up") setLit((i) => (i + count - 1) % count)
+          else if (key === "enter") open(kinds[lit])
+          else if (key === "escape") close()
+          else {
+            const k = byLetter(kinds, key)
+            if (!k) return
+            open(k)
+          }
+          e.preventDefault?.()
+          e.stopPropagation?.()
+        }}
+        style={{ ...menuCard(t, m), keyboardFocusDim: false }}
+      >
         {kinds.map((k, i) => (
-          <Fragment key={k.id}>
-            {i > 0 && kinds[i - 1]!.group !== k.group ? <MenuRule /> : null}
-            <MenuItem
-              icon={k.icon}
-              title={k.title}
-              keys={k.keys}
-              onClick={() => {
-                close()
-                k.open(pane, { kind: "tiled", pane }).catch(swallow)
-              }}
-            />
-          </Fragment>
+          <MenuItem key={k.id} icon={k.icon} title={k.title} keys={k.keys} letter={k.letter} lit={i === lit} onEnter={() => setLit(i)} onClick={() => open(k)} />
         ))}
         {kinds.length ? null : (
           // Nothing is installed that opens a tab: the way to what does.
