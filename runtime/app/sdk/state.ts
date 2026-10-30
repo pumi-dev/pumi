@@ -67,12 +67,16 @@ export interface RendererProps {
   focused: boolean
 }
 
-/** The window a tree draws: its id, the session it shows, and its own controls. */
+/** The window a tree draws: its id, the session and view it shows, and its own controls. */
 export interface WindowInfo {
   id: number
   /** The session it shows. */
   session: Session | null
-  show(session: string | null): void
+  /** The view it shows of it: its own, whichever view the server's focus is in. */
+  view: View | null
+  show(session: string | null, view?: string | null): void
+  /** Shows `view`, in whichever session holds it. */
+  showView(view: string): void
   close(): void
   minimize(): void
   zoom(): void
@@ -97,7 +101,9 @@ export function useWindow(): WindowInfo {
   return {
     id: window.id,
     session: cache.model<Session>("session", window.session),
-    show: (session) => window.show(session ?? ""),
+    view: cache.model<View>("view", window.view),
+    show: (session, view) => window.show(session ?? "", view ?? undefined),
+    showView: (view) => window.showView(view),
     close: window.close,
     minimize: window.minimize,
     zoom: window.zoom,
@@ -127,10 +133,11 @@ export function useViews(session?: string): View[] {
   return useCached(() => shown?.views ?? EMPTY)
 }
 
-/** A view: `id`, or the one in front of the caller's session. */
+/** A view: `id`, or the one the window shows, else the one in front of the caller's session. */
 export function useView(id?: string): View | undefined {
+  const window = useContext(WindowContext)
   const shown = useSession()
-  return useCached(() => workspace.getView(id ?? caller().view ?? shown?.activeView?.id ?? "") ?? undefined)
+  return useCached(() => workspace.getView(id ?? window?.view ?? caller().view ?? shown?.activeView?.id ?? "") ?? undefined)
 }
 
 /** A tab: the model its id names, or the caller's own. */
