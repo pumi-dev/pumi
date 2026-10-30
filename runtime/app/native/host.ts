@@ -321,8 +321,10 @@ export interface StyleDesc {
   pointerEvents?: "auto" | "none"
 
   /** "none" opts this element and its subtree out of text selection.
-   *  Inherited like the CSS property, so a toolbar can disable it once. */
-  userSelect?: "text" | "none" | "auto"
+   *  Inherited like the CSS property, so a toolbar can disable it once.
+   *  "contain" is selectable, and a selection that starts inside stays inside
+   *  (CSS `user-select: contain`): a drag from a pane never selects the next pane. */
+  userSelect?: "text" | "none" | "auto" | "contain"
   /** Selection wash colour for this subtree. Defaults to the theme accent at 35%. */
   selectionColor?: string
 

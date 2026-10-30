@@ -72,6 +72,11 @@ pub struct SelectionState {
     /// or blur; iOS treats that tap as scroll or focus. Promoted on the first
     /// dragging move, or replaced by `begin_with_span` for double-click.
     pending: bool,
+    /// Selection scope the press landed in: the nearest `userSelect:
+    /// "contain"` ancestor's element id, `0` for the window. A drag only
+    /// resolves against runs of the same scope, so it cannot run into the
+    /// next pane.
+    scope: u64,
 }
 
 impl SelectionState {
@@ -105,6 +110,15 @@ impl SelectionState {
 
     pub fn is_pending(&self) -> bool {
         self.pending
+    }
+
+    /// See [`SelectionState::scope`]. Set right after `arm` or `begin_with_span`.
+    pub fn set_scope(&mut self, scope: u64) {
+        self.scope = scope;
+    }
+
+    pub fn scope(&self) -> u64 {
+        self.scope
     }
 
     /// Begin with an immediate span — double or triple click inside one element.

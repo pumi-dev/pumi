@@ -110,7 +110,7 @@ pub fn track_own_bounds<E: gpui::InteractiveElement>(el: E, id: u64) -> E {
 pub(crate) fn track_host_bounds<E>(
     el: E,
     id: u64,
-    selection_start: Option<bool>,
+    selection_start: Option<(bool, u64)>,
     report: Option<PaintReporter>,
     cover: Option<crate::occlusion::Cover>,
 ) -> E
@@ -119,8 +119,8 @@ where
 {
     el.on_painted(move |bounds, window, cx| {
         record_bounds(id, bounds);
-        if let Some(selectable) = selection_start {
-            crate::text::record_start_region(bounds, selectable);
+        if let Some((selectable, scope)) = selection_start {
+            crate::text::record_start_region(bounds, selectable, scope);
         }
         if let Some(cover) = cover {
             crate::occlusion::record(cover, bounds, window, cx);
@@ -156,8 +156,9 @@ pub fn bounds_tracker(id: u64, selection_start: Option<bool>) -> impl IntoElemen
         |bounds, _, _| bounds,
         move |bounds, _, _, _| {
             record_bounds(id, bounds);
+            // A region that starts no selection has no scope to start it in.
             if let Some(selectable) = selection_start {
-                crate::text::record_start_region(bounds, selectable);
+                crate::text::record_start_region(bounds, selectable, 0);
             }
         },
     )

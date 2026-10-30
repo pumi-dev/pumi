@@ -42,6 +42,8 @@ struct RegEntry {
     layout: TextLayout,
     /// See [`selection::RegisteredText::group`].
     group: Option<u64>,
+    /// See [`SelectableText::scope`].
+    scope: u64,
 }
 
 /// Full element box that owns whether a press may start a selection.
@@ -53,6 +55,8 @@ struct RegEntry {
 struct StartRegion {
     bounds: Bounds<gpui::Pixels>,
     selectable: bool,
+    /// Selection scope a press here starts in. See [`SelectableText::scope`].
+    scope: u64,
 }
 
 /// One highlight wash painted this frame, with the boxes it actually drew.
@@ -168,14 +172,18 @@ pub fn selection_frame_reset(
 ///
 /// Only `track_host_bounds` and `bounds_tracker` call this, so a start region is
 /// always the same box automation already uses. Last painted region that contains the point wins.
-pub fn record_start_region(bounds: Bounds<gpui::Pixels>, selectable: bool) {
-    START_REGIONS.with(|r| r.borrow_mut().push(StartRegion { bounds, selectable }));
+pub fn record_start_region(bounds: Bounds<gpui::Pixels>, selectable: bool, scope: u64) {
+    START_REGIONS.with(|r| r.borrow_mut().push(StartRegion { bounds, selectable, scope }));
 }
 
-/// Last painted start region that contains `position`.
-fn start_region_at(position: gpui::Point<gpui::Pixels>) -> Option<bool> {
+/// `(selectable, scope)` of the last painted start region that contains `position`.
+fn start_region_at(position: gpui::Point<gpui::Pixels>) -> Option<(bool, u64)> {
     START_REGIONS.with(|r| {
-        r.borrow().iter().rev().find(|region| region.bounds.contains(&position)).map(|region| region.selectable)
+        r.borrow()
+            .iter()
+            .rev()
+            .find(|region| region.bounds.contains(&position))
+            .map(|region| (region.selectable, region.scope))
     })
 }
 
@@ -262,6 +270,10 @@ pub struct SelectableText {
     /// False under `userSelect: "none"`: the text is still painted, logged and
     /// clickable, but it does not join the selection registry.
     pub selectable: bool,
+    /// Element id of the nearest `userSelect: "contain"` ancestor, `0` for the
+    /// window. A drag anchored in one scope never selects a run of another,
+    /// the way a pane's selection stops at its edge.
+    pub scope: u64,
     /// See [`crate::text::selection::RegisteredText::group`]. `None` for a run
     /// that must never merge with its neighbour, which is every custom element.
     pub group: Option<u64>,
@@ -290,6 +302,7 @@ impl SelectableText {
             links: Vec::new(),
             on_link: None,
             selectable: true,
+            scope: 0,
             group: None,
             highlight: None,
         }
@@ -322,6 +335,7 @@ pub fn selectable_text_parts(opts: SelectableText) -> [gpui::AnyElement; 2] {
         links,
         on_link,
         selectable,
+        scope,
         group,
         highlight,
     } = opts;
@@ -370,6 +384,7 @@ pub fn selectable_text_parts(opts: SelectableText) -> [gpui::AnyElement; 2] {
                         text: text.clone(),
                         layout: layout.clone(),
                         group,
+                        scope,
                     })
                 });
             }
@@ -494,79 +509,82 @@ fn register_link_listener(
 /// texts never share a vertical band. GPUIX lays out arbitrary React trees: a
 /// Y-only match picks the leftmost text in a flex row no matter where the
 /// pointer actually is.
-fn registry_point(position: gpui::Point<gpui::Pixels>) -> Option<(usize, usize)> {
-    REGISTRY.with(|r| {
-        let reg = r.borrow();
-        let mut contained: Option<usize> = None;
-        let mut nearest: Option<(usize, (f32, f32))> = None;
+///
+/// `reg` is one selection scope's runs (see [`scoped`]), and the element index
+/// is into that slice: the nearest-text clamp must never reach into another
+/// pane, or a drag that leaves its pane picks up the neighbour's text.
+fn registry_point(reg: &[&RegEntry], position: gpui::Point<gpui::Pixels>) -> Option<(usize, usize)> {
+    let mut contained: Option<usize> = None;
+    let mut nearest: Option<(usize, (f32, f32))> = None;
 
-        for (ei, entry) in reg.iter().enumerate() {
-            let b = entry.layout.bounds();
-            if b.contains(&position) {
-                contained = Some(ei);
-                continue;
-            }
-            let dy = if position.y < b.top() {
-                f32::from(b.top() - position.y)
-            } else if position.y > b.bottom() {
-                f32::from(position.y - b.bottom())
-            } else {
-                0.0
-            };
-            // Within a shared band, break the tie on horizontal distance so a
-            // drag in the right-hand column does not snap to the left one.
-            // Compared lexicographically: vertical distance dominates outright,
-            // because a weighted sum lets a huge dx beat a 1px dy.
-            let dx = if position.x < b.left() {
-                f32::from(b.left() - position.x)
-            } else if position.x > b.right() {
-                f32::from(position.x - b.right())
-            } else {
-                0.0
-            };
-            let distance = (dy, dx);
-            if nearest.is_none_or(|(_, best): (usize, (f32, f32))| (distance.0, distance.1) < (best.0, best.1)) {
-                nearest = Some((ei, distance));
-            }
+    for (ei, entry) in reg.iter().enumerate() {
+        let b = entry.layout.bounds();
+        if b.contains(&position) {
+            contained = Some(ei);
+            continue;
         }
-
-        let ei = contained.or(nearest.map(|(ei, _)| ei))?;
-        let ix = match reg[ei].layout.index_for_position(position) {
-            Ok(ix) | Err(ix) => ix,
+        let dy = if position.y < b.top() {
+            f32::from(b.top() - position.y)
+        } else if position.y > b.bottom() {
+            f32::from(position.y - b.bottom())
+        } else {
+            0.0
         };
-        Some((ei, ix))
-    })
+        // Within a shared band, break the tie on horizontal distance so a
+        // drag in the right-hand column does not snap to the left one.
+        // Compared lexicographically: vertical distance dominates outright,
+        // because a weighted sum lets a huge dx beat a 1px dy.
+        let dx = if position.x < b.left() {
+            f32::from(b.left() - position.x)
+        } else if position.x > b.right() {
+            f32::from(position.x - b.right())
+        } else {
+            0.0
+        };
+        let distance = (dy, dx);
+        if nearest.is_none_or(|(_, best): (usize, (f32, f32))| (distance.0, distance.1) < (best.0, best.1)) {
+            nearest = Some((ei, distance));
+        }
+    }
+
+    let ei = contained.or(nearest.map(|(ei, _)| ei))?;
+    let ix = match reg[ei].layout.index_for_position(position) {
+        Ok(ix) | Err(ix) => ix,
+    };
+    Some((ei, ix))
 }
 
 /// Like [`registry_point`], but only when the pointer shares a text's vertical
 /// band. That is the empty start or end of the line, a gutter, or parent
 /// padding on that row. A press above or below every line is chrome.
-fn registry_point_on_line(position: gpui::Point<gpui::Pixels>) -> Option<(usize, usize)> {
-    let (ei, ix) = registry_point(position)?;
+fn registry_point_on_line(reg: &[&RegEntry], position: gpui::Point<gpui::Pixels>) -> Option<(usize, usize)> {
+    let (ei, ix) = registry_point(reg, position)?;
+    let b = reg.get(ei)?.layout.bounds();
+    (position.y >= b.top() && position.y <= b.bottom()).then_some((ei, ix))
+}
+
+/// The frame's runs in `scope`, in paint order.
+fn scoped<R>(scope: u64, f: impl FnOnce(&[&RegEntry]) -> R) -> R {
     REGISTRY.with(|r| {
-        let b = r.borrow().get(ei)?.layout.bounds();
-        (position.y >= b.top() && position.y <= b.bottom()).then_some((ei, ix))
+        let reg = r.borrow();
+        let entries: Vec<&RegEntry> = reg.iter().filter(|entry| entry.scope == scope).collect();
+        f(&entries)
     })
 }
 
-/// Resolve the drag head against the frame's registry.
-fn resolve_drag(selection: &SharedSelection, head: (usize, usize)) -> bool {
-    REGISTRY.with(|r| {
-        let reg = r.borrow();
+/// Continue an active drag at a window position, within the scope it started in.
+pub(crate) fn update_drag_at(selection: &SharedSelection, position: gpui::Point<gpui::Pixels>) -> bool {
+    let scope = selection.lock().scope();
+    scoped(scope, |reg| {
+        let Some(head) = registry_point(reg, position) else {
+            return false;
+        };
         let elements: Vec<selection::RegisteredText> = reg
             .iter()
             .map(|e| selection::RegisteredText { key: e.key.as_ref(), text: e.text.as_ref(), group: e.group })
             .collect();
         selection.lock().update_drag(&elements, head)
     })
-}
-
-/// Continue an active drag at a window position.
-pub(crate) fn update_drag_at(selection: &SharedSelection, position: gpui::Point<gpui::Pixels>) -> bool {
-    let Some(head) = registry_point(position) else {
-        return false;
-    };
-    resolve_drag(selection, head)
 }
 
 /// One window-level mouse-down for the whole frame.
@@ -582,7 +600,8 @@ fn register_down_listener(window: &mut Window, selection: &SharedSelection) {
         if phase != DispatchPhase::Bubble || e.button != MouseButton::Left {
             return;
         }
-        if start_region_at(e.position) == Some(false) {
+        let region = start_region_at(e.position);
+        if matches!(region, Some((false, _))) {
             let mut sel = selection.lock();
             if !sel.is_active() {
                 return;
@@ -592,8 +611,11 @@ fn register_down_listener(window: &mut Window, selection: &SharedSelection) {
             window.refresh();
             return;
         }
-        let hit = registry_point_on_line(e.position).and_then(|(ei, ix)| {
-            REGISTRY.with(|r| r.borrow().get(ei).map(|entry| (entry.key.clone(), entry.text.clone(), ix)))
+        // The press's scope is the region it landed in; outside every region it is the window's.
+        let scope = region.map_or(0, |(_, scope)| scope);
+        let hit = scoped(scope, |reg| {
+            registry_point_on_line(reg, e.position)
+                .and_then(|(ei, ix)| reg.get(ei).map(|entry| (entry.key.clone(), entry.text.clone(), ix)))
         });
         let mut sel = selection.lock();
         let was_active = sel.is_active();
@@ -613,6 +635,7 @@ fn register_down_listener(window: &mut Window, selection: &SharedSelection) {
                 // promotes this press into a real selection.
                 _ => sel.arm(&key, ix),
             }
+            sel.set_scope(scope);
         } else if sel.is_active() || sel.is_pending() {
             sel.clear();
         } else {
