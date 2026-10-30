@@ -100,12 +100,12 @@ impl Engine {
         }
         crate::bins::adopt_bundled_appname();
         pumi_proto::paths::export_appname();
-        crate::bins::hydrate_path();
         crate::set_safe_mode(options.as_ref().and_then(|o| o.safe).unwrap_or(false));
         let data_dir = options.and_then(|o| o.data_dir).map(std::path::PathBuf::from);
+        let server_dir = data_dir.clone().unwrap_or_else(|| pumi_proto::paths::Paths::resolve().data);
+        crate::bins::hydrate_path(&pumi_proto::paths::Paths::at(&server_dir).file(pumi_proto::paths::File::LoginEnv));
         crate::log_panics(data_dir.clone());
         let events = on_event.build_threadsafe_function::<Value>().callee_handled::<false>().weak::<true>().build()?;
-        let server_dir = data_dir.clone().unwrap_or_else(|| pumi_proto::paths::Paths::resolve().data);
         let runtime = runtime::connect(data_dir);
         let _ = SHARED.set(Shared {
             runtime: runtime.clone(),
