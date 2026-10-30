@@ -4,6 +4,7 @@
 // machine, so only this machine's sessions have them.
 import { useEffect, useSyncExternalStore } from "react"
 import { call, serverOf, store } from "./engine.ts"
+import { openView } from "./new-view.ts"
 import * as worktrees from "./worktrees.ts"
 import { confirm, prompt } from "../sdk/dialogs.ts"
 
@@ -46,13 +47,12 @@ export async function freeBranchesFor(session: string): Promise<string[]> {
  * A new view of `session` in `path`, one of its worktrees, brought to `window`. A view in the
  * session's own folder needs no `worktree` option: it is there already.
  */
-export async function open(window: { session?: string; show(session: string): void }, session: string, path: string): Promise<void> {
+export async function open(window: { show(session: string, view?: string): void }, session: string, path: string): Promise<void> {
   const home = sessionOf(session)?.cwd
-  const tab: string = await call("tab.open", null, { cwd: path }, { kind: "view", session })
-  if (window.session !== session) window.show(session)
-  if (samePath(home, path)) return
-  const { view } = await call("tab.get", tab)
-  if (typeof view === "string") await call("option.set", "worktree", path, { scope: "view", id: view })
+  const { view } = await openView(session, { cwd: path })
+  window.show(session, view)
+  if (samePath(home, path) || !view) return
+  await call("option.set", "worktree", path, { scope: "view", id: view })
 }
 
 /** A fresh name for a new worktree of `session`'s repository: none of its branches' or folders'. */
@@ -66,7 +66,7 @@ export async function freshName(session: string): Promise<string> {
  * A new worktree of `session`'s repository on the branch `name` (made from the main checkout's
  * HEAD when there is none), opened in a view of its own. Named fresh when no name is given.
  */
-export async function create(window: { session?: string; show(session: string): void }, session: string, name?: string): Promise<string> {
+export async function create(window: { show(session: string, view?: string): void }, session: string, name?: string): Promise<string> {
   const cwd = sessionOf(session)?.cwd
   if (!cwd || serverOf(session)) throw new Error("worktrees are made for this machine's sessions with a folder")
   const dir = store.get().options.worktree_dir
@@ -80,7 +80,7 @@ export async function create(window: { session?: string; show(session: string): 
  * Asks for the new worktree's branch (a fresh name to start with), then makes it as `create`
  * does. What goes wrong is said in a dialog.
  */
-export async function createAsking(window: { session?: string; show(session: string): void }, session: string): Promise<void> {
+export async function createAsking(window: { show(session: string, view?: string): void }, session: string): Promise<void> {
   try {
     const dir = store.get().options.worktree_dir
     const name = await prompt({

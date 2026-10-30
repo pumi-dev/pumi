@@ -73,7 +73,6 @@ const begin = () => {
 }
 const stop = store.subscribe(begin)
 begin()
-store.subscribe(() => manager.follow())
 // Web pages get their inspector as `webview_devtools` says.
 let devtools: unknown
 store.subscribe(() => {

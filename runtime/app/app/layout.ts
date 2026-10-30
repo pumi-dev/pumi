@@ -241,17 +241,31 @@ export interface LayoutEdit {
 export const SESSION_ORDER = "default.tree.order"
 const NONE: string[] = []
 
+/** A window a move can bring what it made to: dropping a tab on a session makes a view in it. */
+export interface ViewShower {
+  show(session: string, view?: string): void
+}
+
 /** Does what a drag dropped: its calls to the server one after another, or a sort of the side bar's own. */
-export function runMove(move: moves.Move) {
+export function runMove(move: moves.Move, window?: ViewShower) {
   const snapshot = store.get().snapshot
   if (move.kind === "session.order") {
     const shown = moves.sortSessions(snapshot?.workspaces ?? [], getLocal<string[]>(SESSION_ORDER, NONE)).map((s) => s.workspace_id)
     return setLocal(SESSION_ORDER, moves.reorder(shown, move.session, move.anchor, move.after))
   }
-  moves
+  const done = moves
     .plan(move, snapshot)
     .reduce<Promise<unknown>>((done, step) => done.then(() => call(via(step.on, step.method), ...step.params)), Promise.resolve())
-    .catch(swallow)
+  // A tab dropped on a session is a view of its own there: the window that dropped it shows it,
+  // as it showed the tab before.
+  if (move.kind === "tab.newView" && window) {
+    done
+      .then(() => call(via(move.tab, "tab.get"), move.tab))
+      .then((made) => typeof made?.session === "string" && typeof made?.view === "string" && window.show(made.session, made.view))
+      .catch(swallow)
+    return
+  }
+  done.catch(swallow)
 }
 
 /** What a view's dividers do, for whichever part draws them: the edit reads the store when it acts. */

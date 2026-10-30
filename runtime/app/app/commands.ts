@@ -15,6 +15,7 @@ import type { AppWindow } from "./windows.tsx"
 import { setCapturedKeys } from "../native/addon.js"
 import { FONT_DEFAULT, FONT_SIZE_RANGE, guifont, parseFont } from "../sdk/font.ts"
 import { explainNoNewTab } from "./new-tab.ts"
+import { openView } from "./new-view.ts"
 
 /** Where a command runs: the window it was asked in, and what of it is in front. */
 export interface Context {
@@ -127,6 +128,21 @@ const swallow = (err: unknown) => {
   if (!explainNoNewTab(err)) console.error(String(err))
 }
 
+/** The views of the session `c` shows, by their number, as the view bar has them. */
+function viewsOf(c: Context): { view_id: string; number: number }[] {
+  const snapshot = store.get().snapshot
+  if (!snapshot || !c.session) return []
+  return snapshot.views.filter((v) => v.workspace_id === c.session).sort((a, b) => a.number - b.number)
+}
+
+/** Shows the view `by` views on from the window's own, wrapping (a negative goes back). */
+function stepView(c: Context, by: number) {
+  const views = viewsOf(c)
+  if (!views.length) return
+  const at = Math.max(views.findIndex((v) => v.view_id === c.view), 0)
+  c.window.showView(views[(((at + by) % views.length) + views.length) % views.length]!.view_id)
+}
+
 /** Where the tab in front of `context` is, or the view's. */
 function tab(c: Context): string | undefined {
   return c.tab
@@ -179,7 +195,7 @@ function fontSize(change: (size: number) => number) {
 }
 
 const APP: [string, string, (c: Context, index?: number) => unknown][] = [
-  ["new_window", "New window", (c) => c.window.manager.open(c.session)],
+  ["new_window", "New window", (c) => openView(c.session).then(({ session, view }) => (session ? c.window.manager.open(session, view) : c.window.manager.open()))],
   ["close_window", "Close window", (c) => c.window.close()],
   ["minimize_window", "Minimize window", (c) => c.window.renderer.minimizeWindow()],
   ["zoom_window", "Zoom window", (c) => c.window.renderer.zoomWindow()],
@@ -189,7 +205,7 @@ const APP: [string, string, (c: Context, index?: number) => unknown][] = [
   ["previous_workspace", "Previous session", (c) => { const s = sessionAt(c, -1); if (s) c.window.show(s) }],
   ["next_workspace", "Next session", (c) => { const s = sessionAt(c, 1); if (s) c.window.show(s) }],
   ["switch_workspace", "Switch to session 1–9", (c, i) => { const s = store.get().snapshot?.workspaces[(i ?? 1) - 1]; if (s) c.window.show(s.workspace_id) }],
-  ["new_view", "New view", (c) => call(via(c.session, "tab.open"), null, {}, { kind: "view", ...(c.session ? { session: c.session } : {}) })],
+  ["new_view", "New view", (c) => openView(c.session).then(({ session, view }) => session && view && c.window.show(session, view))],
   ["new_worktree", "New worktree", (c) => (c.session && worktreeViews.canHave(c.session) ? worktreeViews.createAsking(c.window, c.session) : undefined)],
   ["close_view", "Close view", (c) => (c.view ? call(via(c.view, "view.close"), c.view) : undefined)],
   ["reopen_closed", "Reopen closed tab", async () => {
@@ -197,9 +213,12 @@ const APP: [string, string, (c: Context, index?: number) => unknown][] = [
     // Into its pane while that is there, else beside the tab its pane was beside.
     if (last) return call("tab.open", last.state?.block ?? null, { state: last.state }, { kind: "tiled", ...(last.pane ? { pane: last.pane } : {}), ...(last.view ? { view: last.view } : {}), ...(last.beside ? { beside: last.beside } : {}) })
   }],
-  ["previous_view", "Previous view", (c) => call(via(c.view ?? c.session, "view.focus"), c.view ?? null, { offset: -1 })],
-  ["next_view", "Next view", (c) => call(via(c.view ?? c.session, "view.focus"), c.view ?? null, { offset: 1 })],
-  ["switch_view", "Switch to view 1–9", (c, i) => call(via(c.view ?? c.session, "view.focus"), c.view ?? null, { index: (i ?? 1) - 1 })],
+  ["previous_view", "Previous view", (c) => stepView(c, -1)],
+  ["next_view", "Next view", (c) => stepView(c, 1)],
+  ["switch_view", "Switch to view 1–9", (c, i) => {
+    const view = viewsOf(c).find((v) => v.number === (i ?? 1))
+    if (view) c.window.showView(view.view_id)
+  }],
   ["split_vertical", "Split right", split("right")],
   ["split_horizontal", "Split down", split("down")],
   ["new_tab", "New tab in pane", (c) => call(via(c.tab ?? c.session, "tab.open"), null, {}, { kind: "tiled", pane: paneOf(c) ?? "current" })],
