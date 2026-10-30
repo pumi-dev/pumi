@@ -224,6 +224,7 @@ pub(crate) fn wake_at(shared: &Rc<Shared>, view: &Entity<SubtreeView>, at: Insta
 /// Whether two inherited states draw a subtree the same.
 pub(crate) fn same_inherited(a: &Inherited, b: &Inherited) -> bool {
     a.selectable == b.selectable
+        && a.selection_scope == b.selection_scope
         && a.pointer_events_none == b.pointer_events_none
         && a.selection_wash == b.selection_wash
         && a.color == b.color

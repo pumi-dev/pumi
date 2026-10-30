@@ -2039,6 +2039,9 @@ pub(crate) struct BuildCtx<'a> {
 pub(crate) struct Inherited {
     /// False once an ancestor sets `userSelect: "none"`.
     pub selectable: bool,
+    /// Element id of the nearest `userSelect: "contain"` element at or above
+    /// this one, `0` for the window. See [`crate::text::SelectableText::scope`].
+    pub selection_scope: u64,
     /// Selection wash colour for this subtree.
     pub selection_wash: gpui::Hsla,
     /// The nearest ancestor's `highlight`, resolved. `None` in every app that
@@ -2094,15 +2097,28 @@ impl Inherited {
     fn root(theme: &Theme) -> Self {
         let mut wash = theme.accent;
         wash.a = 0.35;
-        Self { selectable: true, selection_wash: wash, highlight: None, pointer_events_none: false, color: None }
+        Self {
+            selectable: true,
+            selection_scope: 0,
+            selection_wash: wash,
+            highlight: None,
+            pointer_events_none: false,
+            color: None,
+        }
     }
 
-    /// Apply the inheritable parts of `style` for the subtree below it.
-    fn descend(mut self, style: Option<&StyleDesc>) -> Self {
+    /// Apply the inheritable parts of element `id`'s `style` for the subtree below it.
+    fn descend(mut self, id: u64, style: Option<&StyleDesc>) -> Self {
         let Some(style) = style else { return self };
         match style.user_select.as_deref() {
             Some("none") => self.selectable = false,
             Some("text") | Some("auto") => self.selectable = true,
+            // CSS `user-select: contain`: selectable, and a selection that
+            // starts inside stays inside.
+            Some("contain") => {
+                self.selectable = true;
+                self.selection_scope = id;
+            }
             _ => {}
         }
         match style.pointer_events.as_deref() {
@@ -2897,7 +2913,7 @@ pub(crate) fn build_element(
     // Inheritable style resolves once here so both built-ins and custom
     // elements see the same cascade.
     let parent_inherited = ctx.inherited.clone();
-    ctx.inherited = parent_inherited.clone().descend(style);
+    ctx.inherited = parent_inherited.clone().descend(id, style);
 
     // A `highlight` here replaces any ancestor's: the nearest declaration wins,
     // and `GroupList::collect` skips nested declarations so an ancestor never
@@ -2945,6 +2961,7 @@ pub(crate) fn build_element(
                 children: custom_children,
                 selection: ctx.selection.clone(),
                 selectable: inherited.selectable,
+                selection_scope: inherited.selection_scope,
                 selection_wash: inherited.selection_wash,
                 color: inherited.color,
                 highlight_set: inherited.highlight.clone(),
@@ -3398,7 +3415,7 @@ pub(crate) fn build_host_container(
     el = crate::automation::track_host_bounds(
         el,
         element.id,
-        selection_start_flag(style),
+        selection_start_flag(style).map(|selectable| (selectable, ctx.inherited.selection_scope)),
         paint_reporter(element.id, element.events(), ctx),
         style.and_then(crate::occlusion::cover),
     );
@@ -4007,6 +4024,7 @@ fn text_content(
     crate::text::SelectableText {
         group: crate::text::search::group_id(ctx.tree, element.id),
         selectable: ctx.inherited.selectable,
+        scope: ctx.inherited.selection_scope,
         highlight: ctx.inherited.highlight.clone().map(crate::text::HighlightSource::Resolved),
         ..crate::text::SelectableText::new(
             element.id,
@@ -4176,6 +4194,7 @@ fn inline_paragraph(
     });
     Some(crate::text::SelectableText {
         selectable: ctx.inherited.selectable,
+        scope: ctx.inherited.selection_scope,
         highlight: ctx.inherited.highlight.clone().map(crate::text::HighlightSource::Native),
         highlights,
         families,
@@ -4198,7 +4217,7 @@ fn inline_paragraph(
 fn selection_start_flag(style: Option<&StyleDesc>) -> Option<bool> {
     match style.and_then(|style| style.user_select.as_deref()) {
         Some("none") => Some(false),
-        Some("text") | Some("auto") => Some(true),
+        Some("text") | Some("auto") | Some("contain") => Some(true),
         _ => None,
     }
 }
@@ -5730,21 +5749,22 @@ mod inherited_tests {
 
     #[test]
     fn color_cascades_to_descendants_that_set_none() {
-        let button = Inherited::root(&Theme::dark()).descend(Some(&coloured("#3a2d44")));
+        let button = Inherited::root(&Theme::dark()).descend(0, Some(&coloured("#3a2d44")));
         // An icon inside the button, with no `color` of its own, tints with the button's.
-        let icon = button.descend(Some(&StyleDesc::default()));
+        let icon = button.descend(0, Some(&StyleDesc::default()));
         assert_eq!(icon.color, crate::color::parse_color_rgba("#3a2d44"));
     }
 
     #[test]
     fn an_own_color_wins_over_the_inherited_one() {
-        let icon =
-            Inherited::root(&Theme::dark()).descend(Some(&coloured("#ffffff"))).descend(Some(&coloured("#000000")));
+        let icon = Inherited::root(&Theme::dark())
+            .descend(0, Some(&coloured("#ffffff")))
+            .descend(0, Some(&coloured("#000000")));
         assert_eq!(icon.color, crate::color::parse_color_rgba("#000000"));
     }
 
     #[test]
     fn nothing_coloured_above_leaves_no_color() {
-        assert_eq!(Inherited::root(&Theme::dark()).descend(None).color, None);
+        assert_eq!(Inherited::root(&Theme::dark()).descend(0, None).color, None);
     }
 }

@@ -45,6 +45,8 @@ pub struct CustomRenderContext<'a> {
     pub selection: crate::text::SharedSelection,
     /// False when an ancestor set `userSelect: "none"`.
     pub selectable: bool,
+    /// See [`crate::text::SelectableText::scope`].
+    pub selection_scope: u64,
     /// Inherited selection wash colour.
     pub selection_wash: gpui::Hsla,
     /// `color` as inherited: the element's own, else its nearest ancestor's.
@@ -73,6 +75,7 @@ impl CustomRenderContext<'_> {
         let text = text.into();
         crate::text::selectable_text(crate::text::SelectableText {
             selectable: self.selectable,
+            scope: self.selection_scope,
             highlight: self.highlight_set.clone().map(crate::text::HighlightSource::Native),
             ..crate::text::SelectableText::new(self.id, sub, text, runs, self.selection.clone(), self.selection_wash)
         })
@@ -93,7 +96,7 @@ impl CustomRenderContext<'_> {
     /// text selection, and ends the one there is, where otherwise it would anchor one in the
     /// nearest text on its line, outside the element. Records its box for automation too.
     pub fn selects_itself<E: gpui::InteractiveElement>(&self, el: E) -> E {
-        crate::automation::track_host_bounds(el, self.id, Some(false), None, None)
+        crate::automation::track_host_bounds(el, self.id, Some((false, 0)), None, None)
     }
 }
 
