@@ -43,7 +43,7 @@ At run time, the app gives the plugin `import … from "pumi"`. Outside the app,
 
 ```json
 "devDependencies": {
-  "pumi": "npm:@pumi-dev/sdk@0.2.0",
+  "pumi": "npm:@pumi-dev/sdk@0.3.0",
   "@types/bun": "1.3.14",
   "typescript": "5.9.3"
 }

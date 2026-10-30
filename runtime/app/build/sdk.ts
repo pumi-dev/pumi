@@ -29,9 +29,10 @@ const sdk = join(repo, "target", "sdk")
 const out = join(sdk, "package")
 /**
  * The package's version on npm. 0.1.0-alpha.0 was the first; 0.2.0 added webviewRun, webviewSnapshot,
- * the tab icon parts (TabIcon, useTabIcon, …), self.caller and a function's runsOn.
+ * the tab icon parts (TabIcon, useTabIcon, …), self.caller and a function's runsOn. 0.3.0 was built
+ * from pumi 0.45.0.
  */
-const SDK_VERSION = "0.2.0"
+const SDK_VERSION = "0.3.0"
 const appVersion = /^version = "(.+)"$/m.exec(readFileSync(join(repo, "Cargo.toml"), "utf8"))?.[1]
 if (!appVersion) throw new Error("no version in Cargo.toml")
 
