@@ -5,7 +5,7 @@
 
 /** The part of `UpdateState` (settings/shared.tsx) the notices read. */
 export interface UpdatesSeen {
-  app: { status: string; version?: string | null }
+  app: { status: string; version?: string | null; notes?: string | null }
   plugins: { found: { name: string; from?: string; to?: string }[] | null }
 }
 
@@ -16,6 +16,8 @@ export interface UpdateNotice {
   title: string
   detail: string
   action: string
+  /** A page to read about it (pumi's release notes), with the button's label. */
+  link?: { label: string; url: string }
 }
 
 /** The keys last dismissed, by kind. */
@@ -25,7 +27,8 @@ export function updateNotices(state: UpdatesSeen, dismissed: Dismissed): UpdateN
   const notices: UpdateNotice[] = []
   const { app, plugins } = state
   if (app.status === "ready" && app.version) {
-    notices.push({ kind: "app", key: app.version, title: `pumi ${app.version} is ready`, detail: "Restart to update.", action: "Restart" })
+    const link = app.notes ? { link: { label: "What's new", url: app.notes } } : {}
+    notices.push({ kind: "app", key: app.version, title: `pumi ${app.version} is ready`, detail: "Restart to update.", action: "Restart", ...link })
   }
   const found = plugins.found ?? []
   if (found.length) {

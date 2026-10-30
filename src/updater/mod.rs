@@ -48,6 +48,8 @@ pub struct Updater {
     pub status: Status,
     staged: Option<Staged>,
     busy: bool,
+    /// The page of the release found last, with its notes (`Manifest::notes_page`).
+    notes: Option<String>,
 }
 
 impl Global for Updater {}
@@ -84,7 +86,7 @@ pub fn start(cx: &mut App) {
         (true, Ok(_)) => Status::Idle,
     };
     let enabled = status == Status::Idle;
-    cx.set_global(Updater { status, staged: None, busy: false });
+    cx.set_global(Updater { status, staged: None, busy: false, notes: None });
     if !enabled {
         return;
     }
@@ -165,7 +167,11 @@ pub fn check(manual: bool, cx: &mut App) {
             return;
         };
         let version = manifest.version.clone();
-        cx.update(|cx| set(cx, Status::Downloading(version.clone()), true));
+        let notes = manifest.notes_page();
+        cx.update(|cx| {
+            cx.global_mut::<Updater>().notes = Some(notes);
+            set(cx, Status::Downloading(version.clone()), true)
+        });
         let staged =
             cx.background_executor().spawn(async move { install::stage(&version, &asset, &origin, &app) }).await;
         cx.update(|cx| match staged {
@@ -246,6 +252,7 @@ pub fn state(cx: &App) -> serde_json::Value {
             };
             json!({
                 "status": status,
+                "notes": version.as_ref().and(updater.notes.as_ref()),
                 "version": version,
                 "error": error,
                 "current": current,

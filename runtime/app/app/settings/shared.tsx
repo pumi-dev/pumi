@@ -153,7 +153,7 @@ export function GroupSection({ group, title, skip, description, children }: { gr
 
 /** The updater, as `Engine.updateState` says and each `update` event tells again. */
 export interface UpdateState {
-  app: { status: string; version?: string | null; error?: string | null; current: string; channel: string; text: string; canCheck: boolean; busy: boolean }
+  app: { status: string; version?: string | null; notes?: string | null; error?: string | null; current: string; channel: string; text: string; canCheck: boolean; busy: boolean }
   plugins: { checking: boolean; found: { name: string; from?: string; to?: string }[] | null; error: string | null }
 }
 

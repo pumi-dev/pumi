@@ -261,7 +261,7 @@ impl Engine {
         blocking(env, move || Ok(crate::fonts::families(&text, monospace).into()))
     }
 
-    /// The updater's state: `{app: {status, version, current, channel, text, canCheck, busy},
+    /// The updater's state: `{app: {status, version, notes, current, channel, text, canCheck, busy},
     /// plugins: {checking, found, error}}`. An `update` event carries it each time it changes.
     #[napi]
     pub fn update_state(&self) -> Result<Value> {

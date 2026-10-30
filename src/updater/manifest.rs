@@ -35,6 +35,18 @@ pub struct Manifest {
     pub assets: BTreeMap<String, Asset>,
 }
 
+impl Manifest {
+    /// The release's page, where its notes are: `notes_url` when it is a web page, else the
+    /// GitHub release of its tag.
+    pub fn notes_page(&self) -> String {
+        if self.notes_url.starts_with("https://") {
+            return self.notes_url.clone();
+        }
+        let tag = if self.tag.is_empty() { format!("v{}", self.version) } else { self.tag.clone() };
+        format!("https://github.com/{}/releases/tag/{tag}", super::fetch::REPO)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct Asset {
     pub name: String,
@@ -119,6 +131,20 @@ mod tests {
         tampered[at] = b'8';
         assert!(verify(&tampered, &signature, &[TEST_KEY]).is_err());
         assert!(verify(&bytes, "not a signature", &[TEST_KEY]).is_err());
+    }
+
+    #[test]
+    fn notes_page_is_the_release_page() {
+        let (bytes, signature) = fixture();
+        let mut manifest = verify(&bytes, &signature, &[TEST_KEY]).unwrap();
+        assert_eq!(manifest.notes_page(), "https://github.com/pumi-dev/pumi/releases/tag/v9.9.9");
+        manifest.notes_url = "file:///Applications/Calculator.app".into();
+        manifest.tag = "v9.9.9-preview".into();
+        let repo = crate::updater::fetch::REPO;
+        assert_eq!(manifest.notes_page(), format!("https://github.com/{repo}/releases/tag/v9.9.9-preview"));
+        manifest.notes_url.clear();
+        manifest.tag.clear();
+        assert_eq!(manifest.notes_page(), format!("https://github.com/{repo}/releases/tag/v9.9.9"));
     }
 
     fn fixture() -> (Vec<u8>, String) {

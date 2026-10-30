@@ -7,7 +7,7 @@ import { call, engine, on } from "./engine.ts"
 export const APP_FUNCTIONS = new Map<string, (args: unknown[]) => unknown>()
 
 const UPDATES = [
-  ["update.state", "read", "The updater's state: pumi's own (`app`: `status` idle, checking, downloading, ready, upToDate, failed or unavailable, the `version` found, `text` as Settings says it) and the plugins' (`plugins`: `checking`, the updates `found`).", () => engine.updateState()],
+  ["update.state", "read", "The updater's state: pumi's own (`app`: `status` idle, checking, downloading, ready, upToDate, failed or unavailable, the `version` found and its release page, `notes`, `text` as Settings says it) and the plugins' (`plugins`: `checking`, the updates `found`).", () => engine.updateState()],
   ["update.check", "write", "Look for a newer pumi now and download it when there is one; `{plugins: true}` asks which installed plugins have a new version instead. The outcome is an `update.changed` event.", (args: unknown[]) => engine.checkForUpdates((args[0] as { plugins?: boolean } | undefined)?.plugins === true)],
   ["update.install", "write", "Quit, put the downloaded update in place, and open it; nothing while none is ready (`update.state`'s `app.status` is `ready`).", () => engine.restartToUpdate()],
 ] as const

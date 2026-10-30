@@ -56,7 +56,7 @@ export declare class Engine {
    */
   fonts(opts?: FontsOptions | undefined | null): Promise<string[]>
   /**
-   * The updater's state: `{app: {status, version, current, channel, text, canCheck, busy},
+   * The updater's state: `{app: {status, version, notes, current, channel, text, canCheck, busy},
    * plugins: {checking, found, error}}`. An `update` event carries it each time it changes.
    */
   updateState(): any

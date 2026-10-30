@@ -19,6 +19,13 @@ describe("update notices", () => {
     expect(updateNotices({ ...state, app: idle.app, plugins: { found: [{ name: "agents", to: "1.2.0" }] } }, {})[0].title).toBe("agents has an update")
   })
 
+  test("pumi's update links to its release notes when the updater knows the page", () => {
+    const notes = "https://github.com/pumi-dev/pumi/releases/tag/v0.45.0"
+    const [app] = updateNotices({ app: { status: "ready", version: "0.45.0", notes }, plugins: { found: null } }, {})
+    expect(app.link).toEqual({ label: "What's new", url: notes })
+    expect(updateNotices({ app: { status: "ready", version: "0.45.0", notes: null }, plugins: { found: null } }, {})[0].link).toBeUndefined()
+  })
+
   test("a dismissed one stays hidden until there is something newer", () => {
     const state = { app: { status: "ready", version: "0.45.0" }, plugins: { found: [{ name: "agents", to: "1.2.0" }] } }
     const [app, plugins] = updateNotices(state, {})
