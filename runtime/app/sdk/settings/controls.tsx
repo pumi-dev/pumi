@@ -711,6 +711,8 @@ export interface ImageCard {
   src?: string
   /** What the card shows instead of an image: a terminal scheme's lines. */
   preview?: ReactNode
+  /** A word at the caption's end, when it is not picked: `Install` for a theme in the store. */
+  badge?: string
 }
 
 export interface ImageCardsProps {
@@ -925,7 +927,7 @@ const Card = memo(function Card({ card, selected, width, height, onPick, testId 
       </div>
       <div style={{ pointerEvents: "none", display: "flex", flexDirection: "row", alignItems: "center", gap: 6, height: 28, paddingLeft: 8, paddingRight: 8, borderTopWidth: 1, borderColor: t.border, backgroundColor: t.surface }}>
         <text style={{ flexGrow: 1, minWidth: 0, fontSize: ts(12), color: selected ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>{card.title}</text>
-        {selected ? <Icon name="check" size={12} color={t.accent} /> : null}
+        {selected ? <Icon name="check" size={12} color={t.accent} /> : card.badge ? <text style={{ fontSize: ts(11), color: t.accent, flexShrink: 0, whiteSpace: "nowrap" }}>{card.badge}</text> : null}
       </div>
     </div>
   )
