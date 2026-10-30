@@ -150,7 +150,7 @@ A slot is a place in the window. Give it a `component`, an export of `ui.tsx`, o
 
 A theme draws them with `useSlot(slot, args)`, from `pumi/theme`.
 
-`tab.new` is what a new tab can be: the pane's `+` menu, and the Launcher plugin's list. pumi adds nothing of its own; each plugin's actions are a group of their own (the Terminal plugin's shell among them). Opening a file is a plugin's too: an editor adds `File…`, an image editor `Image…`.
+`tab.new` is what a new tab can be: the pane's `+` menu, and the Launcher plugin's list. pumi adds nothing of its own; the menu lists each plugin's actions (the Terminal plugin's shell among them), and the blocks of plugins with none, as one list, the most used first. Each row has a letter that picks it while the menu or the Launcher's tab has the keys: its first letter while no row before it in the plugins' order has it (`C` for Claude Code), else another word's first (`A` for Cursor Agent), else another of its letters. The letter stays the same as the order of use changes. A theme or plugin gets the list, with the letters and the order, from `useNewTabs()` in `pumi/theme`. Opening a file is a plugin's too: an editor adds `File…`, an image editor `Image…`.
 
 An action with `pick` asks the user for files before its command runs, with the system's picker (`fs.pick`). `match` takes globs, as a file renderer's does; on macOS the picker greys out the other files when each glob is `*.<ext>`, and elsewhere a file none of them fits is refused once chosen, with a notification. The command gets what the slot gives it and `path`, or `paths` when `multiple` is set; a cancelled picker runs nothing. `kind: "directory"` picks a folder instead, and takes no `match`.
 

@@ -12,6 +12,8 @@
 //   place showing a tab's icon draws (`IconImage` and `TabIcon` in `pumi` draw them)
 // - slots and blocks: `useSlot` (components, and actions as data: the plugins' and the app's own),
 //   `useRenderer`, `useRenderers`, `renderComponent`, `Boundary`
+// - what a new tab can be: `useNewTabs` (the `+` menu's list, the most used first, each with the
+//   letter that picks it), `byLetter`
 // - actions: `useMenu` (a slot's actions in the theme's `Menu`), `addActions`, `grouped`,
 //   `confirm` and `prompt` (in the theme's `Dialog`), `useRename`, `startRename`
 // - the layout: `useSidebar`, `usePaneTitles`, `useAutoEqualize`, `equalize`, `runMove`, `useLayoutStyle`
@@ -68,6 +70,7 @@ export { ICON, iconSource, showsStatus, tabIcon, useTabIcon, useTabStatus, type 
 export { Boundary, renderComponent, usePlugin, useRenderer, useRenderers, useSlot, type ComponentItem } from "./contributions.ts"
 export { addActions, grouped, shortcut, type Action, type ActionContext, type ActionProvider } from "./actions.ts"
 export { useMenu } from "./menu.ts"
+export { byLetter, useNewTabs, type NewTab, type NewTabPlace } from "./new-tabs.ts"
 export {
   carried,
   plan,
