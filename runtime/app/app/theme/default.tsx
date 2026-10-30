@@ -6,7 +6,7 @@ import { createContext, Fragment, memo, useCallback, useContext, useEffect, useM
 import { basename } from "node:path"
 import { assets } from "../assets.ts"
 import { call, store, via } from "../engine.ts"
-import { openSession } from "../commands.ts"
+import { numberViews, openSession } from "../commands.ts"
 import { openView } from "../new-view.ts"
 import { FILE, renderComponent, useRenderer, useSlot } from "../../sdk/contributions.ts"
 import { grouped, heldShortcut, shortcut, type Action as ActionItem } from "../../sdk/actions.ts"
@@ -1193,14 +1193,14 @@ function useHeldKeys(command: string, index?: number): string | undefined {
 }
 
 /** Keys shown while they are held (`⌘1`), on one cap at a row's far end. */
-function HeldKeys({ keys }: { keys: string }) {
+function HeldKeys({ keys, color }: { keys: string; color?: string }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
   return (
-    <div aria-label={keys} style={{ display: "flex", height: 20, minWidth: 28, flexShrink: 0, paddingLeft: 6, paddingRight: 6, alignItems: "center", justifyContent: "center", borderRadius: m.radiusSmall + 1, borderWidth: 1, borderColor: t.border }}>
+    <div aria-label={keys} style={{ display: "flex", height: 20, minWidth: 28, flexShrink: 0, paddingLeft: 6, paddingRight: 6, alignItems: "center", justifyContent: "center", borderRadius: m.radiusSmall + 1, borderWidth: 1, borderColor: color ?? t.border }}>
       {/* `⌘ 1` as one glyph run, `⌘1`, as a cap that small has it. */}
-      <text style={{ fontSize: ts(11), color: t.muted, whiteSpace: "nowrap" }}>{keys.split(" ").join("")}</text>
+      <text style={{ fontSize: ts(11), color: color ?? t.muted, whiteSpace: "nowrap" }}>{keys.split(" ").join("")}</text>
     </div>
   )
 }
@@ -2832,8 +2832,71 @@ function goTo(window: ReturnType<typeof useWindow>, session: string, view?: stri
 }
 
 
+/**
+ * A row of the side bar that ⌘1…⌘9 go to: a tab that needs attention, or a session's view.
+ * `key` names the row (`tab:…`, `view:…`), as the row asks for its number by it.
+ */
+interface Numbered {
+  key: string
+  session: string
+  view?: string
+  tab?: string
+}
+
+interface Numbering {
+  rows: Numbered[]
+  listeners: Set<() => void>
+  subscribe(listener: () => void): () => void
+}
+
+const NO_NUMBERED: Numbered[] = []
+
+/**
+ * By window id: the rows the side bar numbers, top to bottom, as `Sessions` draws them (the tabs
+ * that need attention, then each session's views, whichever session they are in). Empty while
+ * the side bar is hidden: then ⌘1…⌘9 go to the shown session's views.
+ */
+const numberings = new Map<number, Numbering>()
+
+function numbering(window: number): Numbering {
+  let n = numberings.get(window)
+  if (n) return n
+  const listeners = new Set<() => void>()
+  n = {
+    rows: NO_NUMBERED,
+    listeners,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+  }
+  numberings.set(window, n)
+  return n
+}
+
+function setNumbered(window: number, rows: Numbered[]) {
+  const n = numbering(window)
+  const same = n.rows.length === rows.length && n.rows.every((r, i) => r.key === rows[i].key && r.session === rows[i].session)
+  if (same) return
+  n.rows = rows
+  for (const listener of n.listeners) listener()
+}
+
+/** A side bar row's number (1-based), while the side bar numbers it. */
+function useNumber(key: string): number | undefined {
+  const n = numbering(useWindow().id)
+  const rows = useSyncExternalStore(n.subscribe, () => n.rows)
+  const at = rows.findIndex((r) => r.key === key)
+  return at < 0 ? undefined : at + 1
+}
+
 /** The most urgent first: what a folded level says of the tabs in it. */
 const URGENCY = ["error", "blocked", "working", "done", "idle", "unknown"]
+
+/** The tabs that need attention (`needsAttention`), the most urgent first, as the yellow band lists them. */
+function loudTabs<T extends { status: string }>(tabs: T[]): T[] {
+  return tabs.filter((p) => needsAttention(p.status)).sort((a, b) => URGENCY.indexOf(a.status) - URGENCY.indexOf(b.status))
+}
 
 /** What wants a look: a tab waiting on the user, failed, or done with a result not yet seen. */
 const wantsLook = (status: string) => status === "blocked" || status === "error" || status === "done"
@@ -2968,6 +3031,24 @@ function Sessions() {
   const [expanded] = useLocal(TREE_EXPANDED, false)
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
   const layouts = useApp((s) => s.trees)
+  // ⌘1…⌘9 go to the rows as they are drawn, top to bottom, across every session: what this
+  // draw numbers (`numbered`) is given to the window once it is drawn.
+  const window = useWindow()
+  const latest = useRef(window)
+  latest.current = window
+  const numbered: Numbered[] = []
+  useEffect(() => setNumbered(window.id, numbered))
+  useEffect(() => {
+    const n = numbering(window.id)
+    const off = numberViews(window.id, (at) => {
+      const row = n.rows[at - 1]
+      if (row) goTo(latest.current, row.session, row.view, row.tab)
+    })
+    return () => {
+      off()
+      setNumbered(window.id, NO_NUMBERED)
+    }
+  }, [window.id])
   if (!sessions.length) {
     return <text style={{ padding: 10, fontSize: ts(12), color: t.faint }}>No sessions</text>
   }
@@ -2994,6 +3075,7 @@ function Sessions() {
     return shown.map((p) => <TreeLeaf key={p.tab_id} tab={p.tab_id} depth={1} status={!!p.status} session={session} view={view} alone={false} />)
   }
   let shownAny = false
+  if (!q) for (const p of loudTabs(tabs)) numbered.push({ key: `tab:${p.tab_id}`, session: p.workspace_id, view: p.view_id, tab: p.tab_id })
   return (
     <div style={{ display: "flex", flexDirection: "column", paddingBottom: 4 }}>
       <TreeSearch query={query} setQuery={setQuery} />
@@ -3005,6 +3087,7 @@ function Sessions() {
         if (q && !shown.length && !has(session.label || id)) return null
         shownAny = true
         const shut = !q && folded.includes(id)
+        if (!shut) for (const view of shown) numbered.push({ key: `view:${view.view_id}`, session: id, view: view.view_id })
         return (
           <div key={id} style={{ display: "flex", flexDirection: "column", flexShrink: 0, borderBottomWidth: 1, borderColor: t.border }}>
             <SessionRow session={id} label={session.label || id} folded={shut} toggle={toggle} status={shut ? lead(own) : undefined} views={own.length} />
@@ -3041,7 +3124,7 @@ function NeedsAttention() {
   const t = useTheme()
   const window = useWindow()
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
-  const loud = tabs.filter((p) => needsAttention(p.status)).sort((a, b) => URGENCY.indexOf(a.status) - URGENCY.indexOf(b.status))
+  const loud = loudTabs(tabs)
   if (!loud.length) return null
   // On the yellow, the window's colour reads: dark on the dark theme's light yellow, light on the light theme's amber.
   const ink = t.window
@@ -3057,10 +3140,17 @@ function NeedsAttention() {
           {/* In the ink, not the status's colour, which washes out on yellow: the shape tells them apart. */}
           <Icon name={STATUS_ICON[a.status] ?? "status_unknown"} size={14} color={ink} />
           <text style={{ fontSize: ts(12), fontWeight: 600, color: ink, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabLabel(a)}</text>
+          <NumberKeys row={`tab:${a.tab_id}`} color={ink} />
         </div>
       ))}
     </div>
   )
+}
+
+/** A side bar row's keys (`⌘1`) while ⌘ is held, if it has a number. */
+function NumberKeys({ row, color }: { row: string; color?: string }) {
+  const keys = useHeldKeys("switch_view", useNumber(row) ?? -1)
+  return keys ? <HeldKeys keys={keys} color={color} /> : null
 }
 
 /** A side bar row's height: a session's, and each of its views'. */
@@ -3312,9 +3402,8 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
   const label = useViewName(id)
   const worktree = useApp((s) => s.snapshot?.views.find((x) => x.view_id === id)?.worktree)
   const front = window.session === session && window.view === id
-  // ⌘1…⌘9 go to the views of the session the window shows, by number: only its rows have them.
-  const number = useApp((s) => (window.session === session ? s.snapshot?.views.find((x) => x.view_id === id)?.number : undefined))
-  const keys = useHeldKeys("switch_view", number ?? -1)
+  // ⌘1…⌘9 go to the side bar's rows top to bottom, in whichever session (`Sessions`).
+  const keys = useHeldKeys("switch_view", useNumber(`view:${id}`) ?? -1)
   const [hovered, setHovered] = useState(false)
   const close = () => call(via(id, "view.close"), id).catch(swallow)
   const { renaming, input } = useRename({ view: id }, label)

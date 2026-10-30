@@ -216,6 +216,8 @@ const APP: [string, string, (c: Context, index?: number) => unknown][] = [
   ["previous_view", "Previous view", (c) => stepView(c, -1)],
   ["next_view", "Next view", (c) => stepView(c, 1)],
   ["switch_view", "Switch to view 1–9", (c, i) => {
+    const go = numbered.get(c.window.id)
+    if (go) return go(i ?? 1)
     const view = viewsOf(c).find((v) => v.number === (i ?? 1))
     if (view) c.window.showView(view.view_id)
   }],
@@ -255,6 +257,21 @@ const APP: [string, string, (c: Context, index?: number) => unknown][] = [
 
 for (const [name, label, run] of APP) {
   registry.set(name, { name, label, group: "App", scope: "global", range: name.startsWith("switch_"), run })
+}
+
+/** By window id: what its ⌘1…⌘9 go to while a part of it numbers its own rows (the side bar's). */
+const numbered = new Map<number, (n: number) => void>()
+
+/**
+ * Gives a window's `switch_view` (⌘1…⌘9) to `go`, which is passed the number, until what it
+ * returns is called: the side bar numbers its rows across every session. Without it, the keys go
+ * to the shown session's views by their number.
+ */
+export function numberViews(window: number, go: (n: number) => void): () => void {
+  numbered.set(window, go)
+  return () => {
+    if (numbered.get(window) === go) numbered.delete(window)
+  }
 }
 
 /** Adds a command while its owner lives; returns what removes it. */
