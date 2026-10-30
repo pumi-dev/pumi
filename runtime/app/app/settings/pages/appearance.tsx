@@ -8,7 +8,8 @@ import { guifont, parseFont, FONT_SIZE_RANGE } from "../../../sdk/font.ts"
 import { Button, ImageCards, Note, OptionRow, Page, Row, Section, SelectField, Stepper, TextField, useSettings, useTextSize, type ImageCard } from "../../../sdk/settings/index.ts"
 import { useTheme } from "../../../sdk/theme.ts"
 import { assets } from "../../assets.ts"
-import { engine } from "../../engine.ts"
+import { confirm } from "../../../sdk/dialogs.ts"
+import { call, engine } from "../../engine.ts"
 import { OwnPaletteContext } from "../../root.tsx"
 import { schemeNames, terminalScheme } from "../../theme/terminal/index.ts"
 import { SchemePreview } from "../../theme/terminal/preview.tsx"
@@ -16,6 +17,8 @@ import { useThemes } from "../../themes.ts"
 import { GHOSTTY_FILE, ensureFile, importFromGhostty, inspect } from "../../ghostty.ts"
 import { DEFAULT_THEME, isDefaultTheme, SCHEMES, THEMES } from "../pages.ts"
 import { GroupedOptions, GroupSection, openPath, useGroup } from "../shared.tsx"
+import { useInstalled } from "./plugins.tsx"
+import { holds, storeImage, type Listing } from "./store.tsx"
 
 const MATCH_THEME = "Match the theme"
 /** The most cards a picker shows without a way to a page of them all. */
@@ -40,15 +43,85 @@ interface Picker {
   cards: ImageCard[]
   value: string
   onChange(value: string): void
+  /** How an install from the store is going. */
+  status?: { text: string; error?: boolean }
 }
 
-/** The UI themes: pumi's own, then each installed one with its preview. */
+/** A store theme's card value: `store:` and its listing's id. */
+const STORE = "store:"
+
+/** The themes in the store (listings tagged `theme`), each with its picture once fetched. Empty
+ *  when the store cannot be read: the picker then shows what is installed. */
+function useStoreThemes(): { listing: Listing; src?: string }[] {
+  const [list, setList] = useState<{ listing: Listing; src?: string }[]>([])
+  useEffect(() => {
+    let live = true
+    call("registry.list", "plugin", { available: true }).then(
+      async (all: Listing[]) => {
+        const themes = (all ?? []).filter((e) => e.id && holds("theme", e))
+        if (live) setList(themes.map((listing) => ({ listing })))
+        const pictured = await Promise.all(themes.map(async (listing) => ({ listing, src: await storeImage(listing.images?.find((i) => i.url)?.url ?? "") })))
+        if (live) setList(pictured)
+      },
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [])
+  return list
+}
+
+/** The UI themes: pumi's own, then each installed one with its preview, then the store's that are
+ *  not installed. Picking one of those installs its plugin (once asked) and then uses its theme. */
 function useThemePicker(): Picker {
   const settings = useSettings()!
   const themes = useThemes()
+  const { list: installed } = useInstalled()
+  const store = useStoreThemes()
+  const [installing, setInstalling] = useState<string>()
+  const [status, setStatus] = useState<Picker["status"]>()
+  // The plugin just installed: its theme is used once the app has loaded it.
+  const [apply, setApply] = useState<string>()
   const value = String(settings.value("ui_theme") ?? "").trim() || "default"
-  const cards = useMemo<ImageCard[]>(() => [{ value: "default", title: "Default", src: assets.themePreview("default") }, ...themes.map((t) => ({ value: t.id, title: t.id, src: previewOf(t.dir) }))], [themes])
-  return { cards, value, onChange: (v) => settings.set("ui_theme", v) }
+  useEffect(() => {
+    if (!apply) return
+    const theme = themes.find((t) => t.plugin.toLowerCase() === apply)
+    if (!theme) return
+    settings.set("ui_theme", theme.id)
+    setApply(undefined)
+  }, [apply, themes])
+  const cards = useMemo<ImageCard[]>(() => {
+    const have = new Set([...(installed ?? []).map((p) => p.id.toLowerCase()), ...themes.map((t) => t.plugin.toLowerCase())])
+    const own: ImageCard[] = [{ value: "default", title: "Default", src: assets.themePreview("default") }, ...themes.map((t) => ({ value: t.id, title: t.id, src: previewOf(t.dir) }))]
+    const more = store
+      .filter(({ listing }) => !have.has(listing.id!.toLowerCase()))
+      .map(({ listing, src }) => ({ value: `${STORE}${listing.id}`, title: listing.displayName || listing.name || listing.id!, src, badge: installing === listing.id ? "Installing…" : "Install" }))
+    return [...own, ...more]
+  }, [themes, installed, store, installing])
+  const install = async (id: string) => {
+    if (installing) return
+    const listing = store.find((s) => s.listing.id === id)?.listing
+    if (!listing) return
+    const title = listing.displayName || listing.name || id
+    const owner = listing.repo?.fullName?.split("/")[0] ?? listing.owner
+    const ok = await confirm({
+      title: `Install ${title}?`,
+      detail: `A theme from the store${owner ? `, by ${owner}` : ""}. Listings are not reviewed, and a plugin has full access to pumi and your computer: install only ones you trust.`,
+      confirm: "Install",
+    })
+    if (!ok) return
+    setInstalling(id)
+    setStatus({ text: `Installing ${title}…` })
+    call("plugin.add", listing.install ?? id, {}).then(
+      () => {
+        setStatus({ text: `Installed ${title}.` })
+        setApply(id.toLowerCase())
+      },
+      (err: Error) => setStatus({ text: `Could not install ${title}: ${err?.message ?? err}`, error: true }),
+    ).finally(() => setInstalling(undefined))
+  }
+  return { cards, value, status, onChange: (v) => (v.startsWith(STORE) ? void install(v.slice(STORE.length)) : settings.set("ui_theme", v)) }
 }
 
 /** The colour schemes: the theme's own, then every bundled one as a terminal draws it. */
@@ -91,6 +164,7 @@ function PickerRow({ picker, link, title, noun, page, testId }: { picker: Picker
       }
     >
       {cards.length ? <ImageCards strip testId={`${testId}-cards`} cards={cards} value={picker.value} onChange={picker.onChange} /> : <Note>{`No ${noun} match.`}</Note>}
+      {picker.status ? <Note tone={picker.status.error ? "error" : undefined}>{picker.status.text}</Note> : null}
     </Row>
   )
 }
@@ -112,6 +186,7 @@ function AllCardsPage({ picker, title, noun, testId }: { picker: Picker; title: 
         <text style={{ fontSize: ts(12), color: t.faint }}>{query.trim() ? `${cards.length} of ${picker.cards.length}` : `${picker.cards.length} ${noun}`}</text>
       </div>
       <TextField search autoFocus value={query} width="100%" placeholder={`Search ${noun}…`} onChange={setQuery} onCommit={setQuery} testId={`${testId}-search`} />
+      {picker.status ? <Note tone={picker.status.error ? "error" : undefined}>{picker.status.text}</Note> : null}
       {cards.length ? <ImageCards grid testId={`${testId}-cards`} cards={cards} value={picker.value} onChange={picker.onChange} width={GRID_CARD.width} height={GRID_CARD.height} /> : <Note>{`No ${noun} match.`}</Note>}
     </Page>
   )
