@@ -80,15 +80,6 @@ thread_local! {
     /// the last one to render wins. TODO: scope by renderer/window ID.
     static SCROLL_HANDLES: RefCell<HashMap<u64, gpui::ScrollHandle>> = RefCell::new(HashMap::new());
     static VIRTUAL_LIST_STATES: RefCell<HashMap<u64, gpui::ListState>> = RefCell::new(HashMap::new());
-    /// Virtual-list scrolls queued for the next `GpuixView::render`, applied
-    /// AFTER `VirtualListEntry::sync` splices that frame's child changes.
-    ///
-    /// Never applied eagerly: JS computes row indices against the child list it
-    /// just committed, but that commit only reaches `gpui::ListState` when the
-    /// next render splices it in. An eager `scroll_to` would be shifted a
-    /// second time by `splice_focusable` and land on the wrong row.
-    static PENDING_VIRTUAL_LIST_SCROLLS: RefCell<HashMap<u64, gpui::ListOffset>> =
-        RefCell::new(HashMap::new());
 }
 
 const SELECTION_SCROLL_TICK_MS: u64 = 24;
@@ -119,15 +110,6 @@ fn selection_scroll_step(bounds: gpui::Bounds<gpui::Pixels>, position: gpui::Poi
     } else {
         0.0
     }
-}
-
-/// Queue a virtual-list scroll for the next render. `offset_in_item` may be
-/// negative: gpui then anchors the viewport top above the item, which is what
-/// keeps a row pixel-stable while unmeasured rows are spliced in above it.
-pub(crate) fn queue_virtual_list_scroll(id: u64, index: usize, offset_in_item: f32) {
-    PENDING_VIRTUAL_LIST_SCROLLS.with(|cell| {
-        cell.borrow_mut().insert(id, gpui::ListOffset { item_ix: index, offset_in_item: gpui::px(offset_in_item) });
-    });
 }
 
 fn parse_debug_frame_overlay_mode_str(mode: &str) -> std::result::Result<gpui::DebugFrameOverlayMode, String> {
@@ -676,21 +658,17 @@ impl Renderer {
     pub fn scroll_to_item(&self, element_id: u64, index: usize, offset_in_item: Option<f64>) -> Result<()> {
         let id = element_id;
         let offset = offset_in_item.unwrap_or(0.0) as f32;
-        if !VIRTUAL_LIST_STATES.with(|cell| {
-            if !cell.borrow().contains_key(&id) {
-                return false;
-            }
-            queue_virtual_list_scroll(id, index, offset);
-            true
-        }) {
-            SCROLL_HANDLES.with(|cell| {
-                let handles = cell.borrow();
-                if let Some(handle) = handles.get(&id) {
+        // Through this window's own view, not the thread's last-rendered state: another window
+        // (Settings) rendering after this one must not swallow the scroll.
+        self.update_window(move |view, window, cx| {
+            if !view.scroll_virtual_list_to_item(id, index, offset) {
+                if let Some(handle) = view.scroll_handles.get(&id) {
                     handle.scroll_to_item(index);
                 }
-            });
-        }
-        self.invalidate_window()
+            }
+            cx.notify();
+            window.refresh();
+        })
     }
 
     /// The logical scroll anchor of a `<virtual-list>`:
@@ -1017,6 +995,19 @@ pub struct GpuixView {
     pub(crate) selection: SharedSelection,
     /// Persistent measurement and scroll state for React-backed virtual lists.
     virtual_lists: HashMap<u64, VirtualListEntry>,
+    /// Virtual-list scrolls asked for since the last render (`scroll_virtual_list_to_item`).
+    ///
+    /// Never applied eagerly: JS computes row indices against the child list it
+    /// just committed, but that commit only reaches `gpui::ListState` when the
+    /// next render splices it in. An eager `scroll_to` would be shifted a
+    /// second time by `splice_focusable` and land on the wrong row.
+    list_scrolls: RefCell<HashMap<u64, gpui::ListOffset>>,
+    /// This frame's: taken from `list_scrolls` as the root renders, applied as each list builds
+    /// AFTER `VirtualListEntry::sync` splices the frame's child changes, whether the list is in
+    /// the root's build or in a compartment's cached view built later in the frame. One left at
+    /// the next render was for a list that did not build, and is dropped: it would otherwise fire
+    /// on some later frame, against child indices that no longer match what JS meant.
+    frame_list_scrolls: HashMap<u64, gpui::ListOffset>,
     /// Latest pointer sample and list during selection edge scrolling.
     selection_drag_position: Option<gpui::Point<gpui::Pixels>>,
     selection_scroll_list: Option<u64>,
@@ -1565,6 +1556,8 @@ impl GpuixView {
             motion_grid: None,
             selection,
             virtual_lists: HashMap::new(),
+            list_scrolls: RefCell::default(),
+            frame_list_scrolls: HashMap::new(),
             selection_drag_position: None,
             selection_scroll_list: None,
             selection_scroll_task: None,
@@ -1806,6 +1799,7 @@ impl GpuixView {
             scroll_handles: &mut self.scroll_handles,
             custom_registry: &mut self.custom_registry,
             virtual_lists: &mut self.virtual_lists,
+            list_scrolls: &mut self.frame_list_scrolls,
             motion_states: &mut self.motion_states,
             now: frame.now,
             selection: self.selection.clone(),
@@ -1892,6 +1886,7 @@ impl GpuixView {
             scroll_handles: &mut self.scroll_handles,
             custom_registry: &mut self.custom_registry,
             virtual_lists: &mut self.virtual_lists,
+            list_scrolls: &mut self.frame_list_scrolls,
             motion_states: &mut self.motion_states,
             now,
             selection: self.selection.clone(),
@@ -1930,7 +1925,9 @@ impl GpuixView {
         if !self.virtual_lists.contains_key(&id) {
             return false;
         }
-        queue_virtual_list_scroll(id, index, offset_in_item);
+        self.list_scrolls
+            .borrow_mut()
+            .insert(id, gpui::ListOffset { item_ix: index, offset_in_item: gpui::px(offset_in_item) });
         emit(&self.event_callback, id, || EventKind::VisibleRange { start: index as u64, end: index as u64 + 1 });
         true
     }
@@ -2001,6 +1998,8 @@ pub(crate) struct BuildCtx<'a> {
     pub scroll_handles: &'a mut HashMap<u64, gpui::ScrollHandle>,
     pub custom_registry: &'a mut CustomElementRegistry,
     virtual_lists: &'a mut HashMap<u64, VirtualListEntry>,
+    /// This frame's queued list scrolls (`GpuixView::frame_list_scrolls`).
+    list_scrolls: &'a mut HashMap<u64, gpui::ListOffset>,
     pub motion_states: &'a mut HashMap<u64, crate::motion::MotionState>,
     pub now: web_time::Instant,
     pub selection: SharedSelection,
@@ -2742,6 +2741,21 @@ impl gpui::Render for GpuixView {
             || self.frame.keyboard_focus != keyboard_focus
             || self.frame.focus_dim != focus_dim;
         self.frame = FrameInputs { now, keyboard_focus: keyboard_focus.clone(), focus_dim, cache_all };
+        // The scrolls asked for since the last frame are this frame's (any left from the last
+        // were for lists that did not build). A list in a cached subtree builds only when its
+        // view draws again: each one around a list to scroll is drawn again.
+        self.frame_list_scrolls = std::mem::take(self.list_scrolls.get_mut());
+        if !cache_all && !self.boundaries.is_empty() {
+            for &id in self.frame_list_scrolls.keys() {
+                let mut current = Some(id);
+                while let Some(id) = current {
+                    if let Some(boundary) = self.boundaries.get(&id) {
+                        boundary.invalidate(window);
+                    }
+                    current = tree.elements.get(&id).and_then(|element| element.parent);
+                }
+            }
+        }
         if !cache_all && !self.boundaries.is_empty() {
             for &id in &motion.moving {
                 let mut current = Some(id);
@@ -2763,6 +2777,7 @@ impl gpui::Render for GpuixView {
                     scroll_handles: &mut self.scroll_handles,
                     custom_registry: &mut self.custom_registry,
                     virtual_lists: &mut self.virtual_lists,
+                    list_scrolls: &mut self.frame_list_scrolls,
                     motion_states: &mut self.motion_states,
                     now,
                     selection: self.selection.clone(),
@@ -2844,11 +2859,6 @@ impl gpui::Render for GpuixView {
                 states.insert(id, entry.state.clone());
             }
         });
-        // One-shot: a queued scroll for a list that did not build this frame
-        // would otherwise fire on some later frame, against child indices that
-        // no longer match what JS meant.
-        PENDING_VIRTUAL_LIST_SCROLLS.with(|cell| cell.borrow_mut().clear());
-
         if motion.active {
             window.request_animation_frame();
         } else if let Some(after) = motion.wake {
@@ -3184,7 +3194,7 @@ fn build_virtual_list(
     // Queued scrolls apply here, after `sync` spliced this frame's child
     // changes, so the indices JS computed against its committed child list are
     // the indices the splice-adjusted ListState sees.
-    if let Some(offset) = PENDING_VIRTUAL_LIST_SCROLLS.with(|cell| cell.borrow_mut().remove(&element.id)) {
+    if let Some(offset) = ctx.list_scrolls.remove(&element.id) {
         list_state.scroll_to(offset);
     }
 
