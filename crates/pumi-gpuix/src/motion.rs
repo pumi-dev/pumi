@@ -6,6 +6,10 @@
 //! reversing). One that repeats forever is sampled at a capped rate (`fps`, 30 by default), so
 //! an ambient loop does not rebuild the window every display frame, and less often still when the
 //! frames it moves in are dear (`renderer::LOOP_SHARE`).
+//!
+//! An endless linear rotation is the exception: its angle is a function of the clock, so nothing is
+//! sampled at all. [`SelfTurn`] says the element draws it itself (`renderer` hands it down instead
+//! of a sample), which is how a spinner turns at the display's rate for the cost of one icon.
 
 use std::time::Duration;
 
@@ -446,6 +450,65 @@ fn parse_description(source: &Value) -> Result<Description, String> {
     })
 }
 
+/// A rotation an element draws itself: one `rotate` track, two keyframes, endless and linear, with
+/// nothing else moving and no delay.
+///
+/// Such a track has nothing to sample. Its angle is a function of the clock, so `renderer` hands it
+/// to the element rather than a sampled style: an icon paints the angle it really is at when the
+/// frame is drawn, and asks for the next frame itself. No sample grid, no `fps`, and none of the
+/// endless animations' frame budget — the window draws it whenever it draws anything anyway.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SelfTurn {
+    /// Degrees a cycle starts at.
+    from: f32,
+    /// Degrees it turns through in one cycle (negative: the other way).
+    delta: f32,
+    /// Seconds a cycle takes.
+    seconds: f32,
+}
+
+impl SelfTurn {
+    /// Where the turn has got to `elapsed` after it started.
+    pub(crate) fn degrees(&self, elapsed: Duration) -> f32 {
+        self.from + self.delta * (elapsed.as_secs_f32() / self.seconds).fract()
+    }
+}
+
+/// How often a turn an element draws itself is given a frame: 60 a second, so a turn a second steps
+/// six degrees at a time. Nothing is sampled at that rate — the angle is the clock's — so this costs
+/// the frame it is in, not a restyled tree. `renderer` asks for it separately from the endless
+/// animations' budget: that one exists for the price of a sample, and this has no sample.
+pub(crate) const TURN_FRAME: Duration = Duration::from_micros(16_667);
+
+/// `description` as a turn an element can draw itself, when that is all it is.
+fn self_turn(description: &Description) -> Option<SelfTurn> {
+    let t = &description.transition;
+    if description.initial.is_some()
+        || t.spring.is_some()
+        // Endless only: a counted repeat ends, and an element drawing it would not.
+        || t.repeat.is_some()
+        || t.repeat_type != RepeatType::Loop
+        || t.delay != 0.0
+        || t.repeat_delay != 0.0
+        || t.times.is_some()
+        // Linear only: an ease would have to be measured, which is sampling again.
+        || t.ease != Ease::Bezier([0.0, 0.0, 1.0, 1.0])
+        || t.duration <= 0.0
+    {
+        return None;
+    }
+    let [(index, frames)] = description.animate.as_slice() else { return None };
+    if *index != prop_index("rotate")? || frames.len() != 2 {
+        return None;
+    }
+    let (Some(from), Some(to)) = (frames[0], frames[1]) else { return None };
+    let delta = to[0] - from[0];
+    if delta == 0.0 {
+        return None;
+    }
+    Some(SelfTurn { from: from[0] as f32, delta: delta as f32, seconds: t.duration as f32 })
+}
+
 /// The last keyframe of each property: where the track ends up.
 fn final_style(frames: &Frames) -> MotionStyle {
     let mut style = MotionStyle::default();
@@ -478,6 +541,8 @@ pub(crate) struct MotionState {
     valid: bool,
     needs_settle: bool,
     generation: u64,
+    /// The turn the element draws itself, when the whole track is one (`self_turn`).
+    turn: Option<SelfTurn>,
     /// Where a capped track's samples are counted from: every track of a window counts from
     /// the same moment (`set_grid`), so tracks at one rate move on the same display frames and
     /// the window is drawn once for all of them, not once for each. `None` counts from `started`.
@@ -509,6 +574,7 @@ impl MotionState {
             .collect();
         let moving = tracks.iter().any(|(_, frames)| frames.windows(2).any(|w| w[0] != w[1]));
         let _ = retarget;
+        let turn = self_turn(&description);
         Self {
             source: source.clone(),
             from,
@@ -518,6 +584,7 @@ impl MotionState {
             valid: true,
             needs_settle: description.is_exit || moving,
             generation: description.generation,
+            turn,
             grid: None,
             last_step: None,
         }
@@ -557,6 +624,7 @@ impl MotionState {
             valid: false,
             needs_settle: source_is_exit(source),
             generation: source_generation(source),
+            turn: None,
             grid: None,
             last_step: None,
         }
@@ -593,6 +661,12 @@ impl MotionState {
 
     pub(crate) fn visible_style(&self, now: Instant) -> Option<MotionStyle> {
         self.valid.then(|| self.sample(now).0)
+    }
+
+    /// The turn the element draws itself, when the whole track is one (`SelfTurn`). Its samples
+    /// are never asked for: the element reads its angle from the clock instead.
+    pub(crate) fn self_turn(&self) -> Option<SelfTurn> {
+        self.turn
     }
 
     /// The elapsed time a capped track is drawn at: whole steps of `1 / fps`, counted from its
@@ -1118,5 +1192,58 @@ mod tests {
         assert_eq!(ease(0.49, &Ease::Steps(2, false)), 0.0);
         assert_eq!(ease(0.51, &Ease::Steps(2, false)), 0.5);
         assert_eq!(ease(0.01, &Ease::Steps(2, true)), 0.5);
+    }
+
+    /// A spinner's track, as a plugin writes it (`fps` and all): the element draws it, so it is
+    /// never sampled and the rate it asked for is not what it gets.
+    #[test]
+    fn an_endless_linear_turn_is_the_element_s_own() {
+        let now = Instant::now();
+        let description = serde_json::json!({
+            "generation": 1,
+            "initial": false,
+            "animate": { "rotate": [0, 360] },
+            "transition": { "duration": 1.0, "ease": "linear", "repeat": "infinite", "fps": 24 }
+        });
+        let state = MotionState::new(&description, now).unwrap();
+        let turn = state.self_turn().unwrap();
+        let at = |ms: u64| turn.degrees(Duration::from_millis(ms));
+        assert!((at(0) - 0.0).abs() < 1e-6);
+        assert!((at(250) - 90.0).abs() < 1e-4);
+        assert!((at(1250) - 90.0).abs() < 1e-4, "it comes back round");
+
+        // Backwards, and from where it says it starts.
+        let back = serde_json::json!({
+            "animate": { "rotate": [90, -270] },
+            "transition": { "duration": 2.0, "ease": "linear", "repeat": "infinite" }
+        });
+        let turn = MotionState::new(&back, now).unwrap().self_turn().unwrap();
+        assert!((turn.degrees(Duration::from_millis(0)) - 90.0).abs() < 1e-4);
+        assert!((turn.degrees(Duration::from_millis(1000)) - (-90.0)).abs() < 1e-4);
+    }
+
+    /// What has something to be measured — an ease, an end, another property — stays sampled.
+    #[test]
+    fn a_track_with_more_to_it_is_not_the_element_s_own() {
+        let now = Instant::now();
+        let turn = |transition: serde_json::Value, animate: serde_json::Value| {
+            let description = serde_json::json!({ "animate": animate, "transition": transition });
+            MotionState::new(&description, now).unwrap().self_turn()
+        };
+        let linear = serde_json::json!({ "duration": 1.0, "ease": "linear", "repeat": "infinite" });
+        let spin = serde_json::json!({ "rotate": [0, 360] });
+        assert!(turn(linear.clone(), spin.clone()).is_some(), "the plain turn is one");
+
+        let eased = serde_json::json!({ "duration": 1.0, "ease": "easeOut", "repeat": "infinite" });
+        assert!(turn(eased, spin.clone()).is_none(), "an ease would have to be measured");
+        let once = serde_json::json!({ "duration": 1.0, "ease": "linear", "repeat": 3 });
+        assert!(turn(once, spin.clone()).is_none(), "a counted repeat ends; the element would not");
+        let delayed = serde_json::json!({ "duration": 1.0, "ease": "linear", "repeat": "infinite", "delay": 0.2 });
+        assert!(turn(delayed, spin.clone()).is_none());
+        let with_opacity = serde_json::json!({ "rotate": [0, 360], "opacity": [1.0, 0.4] });
+        assert!(turn(linear.clone(), with_opacity).is_none(), "something else moves too");
+        let three = serde_json::json!({ "rotate": [0, 180, 360] });
+        assert!(turn(linear.clone(), three).is_none());
+        assert!(turn(linear, serde_json::json!({ "opacity": [1.0, 0.4] })).is_none(), "not a turn");
     }
 }

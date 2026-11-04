@@ -60,6 +60,10 @@ pub struct CustomRenderContext<'a> {
     pub highlight_set: Option<std::sync::Arc<crate::text::HighlightContext>>,
     /// Retained custom props, including `role` and `aria-*`.
     pub props: &'a HashMap<String, serde_json::Value>,
+    /// The turn this element draws itself (`crate::motion::SelfTurn`): its `motion` track is one
+    /// endless linear rotation, which has nothing to sample. The element paints the angle its own
+    /// clock is at, and asks for the next frame itself.
+    pub(crate) self_turn: Option<crate::motion::SelfTurn>,
 }
 
 impl CustomRenderContext<'_> {

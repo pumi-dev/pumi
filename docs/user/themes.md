@@ -71,7 +71,7 @@ Each part of the window is a component. Give one in `components` and it draws th
 
 `Sessions` is the side bar's tree of sessions, views and tabs. `TabRow` is a tab with a `@status` in it, and `TabRowControls` the `tab.row.controls` contributions on that row.
 
-`TabIcon` is a tab's icon wherever one is shown: its pane's strip, the side bar, a view's tabs, a tab being dragged. It is given `{tab, size, color}`. `useTabIcon(tab)` says what the tab's icon is (`{src, tint, from}`: its own `@icon`, its block's, or the core's), and `IconImage` draws one, tinted by `color` when `tint` is set. The app's own shows the tab's status (`useTabStatus`) in its place while it is working, done, blocked or failed (`showsStatus`). Draw `<TabIcon tab={id} />` from `pumi` in your own parts and they show what the theme's `TabIcon` does.
+`TabIcon` is a tab's icon wherever one is shown: its pane's strip, the side bar, a view's tabs, a tab being dragged. It is given `{tab, size, color}`. `useTabMeta(tab)` says all a tab has of its own: its `icon` (`{src, tint, from}`: its own `@icon`, its block's, or the core's; `IconImage` draws one, tinted by `color` when `tint` is set), its `color` while it has one (`@color`: `{background, text}`), and what it says it is doing (`status`, with `status_kind` while it is blocked, `progress`, and the `id`, `title` and `msg` of the report that says it). The app's own shows the status in place of the icon while it says something happened (`showsStatus`). Draw `<TabIcon tab={id} />` from `pumi` in your own parts and they show what the theme's `TabIcon` does.
 
 A `Pane` is given its id, its `tabs` and the one in front (`active`). Its `PaneTitle` draws the strip of its tabs, one `PaneTab` each, while panes hold tabs (`pane_tabs`, on by default), and the front tab's title while they don't. `TabBody` draws a tab: only the front tab's is drawn, and the others keep running behind it. A tab on the terminal engine that no renderer draws is drawn as a plain `<terminal tab>`. A zoomed pane fills its view with its strip still on top. Draw the focus from the `focused` a part is given, or `useFocusedTab(view)` from `pumi/theme`, rather than from `view.activeTab`: they are the focus as this window has it.
 
@@ -136,5 +136,7 @@ Styles are objects, not CSS: flexbox, plus gradients, nine-slice borders, sprite
 <motion.svg src={spinner} animate={{ rotate: [0, 360] }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />  {/* rotate: svg only, in degrees */}
 <div style={{ height: 22, appRegion: "drag" }} />      {/* a title bar */}
 ```
+
+An `svg` whose motion is nothing but an endless linear `rotate` is drawn by the icon itself, sixty times a second: its angle comes from the clock as the frame is painted, so no `fps` applies to it and it spends none of the endless animations' frame budget. That is what a spinner wants — `duration` is the time a turn takes.
 
 Files beside the theme, images and fonts, are paths from `` `${import.meta.dir}/…` ``.
