@@ -9,7 +9,7 @@
 // (`crates/pumi-host/src/api/tabs.rs`).
 import type { ActionPick, Entry } from "./plugins.ts"
 
-export type From = Pick<Entry, "id" | "title" | "prefix" | "manifest"> & Partial<Pick<Entry, "state" | "error">>
+export type From = Pick<Entry, "id" | "title" | "prefix" | "manifest"> & Partial<Pick<Entry, "state" | "error" | "dir">>
 
 /** One thing a new tab can start. */
 export interface Startable {
@@ -18,6 +18,8 @@ export interface Startable {
   title: string
   /** One of the app's icons by name, or another form of icon (`plugin:icon.svg`). */
   icon?: string
+  /** Where its plugin is, for an icon that is a file of it (`plugin:icon.svg`). */
+  dir?: string
   /** Its plugin's id (`owner/name`): the list's group. */
   plugin: string
   /** Its plugin's name as people read it. */
@@ -46,11 +48,11 @@ export function startables(entries: Iterable<From>): Startable[] {
     if (actions.length) {
       const alias = actions.length === 1 && blocks.length === 1 && !actions[0]!.pick ? `${e.prefix}${blocks[0]!.id}` : undefined
       for (const a of actions) {
-        out.push({ value: `${e.prefix}${a.command}`, title: a.title, icon: a.icon, plugin: e.id, pluginTitle, action: { id: a.id, command: a.command, pick: a.pick }, alias })
+        out.push({ value: `${e.prefix}${a.command}`, title: a.title, icon: a.icon, dir: e.dir, plugin: e.id, pluginTitle, action: { id: a.id, command: a.command, pick: a.pick }, alias })
       }
       continue
     }
-    for (const b of blocks) out.push({ value: `${e.prefix}${b.id}`, title: b.title ?? b.id, icon: b.icon, plugin: e.id, pluginTitle })
+    for (const b of blocks) out.push({ value: `${e.prefix}${b.id}`, title: b.title ?? b.id, icon: b.icon, dir: e.dir, plugin: e.id, pluginTitle })
   }
   return out
 }

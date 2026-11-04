@@ -2,12 +2,14 @@
 // (each plugin's `tab.new` actions, or its blocks when it has none), drawn the most used first,
 // each row with the letter that picks it while the list has the keys (`letters`). A row opened
 // from either list counts as a use of it (`USES`, kept in window.json), so both keep one order.
+import { readFileSync } from "node:fs"
 import { useMemo, useSyncExternalStore } from "react"
 import { call, via } from "../app/engine.ts"
 import { getLocal, setLocal, useLocal } from "../app/local.ts"
 import * as plugins from "../app/plugins.ts"
 import { fromServer } from "../app/serverkeys.ts"
 import { useApp } from "../app/state.ts"
+import { iconSource } from "./icons.ts"
 import { byUse, letters, startables, type Uses } from "../app/startable.ts"
 import { keyGlyphs } from "./actions.ts"
 import { useSlot } from "./contributions.ts"
@@ -20,7 +22,7 @@ export interface NewTab {
   /** `owner/name/<action id>` for an action, `owner/name/<block>` for a block. */
   id: string
   title: string
-  /** One of the app's icons by name: a block's own file (`plugin:icon.svg`) is a box. */
+  /** An icon of the app's by name (`terminal`), or the plugin's mark for the row (`data:image/…`). */
   icon: string
   /** Its plugin's id (`owner/name`). */
   plugin: string
@@ -62,8 +64,23 @@ function serverShortcut(tables: unknown, fn: string): string | undefined {
 let pluginsVersion = 0
 plugins.subscribe(() => pluginsVersion++)
 
-/** An icon of the app's by name, for a row: a block's own file (`plugin:icon.svg`) is a box. */
-const menuIcon = (icon: string | undefined) => (icon && /^[a-z0-9_]{1,64}$/.test(icon) ? icon : "box")
+/**
+ * A row's icon, as the menu and the Launcher draw it: one of the app's by name (`terminal`), or the
+ * mark a plugin brings for it — an agent's `tab.new` action carries a `data:` URI, and a block names
+ * a file of its plugin (`plugin:icon.svg`), which the two lists read once, here, as bytes they can
+ * draw. `dir` is where that plugin is. Nothing that resolves is the app's box.
+ */
+function menuIcon(icon: string | undefined, dir: string | undefined): string {
+  const source = icon ? iconSource(icon, dir) : undefined
+  if (!source) return "box"
+  if (source.src.startsWith("data:")) return source.src
+  try {
+    const type = /\\.png$/i.test(source.src) ? "image/png" : "image/svg+xml"
+    return `data:${type};base64,${readFileSync(source.src).toString("base64")}`
+  } catch {
+    return "box"
+  }
+}
 
 /**
  * What a new tab can be, the most used first: the list Settings ▸ General ▸ New tabs open picks
@@ -88,7 +105,7 @@ export function useNewTabs(): NewTab[] {
       return {
         id,
         title: s.title,
-        icon: menuIcon(s.icon ?? (s.action ? "plus" : undefined)),
+        icon: menuIcon(s.icon ?? (s.action ? "plus" : undefined), s.dir),
         plugin: s.plugin,
         value: s.value,
         letter: keys[i]!,

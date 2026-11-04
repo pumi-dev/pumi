@@ -40,7 +40,7 @@ import {
 } from "../state.ts"
 import { METRICS, useComponents, useMetrics, useTheme, withOpacity, type Components, type DialogProps, type IconButtonProps, type Metrics, type MenuProps, type TabIconProps } from "../../sdk/theme.ts"
 import { IconImage, TabIcon } from "../../sdk/elements.tsx"
-import { showsStatus, useTabIcon, useTabStatus } from "../../sdk/icons.ts"
+import { iconSource, showsStatus, useTabIcon, useTabStatus } from "../../sdk/icons.ts"
 import { useHover } from "../../sdk/kit.tsx"
 import { useTab as useTabModel } from "../../sdk/state.ts"
 import { useLocal } from "../local.ts"
@@ -737,6 +737,18 @@ function SubMenu({ title, lit, onEnter, children }: { title: string; lit?: boole
 }
 
 /**
+ * A menu's row icon: one of the app's icons by name (`terminal`, `tool_web`), or a mark a plugin
+ * brings (`data:image/svg+xml,…`, which an agent's own icon is): the same forms `@icon` takes, so a
+ * `tab.new` action can show the agent it opens rather than a stand-in.
+ */
+function MenuIcon({ icon, color }: { icon: string; color: string }) {
+  // What an icon would be, a name or a plugin's mark; what is neither is drawn as the app's box, as
+  // the row had before there was a mark to show.
+  const source = useMemo(() => iconSource(icon) ?? iconSource("box"), [icon])
+  return source ? <IconImage icon={source} size={13} color={color} /> : null
+}
+
+/**
  * A menu's row: its title, and at the far end its keys (`⇧ ⌘ D`), a check, or the chevron of a
  * row that opens more (`SubMenu`'s, which is `active` while open). Hovering any other row closes
  * its card's open submenu. `lit`, given: a menu the keys move through says which row is lit (and
@@ -763,7 +775,7 @@ function MenuItem({ title, icon, keys, letter, checked, disabled, more, active, 
       aria-disabled={disabled}
       style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, height: 22, flexShrink: 0, marginLeft: 4, marginRight: 4, paddingLeft: 6, paddingRight: 6, borderRadius: m.radiusSmall, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1, ...(active || lit ? { backgroundColor: t.hover } : {}), ...(disabled || keyed ? {} : { hover: { backgroundColor: t.hover } }) }}
     >
-      {icon ? <Icon name={icon} size={13} color={t.muted} /> : null}
+      {icon ? <MenuIcon icon={icon} color={t.muted} /> : null}
       <text style={{ fontSize: ts(13), color: t.text, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{title}</text>
       {keys || letter || checked !== undefined || more ? <div style={{ flexGrow: 1, minWidth: 16 }} /> : null}
       {keys ? <text style={{ fontSize: ts(12), color: t.muted, whiteSpace: "nowrap", flexShrink: 0 }}>{keys}</text> : null}
@@ -3334,7 +3346,10 @@ function NewViewRows({ session, close }: { session: string; close(): void }) {
             else if (step) setLit((at + step + create + 1) % (create + 1))
             else if (e.key === "right" && !sub && at === create) enterSub()
             else if (e.key === "left" && sub) menu?.show(undefined)
-            else if (e.key === "escape") sub ? menu?.show(undefined) : close()
+            else if (e.key === "escape") {
+              if (sub) menu?.show(undefined)
+              else close()
+            }
             else return
             e.preventDefault()
             e.stopPropagation()
