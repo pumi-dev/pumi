@@ -10,7 +10,6 @@ const decls = [
   { name: "terminal_cursor_style", type: "string", default: "block", label: "Cursor shape", group: "Cursor", choices: ["block", "bar"], labels: ["Block", "Bar"], desc: "The cursor's shape while the program hasn't asked for another." },
   { name: "terminal_copy_on_select", type: "boolean", default: false, label: "Copy text when selected", group: "Mouse" },
   { name: "haptics", type: "boolean", default: true, label: "Haptic feedback", group: "Default theme · Motion and feedback" },
-  { name: "autoupdate", type: "boolean", default: true, label: "Update automatically", group: "Updates" },
   { name: "me.remote.position", type: "string", plugin: "me/remote", label: "Position", default: "top", choices: ["top", "bottom"] },
 ]
 const calls: unknown[][] = []
@@ -103,8 +102,8 @@ gpu("Settings", () => {
   test("lists the built-in pages (a plugin with only sections has no page), and shows General with the server and the plugin's sections after its rows", async () => {
     const { t } = await open()
     const text = t.renderer.getAllText()
-    expect(text).toEqual(expect.arrayContaining(["General", "Appearance", "Keybindings", "Plugins", "Pumi Terminals", "Running", "Update automatically", "Tailscale is here"]))
-    expect(text.indexOf("Tailscale is here")).toBeGreaterThan(text.indexOf("Update automatically"))
+    expect(text).toEqual(expect.arrayContaining(["General", "Appearance", "Keybindings", "Plugins", "Pumi Terminals", "Running", "Current version", "Tailscale is here"]))
+    expect(text.indexOf("Tailscale is here")).toBeGreaterThan(text.indexOf("Current version"))
     // The default theme's settings are its own, under the theme picker: not General's.
     expect(text).not.toContain("Haptic feedback")
     t.unmount()

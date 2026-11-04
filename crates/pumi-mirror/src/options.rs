@@ -616,15 +616,6 @@ pub fn builtin() -> Vec<Decl> {
         .label("Use Option as Alt")
         .group("Keys"),
         Decl::new(
-            "autoupdate",
-            Boolean,
-            json!(false),
-            Global,
-            "Check every few hours and download new versions in the background.",
-        )
-        .label("Update automatically")
-        .group("Updates"),
-        Decl::new(
             "pluginautocheck",
             Boolean,
             json!(false),

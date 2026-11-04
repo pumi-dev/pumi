@@ -35,7 +35,7 @@ On Windows the same are `-Version`, `-Dir` (`%LOCALAPPDATA%\Programs\pumi` by de
 
 The environment variables `PUMI_INSTALL_VERSION`, `PUMI_DIR`, `PUMI_NO_BIN` and `PUMI_NO_OPEN` do what the flags do. The installer checks the archive's SHA-256 against the release manifest, and the manifest's signature when `minisign` is installed. On Linux it also tells you which desktop libraries (GTK, WebKitGTK, xkbcommon, Vulkan) are missing.
 
-Automatic updates are off by default. Set `autoupdate` to `true` to download new versions in the background and apply them on restart.
+pumi keeps itself up to date: it looks for a new version shortly after it opens and every few hours after that, and downloads it in the background. It never restarts on its own — Settings → General shows the version that is ready, and applies it when you choose **Restart to update**, or when you quit.
 
 The first time pumi opens, its start screen sets it up: the plugins to install, whether agents open in a chat or in their own terminal, whether the window is transparent, and the color scheme. It shows once; Settings changes any of them later.
 
