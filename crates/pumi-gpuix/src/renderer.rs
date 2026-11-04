@@ -991,6 +991,9 @@ pub struct GpuixView {
     /// When this window's first motion track started: every capped track samples on its grid
     /// (`MotionState::set_grid`).
     pub(crate) motion_grid: Option<web_time::Instant>,
+    /// When turns an element draws itself were last given a frame: one invalidation of the subtrees
+    /// around a spinner a sixtieth of a second, however often the window draws for other reasons.
+    turn_frame: Option<web_time::Instant>,
     /// Live text selection, shared with the paint closures and the host (`Renderer`).
     pub(crate) selection: SharedSelection,
     /// Persistent measurement and scroll state for React-backed virtual lists.
@@ -1103,6 +1106,15 @@ struct MotionSync {
     moving: Vec<u64>,
     /// The capped tracks that moved, with the time between their samples.
     looping: Vec<(u64, std::time::Duration)>,
+    /// A turn an element draws itself: it wants a frame of its own, at [`crate::motion::TURN_FRAME`],
+    /// and the cached subtrees above it want to be told to draw again.
+    turns: bool,
+}
+
+/// Whether `state`'s track is one `element` draws itself. Only an `<svg>` does: it has an angle of
+/// its own to paint (`SvgElement`), where a box would have to have its whole style sampled again.
+fn draws_own_turn(element: &crate::retained_tree::RetainedElement, state: &crate::motion::MotionState) -> bool {
+    element.element_type == "svg" && state.self_turn().is_some()
 }
 
 /// Brings every motion track to `now`.
@@ -1114,6 +1126,8 @@ fn sync_motion_states(
     // The root build's: it asks which tracks moved since the last frame (and the answer is
     // used up); a list row built on its own does not.
     root: bool,
+    // Whether a turn an element draws itself may be given a frame now (`GpuixView::turn_due`).
+    turn_due: bool,
 ) -> MotionSync {
     states.retain(|id, _| tree.motion_ids.contains(id));
     let mut active = false;
@@ -1121,9 +1135,13 @@ fn sync_motion_states(
     let mut settled = Vec::new();
     let mut moving = Vec::new();
     let mut looping = Vec::new();
+    let mut turns = false;
 
     for &id in &tree.motion_ids {
-        let Some(source) = tree.elements.get(&id).and_then(|element| element.custom_props().get("motion")) else {
+        let Some(element) = tree.elements.get(&id) else {
+            continue;
+        };
+        let Some(source) = element.custom_props().get("motion") else {
             continue;
         };
         let state = match states.entry(id) {
@@ -1142,6 +1160,17 @@ fn sync_motion_states(
         };
         if let Err(error) = state.sync(source, now) {
             log::warn!("Invalid motion update for element {id}: {error}");
+        }
+        // A turn the element draws itself: its angle is the clock's, so there is no sample to take,
+        // nothing to put on the grid, and nothing to hold to the endless animations' budget — but it
+        // does want frames, and the cached subtrees above it have to be told to draw again, as one
+        // with a sampled motion would. `build_element` hands the element the turn to paint.
+        if draws_own_turn(element, state) {
+            if turn_due {
+                moving.push(id);
+                turns = true;
+            }
+            continue;
         }
         let frame = state.frame(now);
         // Only what shows something new is drawn again: a capped loop between its samples is
@@ -1162,7 +1191,7 @@ fn sync_motion_states(
         }
     }
 
-    MotionSync { active, wake, settled, moving, looping }
+    MotionSync { active, wake, settled, moving, looping, turns }
 }
 
 /// The share of the time endless animations may spend drawing the window. A frame one moves in
@@ -1554,6 +1583,7 @@ impl GpuixView {
             scroll_handles: HashMap::new(),
             motion_states: HashMap::new(),
             motion_grid: None,
+            turn_frame: None,
             selection,
             virtual_lists: HashMap::new(),
             list_scrolls: RefCell::default(),
@@ -1743,6 +1773,20 @@ impl GpuixView {
         by_name
     }
 
+    /// Whether a turn an element draws itself is due a frame, taking the moment when it is: the
+    /// subtrees around a spinner are drawn again a sixtieth of a second at most, however often the
+    /// window draws for other reasons (a terminal's output draws it every display frame).
+    fn turn_due(&mut self, now: web_time::Instant) -> bool {
+        // A little under `TURN_FRAME`: the repaint it asks for has to find the next turn due, or a
+        // frame that landed a hair early would leave the icon with nothing scheduled.
+        let step = crate::motion::TURN_FRAME - crate::motion::TURN_FRAME / 4;
+        if self.turn_frame.is_some_and(|at| now.saturating_duration_since(at) < step) {
+            return false;
+        }
+        self.turn_frame = Some(now);
+        true
+    }
+
     /// When the endless animations that moved (`looping`) are sampled next: at `after`, or later
     /// if their frames cost more than `LOOP_SHARE` of the time. Each one held to half its rate or
     /// less is told so once (`motionThrottled`, with the compartment it is in).
@@ -1858,7 +1902,8 @@ impl GpuixView {
 
         let callback = self.event_callback.clone();
         let now = self.clock.now();
-        let motion = sync_motion_states(&tree, &mut self.motion_states, &mut self.motion_grid, now, false);
+        let turn_due = self.turn_due(now);
+        let motion = sync_motion_states(&tree, &mut self.motion_states, &mut self.motion_grid, now, false, turn_due);
         let mut highlight_events = Vec::new();
 
         // Re-resolve against the tree as it is NOW. gpui calls this during
@@ -1905,10 +1950,17 @@ impl GpuixView {
         emit_motion_settled(&callback, &tree, &motion.settled);
         if motion.active {
             window.request_animation_frame();
-        } else if let Some(after) = motion.wake {
-            // Only capped tracks move: a timed repaint at their next sample, not every frame.
-            let after = self.pace_loops(&tree, &motion.looping, after, &callback);
-            crate::schedule::repaint_in(after, window, cx);
+        } else {
+            if let Some(after) = motion.wake {
+                // Only capped tracks move: a timed repaint at their next sample, not every frame.
+                let after = self.pace_loops(&tree, &motion.looping, after, &callback);
+                crate::schedule::repaint_in(after, window, cx);
+            }
+            if motion.turns {
+                // A turn an element draws itself keeps its own rate, beside the endless animations'
+                // budget: its frames are not samples, and it pays for the icon it is in.
+                crate::schedule::repaint_in(crate::motion::TURN_FRAME, window, cx);
+            }
         }
         let Some(focus_handle) = row_focus_handle else {
             return child;
@@ -2716,7 +2768,8 @@ impl gpui::Render for GpuixView {
         // are different fields of self, so Rust allows borrowing all simultaneously.
         let theme = Theme::dark();
         let now = self.clock.now();
-        let motion = sync_motion_states(&tree, &mut self.motion_states, &mut self.motion_grid, now, true);
+        let turn_due = self.turn_due(now);
+        let motion = sync_motion_states(&tree, &mut self.motion_states, &mut self.motion_grid, now, true, turn_due);
         self.slowed.retain(|id| tree.motion_ids.contains(id));
         // Pruned by DECLARATION, not existence: an element that drops its
         // `highlight` prop keeps living, and its cached group list holds a copy
@@ -2861,10 +2914,17 @@ impl gpui::Render for GpuixView {
         });
         if motion.active {
             window.request_animation_frame();
-        } else if let Some(after) = motion.wake {
-            // Only capped tracks move: a timed repaint at their next sample, not every frame.
-            let after = self.pace_loops(&tree, &motion.looping, after, &callback);
-            crate::schedule::repaint_in(after, window, cx);
+        } else {
+            if let Some(after) = motion.wake {
+                // Only capped tracks move: a timed repaint at their next sample, not every frame.
+                let after = self.pace_loops(&tree, &motion.looping, after, &callback);
+                crate::schedule::repaint_in(after, window, cx);
+            }
+            if motion.turns {
+                // A turn an element draws itself keeps its own rate, beside the endless animations'
+                // budget: its frames are not samples, and it pays for the icon it is in.
+                crate::schedule::repaint_in(crate::motion::TURN_FRAME, window, cx);
+            }
         }
 
         result
@@ -2888,7 +2948,14 @@ pub(crate) fn build_element(
         return gpui::Empty.into_any_element();
     };
 
-    let animated_style = if element.custom_props().contains_key("motion") {
+    // A turn the element draws itself (`crate::motion::SelfTurn`): the style is left as declared,
+    // with no sampled `rotate` on it, and the element paints the angle from its own clock.
+    let self_turn = if element.element_type == "svg" {
+        ctx.motion_states.get(&id).and_then(crate::motion::MotionState::self_turn)
+    } else {
+        None
+    };
+    let animated_style = if self_turn.is_none() && element.custom_props().contains_key("motion") {
         ctx.motion_states.get(&id).and_then(|state| state.visible_style(ctx.now)).map(|style| {
             // `Arc<StyleDesc>` is shared, so the animated frame is applied to a
             // copy. Mutating through the pointer would restyle every element
@@ -2975,6 +3042,7 @@ pub(crate) fn build_element(
                 selection_wash: inherited.selection_wash,
                 color: inherited.color,
                 highlight_set: inherited.highlight.clone(),
+                self_turn,
                 props: element.custom_props(),
             };
             ctx.custom_registry.render(custom_type, element.custom_props(), render_ctx, window, cx)

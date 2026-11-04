@@ -581,6 +581,8 @@ pub struct SvgElement {
     bytes: Option<std::sync::Arc<[u8]>>,
     source: String,
     paint: SvgPaint,
+    /// When its own turn began (`ctx.self_turn`): what the angle it paints is measured from.
+    turned: std::cell::Cell<Option<std::time::Instant>>,
 }
 
 impl SvgElement {
@@ -685,8 +687,32 @@ impl CustomElement for SvgElement {
         // Its own `color`, else the one it inherits (`currentColor`, as an icon in a button wants).
         let tint = ctx.color.unwrap_or_else(|| gpui::rgb(0xe2e2e2));
         let mut icon = gpui::svg().data(bytes).flex_none().text_color(tint);
-        if let Some(degrees) = ctx.style.and_then(|style| style.rotate).filter(|d| d.is_finite() && *d != 0.0) {
-            icon = icon.with_transformation(gpui::Transformation::rotate(gpui::radians((degrees as f32).to_radians())));
+        // A turn it draws itself: the angle is the clock's when this frame is painted, not a sample
+        // the tree was built with, so whatever asked for the frame shows where the icon is now. The
+        // renderer keeps the frames coming (`TURN_FRAME`), and the subtrees above it drawing.
+        let turned = match ctx.self_turn {
+            Some(turn) => {
+                let started = match self.turned.get() {
+                    Some(started) => started,
+                    None => {
+                        let now = std::time::Instant::now();
+                        self.turned.set(Some(now));
+                        now
+                    }
+                };
+                Some(turn.degrees(started.elapsed()))
+            }
+            None => {
+                // No longer a turn of its own (or never one): the next one starts where it begins.
+                self.turned.set(None);
+                None
+            }
+        };
+        let degrees = turned.or_else(|| {
+            ctx.style.and_then(|style| style.rotate).filter(|d| d.is_finite() && *d != 0.0).map(|d| d as f32)
+        });
+        if let Some(degrees) = degrees {
+            icon = icon.with_transformation(gpui::Transformation::rotate(gpui::radians(degrees.to_radians())));
         }
         let mut icon = icon.id(element_id);
         if let Some(style) = ctx.style {
