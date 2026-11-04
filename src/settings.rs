@@ -10,17 +10,16 @@ pub struct Settings {
     pub terminal: TerminalSettings,
     pub updates: UpdateSettings,
 }
-/// The updater (`crate::updater`). Off, it never checks on its own; "Check for updates"
-/// still does. `plugins` is the same for the installed plugins (`updater::plugins`).
+/// The plugin updater (`updater::plugins`). pumi's own updates are not a setting: it always
+/// checks (`crate::updater`), and applies one only when a person restarts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateSettings {
-    pub auto: bool,
     pub plugins: bool,
 }
 impl Default for UpdateSettings {
     fn default() -> Self {
-        Self { auto: false, plugins: false }
+        Self { plugins: false }
     }
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,7 +127,6 @@ pub mod names {
     pub const CURSOR_BLINK: &str = "terminal_cursor_blink";
     pub const COPY_ON_SELECT: &str = "terminal_copy_on_select";
     pub const OPTION_AS_ALT: &str = "macos_option_as_alt";
-    pub const AUTOUPDATE: &str = "autoupdate";
     pub const PLUGINAUTOCHECK: &str = "pluginautocheck";
 }
 fn parse_guifont(text: &str, defaults: &TerminalSettings) -> (String, f32) {
@@ -195,10 +193,7 @@ impl Settings {
                 copy_on_select: b(names::COPY_ON_SELECT, d.terminal.copy_on_select),
                 option_as_alt: b(names::OPTION_AS_ALT, d.terminal.option_as_alt),
             },
-            updates: UpdateSettings {
-                auto: b(names::AUTOUPDATE, d.updates.auto),
-                plugins: b(names::PLUGINAUTOCHECK, d.updates.plugins),
-            },
+            updates: UpdateSettings { plugins: b(names::PLUGINAUTOCHECK, d.updates.plugins) },
         }
         .clamped()
     }

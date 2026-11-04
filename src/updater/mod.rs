@@ -19,13 +19,13 @@ use std::time::Duration;
 
 use gpui::{App, BorrowAppContext, Global};
 
-use crate::settings::Settings;
 use install::Staged;
 
 /// Whether this build updates itself.
 pub const ENABLED: bool = option_env!("PUMI_UPDATER").is_some();
 
-/// The first check, after launch has settled.
+/// The first check, after launch has settled. pumi always checks for its own updates; it applies
+/// one only when the person restarts (or quits, where terminals survive that).
 const FIRST_CHECK: Duration = Duration::from_secs(30);
 /// Checks after that.
 const EVERY: Duration = Duration::from_secs(4 * 60 * 60);
@@ -105,12 +105,12 @@ pub fn start(cx: &mut App) {
     })
     .detach();
 
+    // pumi always looks for its own updates: what a person chooses is when one is applied. A
+    // scheduled check stays quiet unless it finds one.
     cx.spawn(async move |cx| {
         cx.background_executor().timer(FIRST_CHECK).await;
         loop {
-            if cx.update(|cx| Settings::get(cx).updates.auto) {
-                cx.update(|cx| check(false, cx));
-            }
+            cx.update(|cx| check(false, cx));
             cx.background_executor().timer(EVERY).await;
         }
     })

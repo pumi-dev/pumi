@@ -86,21 +86,6 @@ case ":$PATH:" in
   *) echo "    (add ~/.local/bin to your PATH to run \`pumi\` from a shell)" ;;
 esac
 
-# A first install: this is a build to test, not a release, so it does not update itself over the
-# official one. Nothing is written when settings are already there.
-SETTINGS="$HOME/.config/pumi/settings.json"
-if [ ! -f "$SETTINGS" ]; then
-  mkdir -p "$(dirname "$SETTINGS")"
-  cat >"$SETTINGS" <<'JSON'
-{
-  "options": {
-    "autoupdate": false
-  }
-}
-JSON
-  echo "    updates:     off (Settings > Updates turns them on)"
-fi
-
 say "opening $APP_PATH"
 open "$APP_PATH" 2>/dev/null || true
 say "done — pumi $VERSION is in $APP_PATH"
