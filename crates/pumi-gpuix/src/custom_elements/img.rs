@@ -565,17 +565,63 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
     start.starts_with("<svg") || start.starts_with("<?xml")
 }
 
+/// How an `<svg>` paints. `Tint` is an icon: the drawing is a mask in the element's colour, which
+/// is what an icon in a button wants. `Image` is a picture: its own colours, rasterised at the size
+/// the element is given, which a diagram or a chart needs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum SvgPaint {
+    #[default]
+    Tint,
+    Image,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SvgElement {
     src: String,
     bytes: Option<std::sync::Arc<[u8]>>,
     source: String,
+    paint: SvgPaint,
 }
 
 impl SvgElement {
     fn load_src(&mut self, src: String) {
         self.bytes = svg_bytes(&src).map(std::sync::Arc::from);
         self.src = src;
+    }
+
+    /// The drawing in its own colours, rasterised at the size the element is given: an `<svg>` that
+    /// holds a diagram, a chart or any picture, rather than the icon the tint path draws.
+    fn render_image(&mut self, ctx: CustomRenderContext) -> gpui::AnyElement {
+        use gpui::prelude::*;
+
+        let bytes: Option<std::sync::Arc<[u8]>> = if self.source.trim().is_empty() {
+            self.bytes.clone()
+        } else {
+            Some(std::sync::Arc::from(self.source.as_bytes()))
+        };
+        let el = super::custom_surface(
+            gpui::div().id(gpui::SharedString::from(format!("__gpuix_svg_{}", ctx.id))),
+            &ctx,
+        );
+        let Some(bytes) = bytes else {
+            return el.into_any_element();
+        };
+        let painter = gpui::canvas(
+            |_, _, _| (),
+            move |bounds, (), window, cx| {
+                let (width, height) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+                let Some(image) = crate::images::load_sized_bytes(&bytes, width, height, window, cx) else {
+                    return;
+                };
+                crate::decor::draw(window, bounds, bounds, gpui::Corners::default(), &image, false);
+            },
+        )
+        .absolute()
+        .top(gpui::px(0.0))
+        .left(gpui::px(0.0))
+        .right(gpui::px(0.0))
+        .bottom(gpui::px(0.0));
+        el.child(painter).into_any_element()
     }
 }
 
@@ -625,6 +671,10 @@ impl CustomElement for SvgElement {
     ) -> gpui::AnyElement {
         use gpui::prelude::*;
 
+        if self.paint == SvgPaint::Image {
+            return self.render_image(ctx);
+        }
+
         let bytes = if self.source.trim().is_empty() { self.bytes.as_deref() } else { Some(self.source.as_bytes()) };
         let element_id = gpui::SharedString::from(format!("__gpuix_svg_{}", ctx.id));
         let Some(bytes) = bytes else {
@@ -651,12 +701,18 @@ impl CustomElement for SvgElement {
         match key {
             "src" => self.load_src(value.as_str().unwrap_or_default().to_string()),
             "source" => self.source = value.as_str().unwrap_or_default().to_string(),
+            "paint" => {
+                self.paint = match value.as_str() {
+                    Some("image") => SvgPaint::Image,
+                    _ => SvgPaint::Tint,
+                }
+            }
             _ => {}
         }
     }
 
     fn supported_props(&self) -> &'static [&'static str] {
-        &["src", "source"]
+        &["src", "source", "paint"]
     }
 
     fn supported_events(&self) -> &'static [&'static str] {
