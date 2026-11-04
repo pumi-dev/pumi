@@ -708,6 +708,12 @@ export interface SvgProps extends HostProps {
   src?: string
   /** Raw SVG markup rendered directly by GPUI. */
   source?: string
+  /**
+   * How it paints. `tint` (the default) is an icon: the drawing is a mask filled with the element's
+   * `color`. `image` is a picture: its own colours, rasterised at the element's size and drawn
+   * again when that size changes, which a diagram or a chart needs.
+   */
+  paint?: "tint" | "image"
 }
 
 // Props for the <anchored> custom element.

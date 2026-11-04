@@ -235,6 +235,33 @@ pub(crate) fn load_sized(
     })
 }
 
+/// SVG markup drawn `width` by `height` (logical pixels): parsed and rasterised at that size in
+/// device pixels, kept by content and size. What an `<svg paint="image">` paints, and the same
+/// rasterisation `<img>` gets — with no file to name it by.
+pub(crate) fn load_sized_bytes(
+    svg: &[u8],
+    width: f32,
+    height: f32,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> Option<Arc<gpui::RenderImage>> {
+    let renderer = cx.svg_renderer();
+    let scale = window.scale_factor();
+    // Whole device pixels, and never more than a 4k texture side, as `load_sized` does.
+    let w = ((width * scale).ceil() as u32).clamp(1, 4096);
+    let h = ((height * scale).ceil() as u32).clamp(1, 4096);
+    cached(Key::Svg(hash_of(&svg), w, h), window, || {
+        // Parsed on a miss only: a hit answers an image, and parsing is the costly half.
+        let parsed = renderer.parse_svg(svg).ok()?;
+        renderer
+            .render_parsed(
+                &parsed,
+                gpui::SvgSize::ExactSize(gpui::size(gpui::DevicePixels(w as i32), gpui::DevicePixels(h as i32))),
+            )
+            .ok()
+    })
+}
+
 /// A gradient raster `w` by `h` pixels (BGRA), made by `make` once per spec and size.
 pub(crate) fn gradient(
     spec: u64,
