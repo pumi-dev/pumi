@@ -501,7 +501,7 @@ Both files import from `"pumi"`. The app provides it at run time; for type-check
 | --- | --- |
 | state | `useProjects` `useProject` `useViews` `useView` `useTab` `useTabs` `useRequests` `useRegistry` `useWatchable` `useOption` `useWindow` `workspace` `call` |
 | models | `Project` `View` `Pane` `Tab` `Request` `Plugin` `Model` `cache` |
-| theme | `defineTheme` `useTheme` `usePalette` `useMetrics` `useAppearance` `useFont` |
+| theme | `defineTheme` `useTheme` `usePalette` `useMetrics` `useFont` |
 | hooks | `useChannel` `useChannelListener` `useEvent` `usePlugin` |
 | elements | `div` `text` `img` `svg` `scroll` `input` `terminal` `Icon` `IconButton`; an element's `ref` (`ElementRef`) has `focus()`, `scrollTo()`, `scrollIntoView()`, and a `virtual-list`'s `scrollToItem()` |
 | web | `WebView` `useWebview` `webview` `webviewRun` `webviewSnapshot` |

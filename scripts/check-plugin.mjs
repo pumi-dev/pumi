@@ -44,7 +44,10 @@ function sources(dir) {
 }
 
 const api = exportOf();
-const known = new Set(api.functions.map((f) => f.name));
+// What the app answers itself, so the export (the server's) has none of it: its updates
+// (`updates.ts`) and its commands (`commands.ts`).
+const APP = ["update.state", "update.check", "update.install", "command.run"];
+const known = new Set([...api.functions.map((f) => f.name), ...APP]);
 // `call("tab.open", […])` is checked. A handle's own method (`tab.call("report")`, a tab's
 // type method) and the SDK's nouns (`tab.open(…)`) are not: those are not functions of the
 // export, and the generated SDK is their authority.
