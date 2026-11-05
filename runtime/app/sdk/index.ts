@@ -25,7 +25,7 @@ export {
 export { cache, Model } from "../worker/sdk/model.ts"
 export { Pane, Plugin, Request, Session, Tab, View } from "../worker/sdk/models.gen.ts"
 export type { Data, Fields } from "../worker/sdk/model.ts"
-export { defineTheme, useAppearance, useMetrics, usePalette, useTheme, type Appearance, type DockSpec, type IconButtonProps, type Metrics, type TabIconProps, type TerminalPalette, type ThemeSpec, type Tokens } from "./theme.ts"
+export { defineTheme, useMetrics, usePalette, useTheme, type DockSpec, type IconButtonProps, type Metrics, type TabIconProps, type TerminalPalette, type ThemeSpec, type Tokens } from "./theme.ts"
 export { usePlugin } from "./contributions.ts"
 export { useFont, type Font } from "./font.ts"
 // A plugin's own channel from its `main.ts` (`ui.post`), and the server's events.

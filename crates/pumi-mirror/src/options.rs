@@ -441,9 +441,9 @@ pub fn builtin() -> Vec<Decl> {
         Decl::new(
             "terminal_colorscheme",
             String,
-            json!(""),
+            json!("GitHub Dark Default"),
             Global,
-            "Give terminals a colour scheme of their own (one of iTerm2-Color-Schemes'), or leave empty to match the theme. pumi's own theme takes its colours from the scheme too, dark or light as the scheme's background is (Ghostty's `theme`).",
+            "Give terminals a colour scheme of their own (one of iTerm2-Color-Schemes'), pumi's own theme taking its colours from it too; empty gives the theme's own colours (Ghostty's `theme`).",
         )
         .label("Color scheme")
         .group("Appearance")

@@ -139,7 +139,8 @@ function useSchemePicker(): Picker {
     for (const name of names) out.push({ value: name, title: name, preview: <SchemePreview s={terminalScheme(name)!} font={font} /> })
     return out
   }, [value, font, own])
-  return { cards, value, onChange: (v) => settings.set("terminal_colorscheme", v || null) }
+  // Empty is the theme's own colours, a value of its own: the default is a scheme (GitHub Dark Default).
+  return { cards, value, onChange: (v) => settings.set("terminal_colorscheme", v) }
 }
 
 /** A picker's row: a search, a strip of its cards, and past a dozen of them a way to a page of them all. */

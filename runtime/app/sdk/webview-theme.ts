@@ -1,7 +1,7 @@
 // A web page's look, from the app's theme: `themeCss` is its `--pumi-*` variables plus a base
 // sheet (`@layer pumi`, so a page's own CSS wins) that `src/ui/webview_bridge.js` puts in the
 // page's `<style id="pumi-theme">`.
-import type { Appearance, Metrics, Tokens } from "./theme.ts"
+import { isDark, type Metrics, type Tokens } from "./theme.ts"
 
 const UI_FONT = `-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Ubuntu, Cantarell, sans-serif`
 const MONO_FONT = `ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace`
@@ -25,7 +25,7 @@ function withAlpha(color: string, alpha: number): string {
 
 /** The stylesheet for a plugin's page: every token and metric as a `--pumi-*` variable, and a base
  *  sheet a page can override, since it is all in `@layer pumi`. */
-export function themeCss(tokens: Tokens, metrics: Metrics, appearance: Appearance): string {
+export function themeCss(tokens: Tokens, metrics: Metrics): string {
   const vars = Object.entries(tokens).map(([name, value]) => `--pumi-${kebab(name)}: ${value};`)
   for (const [name, value] of Object.entries(metrics)) vars.push(`--pumi-${kebab(name)}: ${value}px;`)
   const thumb = withAlpha(tokens.faint, 0.5)
@@ -34,7 +34,7 @@ export function themeCss(tokens: Tokens, metrics: Metrics, appearance: Appearanc
     ${vars.join("\n    ")}
     --pumi-font: ${UI_FONT};
     --pumi-font-mono: ${MONO_FONT};
-    color-scheme: ${appearance};
+    color-scheme: ${isDark(tokens.window) ? "dark" : "light"};
   }
   :where(html, body) {
     margin: 0;

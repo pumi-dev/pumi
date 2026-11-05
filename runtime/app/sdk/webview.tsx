@@ -9,7 +9,7 @@ import { entries, invoke } from "../app/plugins.ts"
 import { usePlugin } from "./contributions.ts"
 import { useDragState, useDroppable } from "./drag.ts"
 import { Icon } from "./elements.tsx"
-import { paletteTokens, useAppearance, useMetrics, usePalette, useTheme } from "./theme.ts"
+import { paletteTokens, useMetrics, usePalette, useTheme } from "./theme.ts"
 import { themeCss } from "./webview-theme.ts"
 
 export interface WebState {
@@ -241,8 +241,7 @@ export function WebView({ handle, src, args, zoom, autoFocus, onOpen, background
   // that should look like the terminal beside it can.
   const theme = useMemo(() => ({ ...tokens, ...paletteTokens(palette) }), [tokens, palette])
   const metrics = useMetrics()
-  const appearance = useAppearance()
-  const css = useMemo(() => themeCss(theme, metrics, appearance), [theme, metrics, appearance])
+  const css = useMemo(() => themeCss(theme, metrics), [theme, metrics])
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: PageItem[]; done(index: number | null): void }>()
   useEffect(() => {
     if (!onOpen) return

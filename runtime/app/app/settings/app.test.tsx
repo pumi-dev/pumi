@@ -58,14 +58,14 @@ plugins.entries.set("me/remote", {
   active: false,
   sent: false,
 })
-const { ThemeContext, DARK, METRICS } = await import("../../sdk/theme.ts")
+const { ThemeContext, TOKENS, METRICS } = await import("../../sdk/theme.ts")
 const { DEFAULT } = await import("../theme/default.tsx")
 const { SettingsApp } = await import("./app.tsx")
 const { useState } = await import("react")
 const { flushSync } = await import("../../react/reconciler/reconciler.ts")
 
 const gpu = hasNativeTestRenderer ? describe : describe.skip
-const theme = { spec: { name: "test" }, appearance: "dark" as const, tokens: DARK, metrics: METRICS, components: DEFAULT }
+const theme = { spec: { name: "test" }, tokens: TOKENS, metrics: METRICS, components: DEFAULT }
 
 async function open() {
   let go: (route: { page?: string; link?: string }) => void = () => {}

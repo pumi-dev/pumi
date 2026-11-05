@@ -17,14 +17,14 @@ mock.module("../../app/engine.ts", () => ({
   share: (_: unknown, next: unknown) => next,
   restartApp: () => {},
 }))
-const { ThemeContext, DARK, METRICS } = await import("../theme.ts")
+const { ThemeContext, TOKENS, METRICS } = await import("../theme.ts")
 const { DEFAULT } = await import("../../app/theme/default.tsx")
 const kit = await import("./index.ts")
 const { SettingsContext } = await import("./context.ts")
 const { formatNumber, parse, snap, titleOf, choicesOf } = await import("./options.ts")
 
 const gpu = hasNativeTestRenderer ? describe : describe.skip
-const theme = { spec: { name: "test" }, appearance: "dark" as const, tokens: DARK, metrics: METRICS, components: DEFAULT }
+const theme = { spec: { name: "test" }, tokens: TOKENS, metrics: METRICS, components: DEFAULT }
 
 function draw(node: ReactNode, size = { width: 600, height: 400 }) {
   const t = createTestRoot(size)

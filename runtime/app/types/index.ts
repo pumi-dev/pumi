@@ -21,7 +21,7 @@ export {
   type RendererProps,
   type WindowInfo,
 } from "../sdk/state.ts"
-export { defineTheme, useAppearance, useMetrics, usePalette, useTheme, type Appearance, type DockSpec, type IconButtonProps, type Metrics, type TabIconProps, type TerminalPalette, type ThemeSpec, type Tokens } from "../sdk/theme.ts"
+export { defineTheme, useMetrics, usePalette, useTheme, type DockSpec, type IconButtonProps, type Metrics, type TabIconProps, type TerminalPalette, type ThemeSpec, type Tokens } from "../sdk/theme.ts"
 export { usePlugin } from "../sdk/contributions.ts"
 export * from "../sdk/settings/index.ts"
 export { haptic, type HapticPattern } from "../sdk/haptic.ts"

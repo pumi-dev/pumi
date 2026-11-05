@@ -1,5 +1,5 @@
-// A UI theme: its colours (dark and light), the terminal's palette, its metrics and fonts, and
-// the window's parts it draws itself. The app's own parts (app/theme/default.tsx) draw anything a
+// A UI theme: its colours, the terminal's palette, its metrics and fonts, and the window's parts
+// it draws itself. The app's own parts (app/theme/default.tsx) draw anything a
 // theme leaves out, so a theme can replace one part (its view bar) or the whole window (`Window`).
 import { createContext, useContext, type ComponentType } from "react"
 import type { StyleDesc } from "../native/host.ts"
@@ -66,26 +66,14 @@ export interface Metrics {
   [metric: string]: number
 }
 
-/** A theme's two looks. */
-export type Appearance = "dark" | "light"
-
 /** What a theme is: `defineTheme({...})`. */
 export interface ThemeSpec {
   name: string
   description?: string
-  /**
-   * Its looks: its colours over the default's, per appearance. A theme with one look gives only
-   * that one (`colors: { light: … }`, and `terminal` the same) and is always drawn so.
-   */
-  colors?: { dark?: Partial<Tokens>; light?: Partial<Tokens> }
-  terminal?: { dark?: Partial<TerminalPalette>; light?: Partial<TerminalPalette> }
-  /**
-   * Which look draws when it has both: always one (`"dark"`, `"light"`), the system's
-   * (`"system"`, what leaving it out means), or what the user picks in a setting of its own:
-   * `{ option: "appearance" }` names an option its manifest declares (`contributes.options`,
-   * unprefixed) whose value is `system`, `dark` or `light`. The app has no such setting itself.
-   */
-  appearance?: Appearance | "system" | { option: string }
+  /** Its colours, over the default theme's: the ones it leaves out are the default's. */
+  colors?: Partial<Tokens>
+  /** Its terminals' palette, over the default theme's: the slots it leaves out are the default's. */
+  terminal?: Partial<TerminalPalette>
   metrics?: Partial<Metrics>
   /** The window's parts it draws itself, by name (see `Components`); the app's draw the rest. */
   components?: Partial<Components>
@@ -112,10 +100,9 @@ export interface ThemeSpec {
   /**
    * Its colours made from the terminals' palette (`terminal_colorscheme`'s scheme, else the
    * theme's own `terminal`), over `colors`: a theme that looks like the terminals it holds
-   * whatever scheme is picked, as pumi's own does. With a scheme picked, its look (dark or light)
-   * is the scheme's.
+   * whatever scheme is picked, as pumi's own does.
    */
-  fromPalette?: (palette: TerminalPalette, appearance: Appearance) => Partial<Tokens>
+  fromPalette?: (palette: TerminalPalette) => Partial<Tokens>
   /**
    * The window's docks, by a name of the theme's choosing: a side bar, a second one on the right,
    * a panel at the foot. Each gets a command that shows and hides it (`toggle_<name>`, in the View
@@ -195,54 +182,49 @@ export function defineTheme(spec: ThemeSpec): ThemeSpec {
   return spec
 }
 
-export const DARK: Tokens = {
-  window: "#282c34",
-  surface: "#26282b",
-  editor: "#1e1f22",
-  text: "#dfe1e5",
-  muted: "#b0b1b3",
-  faint: "#888a8f",
-  border: "#393b41",
-  hover: "#3c3e41",
-  active: "#494a4d",
-  selected: "#4a4d54",
-  accent: "#3474f0",
+/**
+ * The colour tokens every theme has, the default theme's: GitHub Dark Default made into the
+ * window's colours by the same rules as a picked scheme (`schemeLook`, app/theme/terminal). A
+ * theme's `colors` lay over them, and pumi's own theme lays its picked scheme's over them.
+ */
+export const TOKENS: Tokens = {
+  window: "#181c22",
+  surface: "#161a20",
+  editor: "#0d1117",
+  text: "#e6edf3",
+  muted: "#a5abb1",
+  faint: "#7a7f85",
+  border: "#272b31",
+  hover: "#23272d",
+  active: "#30343a",
+  selected: "#383d43",
+  accent: "#58a6ff",
   accentText: "#ffffff",
-  warning: "#f0c674",
-  error: "#cc6666",
-  success: "#a6e3a1",
-  overlay: "#26282bf2",
-  "status.working": "#89b4fa",
-  "status.blocked": "#fab387",
-  "status.error": "#f38ba8",
-  "status.done": "#a6e3a1",
-  "status.idle": "#9399b2",
-  "status.unknown": "#6c7086",
+  warning: "#d29922",
+  error: "#ff7b72",
+  success: "#3fb950",
+  overlay: "#161a20f2",
+  "status.working": "#58a6ff",
+  "status.blocked": "#d29922",
+  "status.error": "#ff7b72",
+  "status.done": "#3fb950",
+  "status.idle": "#8f959b",
+  "status.unknown": "#7a7f85",
 }
 
-export const LIGHT: Tokens = {
-  window: "#f7f8fa",
-  surface: "#f7f8fa",
-  editor: "#ffffff",
-  text: "#1f2023",
-  muted: "#6c707e",
-  faint: "#818594",
-  border: "#dcdee3",
-  hover: "#e4e5e9",
-  active: "#d8dae0",
-  selected: "#d3d5db",
-  accent: "#3574f0",
-  accentText: "#ffffff",
-  warning: "#b27200",
-  error: "#db3b4b",
-  success: "#40a02b",
-  overlay: "#f7f8faf2",
-  "status.working": "#1e66f5",
-  "status.blocked": "#d35e00",
-  "status.error": "#d20f39",
-  "status.done": "#2f8a1e",
-  "status.idle": "#7c7f93",
-  "status.unknown": "#9ca0b0",
+/**
+ * Whether `color` is dark, by its brightness: below 0.4 luminance. The window's colour says which
+ * way the native chrome goes (macOS's title bar, a page's `color-scheme`): there is no setting for
+ * it.
+ */
+export function isDark(color: string): boolean {
+  const hex = /^#[0-9a-f]{6}/i.test(color) ? color : "#000000"
+  const n = Number.parseInt(hex.slice(1, 7), 16)
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
+    const s = c / 255
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! < 0.4
 }
 
 export const METRICS: Metrics = { fontSize: 13, radius: 6, radiusSmall: 4, paneFade: 0.25, backgroundOpacity: 1 }
@@ -250,7 +232,6 @@ export const METRICS: Metrics = { fontSize: 13, radius: 6, radiusSmall: 4, paneF
 /** The theme in use and what it resolves to now. */
 export interface ThemeState {
   spec: ThemeSpec
-  appearance: "dark" | "light"
   tokens: Tokens
   metrics: Metrics
   /** The colour palette as it is drawn now (what the terminals use): `terminal_colorscheme`'s, the
@@ -269,17 +250,13 @@ function themeState(): ThemeState {
   return state
 }
 
-/** The theme's colour tokens, for the appearance in use. */
+/** The theme's colour tokens. */
 export function useTheme(): Tokens {
   return themeState().tokens
 }
 
 export function useMetrics(): Metrics {
   return themeState().metrics
-}
-
-export function useAppearance(): "dark" | "light" {
-  return themeState().appearance
 }
 
 /** The colour palette as it is drawn now: the terminals' background, foreground, cursor, selection
