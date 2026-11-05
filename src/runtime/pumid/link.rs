@@ -142,7 +142,7 @@ mod tests {
                 Input::Updated,
                 Input::Opened(sock),
                 Input::Introduced,
-                Input::Attached { client, state: Some(json!({ "sessions": [] })) },
+                Input::Attached { client, state: Some(json!({ "projects": [] })) },
                 Input::Registered,
             ],
         )
@@ -158,7 +158,7 @@ mod tests {
                 Effect::Open { generation: 1 },
                 Effect::Introduce("a"),
                 Effect::Attach("a"),
-                Effect::KeepModel(Some(json!({ "sessions": [] }))),
+                Effect::KeepModel(Some(json!({ "projects": [] }))),
                 Effect::Register("a"),
             ]
         );

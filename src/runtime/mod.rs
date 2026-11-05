@@ -45,10 +45,10 @@ pub struct Read {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Split { target: String, axis: Axis, cwd: Option<String>, env: Option<Value> },
-    NewView { workspace: String, cwd: Option<String>, env: Option<Value> },
-    NewWorkspace { cwd: Option<String>, env: Option<Value>, server: Option<String> },
-    NewWorktree { workspace: String },
-    OpenWorktree { workspace: String, path: String },
+    NewView { project: String, cwd: Option<String>, env: Option<Value> },
+    NewProject { path: Option<String>, env: Option<Value>, server: Option<String> },
+    NewWorktree { project: String },
+    OpenWorktree { project: String, path: String },
     MoveTab { tab: String, to: Destination },
     CloseTab { tab: String },
     CloseView { view: String },
@@ -57,23 +57,21 @@ pub enum Op {
     SendText { tab: String, text: String },
     SendKeys { tab: String, keys: Vec<String> },
     Relaunch { tab: String, line: String },
-    RenameWorkspace { workspace: String, label: String },
     RenameView { view: String, label: String },
     RenameTab { tab: String, label: Option<String> },
-    MoveWorkspace { workspace: String, before: Option<String> },
     SetRatio { view: String, path: Vec<bool>, ratio: f32 },
 }
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Destination {
     Beside { view: String, target: String, axis: Axis },
-    NewView { workspace: String },
-    NewWorkspace,
+    NewView { project: String },
+    NewProject,
 }
 #[cfg(test)]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Made {
-    pub workspace: Option<String>,
+    pub project: Option<String>,
     pub view: Option<String>,
     pub tabs: Vec<String>,
 }

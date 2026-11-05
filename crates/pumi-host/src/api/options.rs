@@ -18,7 +18,7 @@ use std::time::SystemTime;
 #[serde(rename_all = "lowercase")]
 pub enum OptionScope {
     Global,
-    Session,
+    Project,
     View,
     Tab,
     /// One plugin's own store (`plugin` names it).
@@ -28,7 +28,7 @@ pub enum OptionScope {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OptionOpts {
-    /// `global`, `session`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the
+    /// `global`, `project`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the
     /// object `id` names (the caller's own without that).
     #[serde(default)]
     pub scope: Optional<OptionScope>,
@@ -90,7 +90,7 @@ impl SetOptionOpts {
 fn scope_name(scope: OptionScope) -> &'static str {
     match scope {
         OptionScope::Global => "global",
-        OptionScope::Session => "session",
+        OptionScope::Project => "project",
         OptionScope::View => "view",
         OptionScope::Tab => "tab",
         OptionScope::Plugin => "plugin",

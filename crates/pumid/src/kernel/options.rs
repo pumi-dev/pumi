@@ -25,13 +25,13 @@ pub fn builtin() -> Vec<Decl> {
             Global,
             "macOS: a new terminal's program asks for privacy permissions (files, screen recording, …) as itself, so the prompt names it, not pumi; off, pumi asks and what pumi was granted covers every program it runs.",
         ),
-        Decl::new("base_index", Number, json!(0), Session, "The index of a session's first view."),
+        Decl::new("base_index", Number, json!(0), Project, "The index of a project's first view."),
         Decl::new(
             "worktree",
             String,
             json!(""),
             View,
-            "The git worktree a view works in, as a folder: where a terminal opened in the view without a `cwd` starts. Empty is its session's folder.",
+            "The git worktree a view works in, as a folder: where a terminal opened in the view without a `cwd` starts. Empty is its project's folder.",
         ),
         Decl::new(
             "history_bytes",
@@ -52,7 +52,7 @@ pub fn builtin() -> Vec<Decl> {
             "environment",
             Table,
             json!({}),
-            Session,
+            Project,
             "Variables a new terminal gets, by name; a `false` value removes one.",
         ),
         Decl::new(
@@ -60,7 +60,7 @@ pub fn builtin() -> Vec<Decl> {
             Boolean,
             json!(true),
             Global,
-            "The core exits a while after its last session closed and no one is connected.",
+            "The core exits a while after its last project closed and no one is connected.",
         ),
         Decl::new(
             "viewoptions",

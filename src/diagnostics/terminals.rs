@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-/// A terminal's counters, the session's to add to.
+/// A terminal's counters, the project's to add to.
 #[derive(Clone)]
 pub struct Handle(Arc<Mutex<Counters>>);
 

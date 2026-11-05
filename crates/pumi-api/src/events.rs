@@ -35,14 +35,14 @@ const INTERNAL: &[(&str, &str, &str, &[&str], &str)] = &[
         &["restarted"],
         "The core started, or started again after a restart (the host lays out again).",
     ),
-    ("client.attached", "core", "", &["client", "session"], "A client attached."),
+    ("client.attached", "core", "", &["client", "project"], "A client attached."),
     ("client.detached", "core", "", &["client"], "A client detached: the primary app may change."),
     (
         "client.changed",
         "core",
-        "the session's id",
+        "the project's id",
         &["client", "keys", "patch"],
-        "A client shows another session (`session.focus`): `patch.session` is it.",
+        "A client shows another project (`project.focus`): `patch.project` is it.",
     ),
     (
         "plugin.reloadRequested",

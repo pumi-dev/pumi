@@ -1,14 +1,14 @@
-//! `pumi do FILE [k=v …] [--args JSON|@FILE] [--session ID] [--tab ID] [--all] [--for DURATION]
+//! `pumi do FILE [k=v …] [--args JSON|@FILE] [--project ID] [--tab ID] [--all] [--for DURATION]
 //! [--fail-fast] [--json]`: one script, now, with its answer and an exit status. It runs on Bun
 //! with the worker's SDK as `pumi`, against the server (`runtime/app/worker/do.ts`), its calls
-//! defaulting to `--session`'s session (`PUMI_SESSION`) and `--tab`'s tab (`PUMI_TAB`).
+//! defaulting to `--project`'s project (`PUMI_PROJECT`) and `--tab`'s tab (`PUMI_TAB`).
 use crate::client::Address;
 use pumi_api::{Error, ErrorKind};
 use serde_json::{Map, Value, json};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const USAGE: &str = "usage: pumi do FILE [KEY=VALUE …] [--args JSON|@FILE] [--session ID] [--tab ID] [--all] [--for DURATION] [--fail-fast] [--json]
+const USAGE: &str = "usage: pumi do FILE [KEY=VALUE …] [--args JSON|@FILE] [--project ID] [--tab ID] [--all] [--for DURATION] [--fail-fast] [--json]
        pumi do -e EXPRESSION [KEY=VALUE …]   an expression, with the SDK's names in scope
        pumi do - [KEY=VALUE …]               a script on stdin";
 
@@ -67,7 +67,7 @@ fn value(text: &str) -> Value {
 
 /// The nouns `-e` has as `noun.verb(…)` objects where the SDK has none of its own: `tab.cells("%3")`
 /// is `call("tab.cells", "%3")`, and a tab method (`tab.read("%3", {lines: 5})`) is `tab.call`'s.
-const NOUNS: &[&str] = &["tab", "pane", "view", "session", "app", "update"];
+const NOUNS: &[&str] = &["tab", "pane", "view", "project", "app", "update"];
 const TAB_METHODS: &[&str] = &["read", "input", "run", "wait", "selection", "report", "attach"];
 
 /// `pumi do -e EXPRESSION` as a script: the SDK's names in scope (`workspace`, `call`, `tab`,
@@ -109,7 +109,7 @@ pub fn main(address: &Address, args: &[String], json: bool) -> Result<i32, Error
     let mut given: Option<Value> = None;
     let mut json = json;
     let mut lasting: Option<u64> = None;
-    let mut session: Option<String> = None;
+    let mut project: Option<String> = None;
     let mut tab: Option<String> = None;
     let mut all = false;
     let mut fail_fast = false;
@@ -121,7 +121,7 @@ pub fn main(address: &Address, args: &[String], json: bool) -> Result<i32, Error
             "--json" => json = true,
             "--all" => all = true,
             "--fail-fast" => fail_fast = true,
-            "--session" => session = Some(id_of(words.next().ok_or_else(|| usage("--session needs a session"))?, '$')),
+            "--project" => project = Some(id_of(words.next().ok_or_else(|| usage("--project needs a project"))?, '$')),
             "--tab" => tab = Some(id_of(words.next().ok_or_else(|| usage("--tab needs a tab"))?, '%')),
             "--for" => lasting = Some(crate::duration(words.next().ok_or_else(|| usage("--for needs a duration"))?)?),
             "--args" => {
@@ -183,10 +183,10 @@ pub fn main(address: &Address, args: &[String], json: bool) -> Result<i32, Error
         command.env("BUN_BE_BUN", "1");
     }
     command.arg(runtime.join("app/worker/do.ts")).arg(&script).env("PUMI", &socket);
-    // The script's own: what its calls are relative to (`self`, the event's session), and how its
+    // The script's own: what its calls are relative to (`self`, the event's project), and how its
     // handlers treat a failure. `runtime/app/worker/do.ts` reads these.
-    if let Some(session) = &session {
-        command.env("PUMI_SESSION", session);
+    if let Some(project) = &project {
+        command.env("PUMI_PROJECT", project);
     }
     if let Some(tab) = &tab {
         command.env("PUMI_TAB", tab);
@@ -195,7 +195,7 @@ pub fn main(address: &Address, args: &[String], json: bool) -> Result<i32, Error
         .env("PUMI_DO", json!(arguments).to_string())
         .env("PUMI_DO_JSON", if json { "1" } else { "0" })
         .env("PUMI_DO_FOR", lasting.unwrap_or(0).to_string())
-        .env("PUMI_DO_SESSION", session.clone().unwrap_or_default())
+        .env("PUMI_DO_PROJECT", project.clone().unwrap_or_default())
         .env("PUMI_DO_TAB", tab.clone().unwrap_or_default())
         .env("PUMI_DO_ALL", if all { "1" } else { "0" })
         .env("PUMI_DO_FAIL_FAST", if fail_fast { "1" } else { "0" });
@@ -211,7 +211,7 @@ mod tests {
     fn an_expression_has_every_noun_and_says_what_is_in_scope() {
         let script = super::expression_script("tab.cells(\"%3\")");
         assert!(script.contains("return await (async () => (tab.cells(\"%3\")))();"), "{script}");
-        assert!(script.contains(r#"["tab","pane","view","session","app","update"]"#), "{script}");
+        assert!(script.contains(r#"["tab","pane","view","project","app","update"]"#), "{script}");
         assert!(script.contains("In scope: "), "a name that is not there says what is");
     }
 }

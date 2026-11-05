@@ -7,7 +7,7 @@ use serde_json::Value;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PlaceSpec {
-    /// `tiled` (the default), `view` (a new view), `session` (a new session), `float`, `slot`,
+    /// `tiled` (the default), `view` (a new view), `project` (a new project), `float`, `slot`,
     /// `detached`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<PlaceKind>,
@@ -31,18 +31,18 @@ pub struct PlaceSpec {
     /// Tiled: into this view, beside its active pane. Float: over this view.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<u64>,
-    /// View: the session the new view goes in.
+    /// View: the project the new view goes in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<u64>,
+    pub project: Option<u64>,
     /// View: its index. Into a pane: where in its strip.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index: Option<u32>,
-    /// View, session: its name.
+    /// View: its name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Session: its directory.
+    /// Project: its folder, the one project there is; the home folder without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cwd: Option<String>,
+    pub path: Option<String>,
     /// Float: what it floats over: `view` (the default: the view's panes, and only while that view
     /// shows) or `client` (the whole window, whichever view it shows). `pane`, `cursor` and
     /// `mouse` are kept and drawn as `view`.
@@ -104,6 +104,6 @@ pub struct PlaceSpec {
 pub enum PlaceKind {
     Tiled,
     View,
-    Session,
+    Project,
     Float,
 }

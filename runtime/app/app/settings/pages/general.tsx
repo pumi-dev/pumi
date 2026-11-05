@@ -13,14 +13,14 @@ interface ServerStatus {
   version?: string
   pid?: number
   tabs?: number
-  sessions?: number
+  projects?: number
   plugins?: number
 }
 
-/** `v0.42.0 · 3 tabs · 1 session`. */
+/** `v0.42.0 · 3 tabs · 1 project`. */
 export function serverSummary(s: ServerStatus): string {
   const count = (n: number | undefined, one: string) => `${n ?? 0} ${one}${n === 1 ? "" : "s"}`
-  return [`v${s.version ?? "?"}`, count(s.tabs, "tab"), count(s.sessions, "session"), count(s.plugins, "plugin")].join(" · ")
+  return [`v${s.version ?? "?"}`, count(s.tabs, "tab"), count(s.projects, "project"), count(s.plugins, "plugin")].join(" · ")
 }
 
 function ServerSection() {

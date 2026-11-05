@@ -472,7 +472,7 @@
       "provider": "core",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Wait for an event, by name or glob: the call answers when one that matches fires, with the\nevent (`{event, match, session, view, tab, data}`), or with `null` when `timeout` passes or\nthe caller goes. A wait that times out is not an error.",
+      "desc": "Wait for an event, by name or glob: the call answers when one that matches fires, with the\nevent (`{event, match, project, view, tab, data}`), or with `null` when `timeout` passes or\nthe caller goes. A wait that times out is not an error.",
       "parameters": [
         [
           "Object",
@@ -566,7 +566,7 @@
               "match": {
                 "type": "string"
               },
-              "session": {
+              "project": {
                 "anyOf": [
                   {
                     "type": "string",
@@ -1263,13 +1263,13 @@
             "properties": {
               "scope": {
                 "default": null,
-                "description": "`global`, `session`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the\nobject `id` names (the caller's own without that).",
+                "description": "`global`, `project`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the\nobject `id` names (the caller's own without that).",
                 "oneOf": [
                   {
                     "type": "string",
                     "enum": [
                       "global",
-                      "session",
+                      "project",
                       "view",
                       "tab"
                     ]
@@ -1375,7 +1375,7 @@
                     "type": "string",
                     "enum": [
                       "global",
-                      "session",
+                      "project",
                       "view",
                       "tab"
                     ]
@@ -1528,7 +1528,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Give a pane its view's focus (its front tab becomes the view's active tab), and make its view\nand session current; or move from it to another: the one beside it (`direction`), so many\non (`offset`), or the one used last (`last`). No id is the caller's tab's pane. Moving out of\na zoomed pane unzooms the view; nothing there is not an error.",
+      "desc": "Give a pane its view's focus (its front tab becomes the view's active tab), and make its view\nand project current; or move from it to another: the one beside it (`direction`), so many\non (`offset`), or the one used last (`last`). No id is the caller's tab's pane. Moving out of\na zoomed pane unzooms the view; nothing there is not an error.",
       "parameters": [
         [
           "String",
@@ -2394,6 +2394,2088 @@
             }
           ],
           "desc": "The ones running in a directory"
+        }
+      ],
+      "source": "core"
+    },
+    {
+      "name": "project.close",
+      "since": 1,
+      "provider": "core",
+      "runs_on": "server",
+      "effect": "write",
+      "desc": "Close a project and its views and tabs. No id is the caller's.",
+      "parameters": [
+        [
+          "String",
+          "project"
+        ]
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns": "nil",
+      "returns_schema": {
+        "type": "null"
+      },
+      "examples": [
+        {
+          "args": [
+            "$1"
+          ],
+          "result": null
+        }
+      ],
+      "source": "core"
+    },
+    {
+      "name": "project.focus",
+      "since": 1,
+      "provider": "host",
+      "runs_on": "server",
+      "effect": "write",
+      "desc": "Show a project in the caller's client; or move from it to another by offset, or to the last\none (`-n`, `-p`, `-l`). No id is the caller's project.",
+      "parameters": [
+        [
+          "String",
+          "project"
+        ],
+        [
+          "Dict",
+          "opts"
+        ]
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opts": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "offset": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "format": "int64",
+                    "description": "To so many projects on (or back), in the order they were made, wrapping.",
+                    "default": null
+                  },
+                  "last": {
+                    "type": "boolean",
+                    "description": "To the project used most recently before it.",
+                    "default": false
+                  }
+                },
+                "description": "Where `project.focus` moves from its project."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns": "nil",
+      "returns_schema": {
+        "type": "null"
+      },
+      "examples": [
+        {
+          "args": [
+            "$1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            {
+              "offset": 1
+            }
+          ],
+          "result": null,
+          "desc": "The next project."
+        },
+        {
+          "args": [
+            null,
+            {
+              "last": true
+            }
+          ],
+          "result": null
+        }
+      ],
+      "source": "core"
+    },
+    {
+      "name": "project.get",
+      "since": 1,
+      "provider": "core",
+      "runs_on": "server",
+      "effect": "read",
+      "desc": "A project: its name, directory, views and active view; with `deep`, the whole tree in one call.\nNo id is the caller's: its tab's project, its client's, or the one used last.",
+      "parameters": [
+        [
+          "String",
+          "project"
+        ],
+        [
+          "Dict",
+          "opts"
+        ]
+      ],
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opts": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "deep": {
+                    "type": "boolean",
+                    "description": "The whole tree: every view, each with its tabs.",
+                    "default": false
+                  }
+                },
+                "description": "What `project.get` adds."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns": "Dict",
+      "returns_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          },
+          "path": {
+            "type": "string",
+            "description": "Its folder, where its terminals start without a `cwd` of their own."
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+            },
+            "description": "Its views, in index order."
+          },
+          "activeView": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tree": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "description": "A view and its tabs, in `project.get {deep}`'s tree.",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+                },
+                "project": {
+                  "type": "string",
+                  "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The name it was given; `null` while it takes its active tab's title."
+                },
+                "index": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "description": "Its index in its project."
+                },
+                "layout": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "pane": {
+                          "type": "string",
+                          "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+                        },
+                        "tabs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                          },
+                          "description": "Its tabs, in its strip's order.",
+                          "default": []
+                        },
+                        "active": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "The tab in front."
+                        }
+                      },
+                      "required": [
+                        "pane"
+                      ],
+                      "description": "A pane of a layout. `view.update {layout}` names each pane, and its tabs stay as they are."
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "axis": {
+                          "type": "string",
+                          "enum": [
+                            "row",
+                            "column"
+                          ],
+                          "description": "A `row` lays its halves out left to right, a `column` top to bottom."
+                        },
+                        "ratio": {
+                          "type": "number",
+                          "format": "double",
+                          "description": "The first half's share, between 0 and 1."
+                        },
+                        "first": {
+                          "$ref": "#/$defs/LayoutTree"
+                        },
+                        "second": {
+                          "$ref": "#/$defs/LayoutTree"
+                        }
+                      },
+                      "required": [
+                        "axis",
+                        "ratio",
+                        "first",
+                        "second"
+                      ]
+                    }
+                  ],
+                  "description": "A view's panes: a pane, or a split of two halves along an axis."
+                },
+                "activeTab": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The tab with the focus, in front of its pane."
+                },
+                "activePane": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The pane with the focus."
+                },
+                "zoom": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The pane zoomed to fill it."
+                },
+                "tabs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                      },
+                      "project": {
+                        "type": "string",
+                        "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+                      },
+                      "view": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "block": {
+                        "type": "string",
+                        "description": "The block it holds (`file`, `owner.name.page`)."
+                      },
+                      "traits": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Each trait it has, with its fields: `{\"pumi_dev.files.file\": {path}}`."
+                      },
+                      "place": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tiled",
+                              "float",
+                              "hidden",
+                              "view",
+                              "project"
+                            ],
+                            "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new project."
+                          },
+                          "view": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Tiled: into this view, beside its active tab. Float: over this view."
+                          },
+                          "pane": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "current"
+                                    ]
+                                  }
+                                ],
+                                "description": "A pane a place names: one there is, or `current`, the caller's tab's."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,\nbeside it, in a pane of its own. Where a tiled tab is, its pane."
+                          },
+                          "project": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "new"
+                                    ]
+                                  }
+                                ],
+                                "description": "A project a place names: one there is, or `new`."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "View: the project the new view goes in; `new` makes a project for the tab."
+                          },
+                          "split": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "left",
+                                  "right",
+                                  "up",
+                                  "down"
+                                ],
+                                "description": "Where a new pane goes beside an existing one."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Tiled: which side of the pane it splits, making a pane for the tab; `down` by default."
+                          },
+                          "index": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "format": "uint32",
+                            "minimum": 0,
+                            "description": "View: the new view's index. Into a pane: where in its strip, after its front tab by\ndefault."
+                          },
+                          "swap": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Moving: trade places with this tab."
+                          },
+                          "ratio": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "format": "double",
+                            "description": "Tiled: the new pane's share of what it splits, between 0 and 1."
+                          },
+                          "beside": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Tiled: the tab whose pane to split, the caller's by default. Float: the tab\n`relative: \"pane\"` is relative to."
+                          },
+                          "size": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Tiled: the new pane's size, `\"30%\"` or cells, instead of `ratio`."
+                          },
+                          "full": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ],
+                            "description": "Tiled: split the whole view, not one pane."
+                          },
+                          "name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "View: its name."
+                          },
+                          "path": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "Project: its folder, the one project there is; the home folder without one."
+                          },
+                          "focus": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ],
+                            "description": "Make it the caller's tab; `true` by default."
+                          },
+                          "replace": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Opening: in this tab instead of the block it holds, keeping its id, place and options."
+                          },
+                          "relative": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "Float: what it floats over, `view` (the default) or `client`."
+                          },
+                          "anchor": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "NW",
+                                  "N",
+                                  "NE",
+                                  "W",
+                                  "center",
+                                  "E",
+                                  "SW",
+                                  "S",
+                                  "SE"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Float: the corner or edge it is pinned to (`NW` … `SE`, `center`)."
+                          },
+                          "row": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Float: how far in from its anchor: cells, `\"24px\"` or `\"10%\"`."
+                          },
+                          "col": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Float: cells, `\"480px\"` or a share of what it floats over (`\"50%\"`, the default)."
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "border": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "Float: `none` draws it bare."
+                          },
+                          "focusable": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ],
+                            "description": "Float: it takes the keyboard when it opens (`true` by default)."
+                          },
+                          "mouse": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ],
+                            "description": "Float: it takes the pointer (`focusable` by default)."
+                          },
+                          "dismiss": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Float: what closes it: `escape`, `key`, `press`, `scroll`."
+                          },
+                          "backdrop": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "format": "uint8",
+                            "minimum": 0,
+                            "maximum": 255,
+                            "description": "Float: dims what is under it, 0 to 100."
+                          },
+                          "zIndex": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "format": "int64",
+                            "description": "Float: above floats with a lower one (50 by default)."
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "description": "Where a tab is, and where `tab.open` and `tab.update` put one."
+                      },
+                      "title": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "cwd": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Its directory: a terminal's program's."
+                      },
+                      "foregroundCwd": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "The directory of its foreground process."
+                      },
+                      "process": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "pid": {
+                                "type": "integer",
+                                "format": "uint32",
+                                "minimum": 0
+                              },
+                              "command": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "description": "Its program, as the system names it."
+                              }
+                            },
+                            "required": [
+                              "pid",
+                              "command"
+                            ],
+                            "description": "A tab's foreground process."
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "scroll": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "offsetFromBottom": {
+                            "type": "integer",
+                            "format": "uint64",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "offsetFromBottom"
+                        ],
+                        "description": "How far a tab is scrolled back."
+                      },
+                      "neighbors": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "left": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "right": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "up": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "down": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "description": "The tab beside a tab on each side, in its view."
+                      },
+                      "isFocused": {
+                        "type": "boolean",
+                        "description": "It is the tab a client is in: its view's active tab, in its project's active view."
+                      },
+                      "isZoomed": {
+                        "type": "boolean",
+                        "description": "It fills its view."
+                      },
+                      "options": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "The options set on it."
+                      },
+                      "state": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "pumi_state": {
+                                "type": "integer",
+                                "format": "uint32",
+                                "minimum": 0
+                              },
+                              "block": {
+                                "type": "string",
+                                "description": "The block that saved it."
+                              },
+                              "block_version": {
+                                "type": "integer",
+                                "format": "uint32",
+                                "minimum": 0,
+                                "description": "The version of that block's `data`."
+                              },
+                              "options": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "The tab's own options, `@user` ones included.",
+                                "default": {}
+                              },
+                              "data": {
+                                "description": "What the block's `serialize` returned.",
+                                "default": null
+                              },
+                              "blobs": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "encoding": {
+                                      "type": "string",
+                                      "description": "How to read it: `vt` (terminal output), `png`, `bytes`."
+                                    },
+                                    "size": {
+                                      "type": "integer",
+                                      "format": "uint64",
+                                      "minimum": 0
+                                    },
+                                    "ref": {
+                                      "type": "string",
+                                      "description": "`blob:<sha256>`."
+                                    },
+                                    "data": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ],
+                                      "description": "The bytes, in base64, when the state is to leave this server (`opts.blobs = \"inline\"`)."
+                                    }
+                                  },
+                                  "required": [
+                                    "encoding",
+                                    "size",
+                                    "ref"
+                                  ],
+                                  "description": "A blob: its content's hash, and the content itself when the state travels."
+                                },
+                                "description": "Large parts (scrollback, images), by name."
+                              },
+                              "extra": {
+                                "type": "object",
+                                "additionalProperties": true,
+                                "description": "What other plugins added in `TabSavePre`, by plugin."
+                              },
+                              "strategy": {
+                                "oneOf": [
+                                  {
+                                    "type": "string",
+                                    "const": "exact",
+                                    "description": "As it was."
+                                  },
+                                  {
+                                    "type": "string",
+                                    "const": "relaunch",
+                                    "description": "By running something again: a terminal's command, in its directory, under its scrollback."
+                                  },
+                                  {
+                                    "type": "string",
+                                    "const": "reference",
+                                    "description": "It points at something that must still exist, such as a file."
+                                  }
+                                ],
+                                "description": "How a state comes back."
+                              },
+                              "needs": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "path"
+                                        },
+                                        "path": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "path"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "program"
+                                        },
+                                        "name": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "name"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "url"
+                                        },
+                                        "url": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "url"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "description": "What must be true where it is restored."
+                              },
+                              "origin": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "server": {
+                                        "type": "string"
+                                      },
+                                      "tab": {
+                                        "type": "integer",
+                                        "format": "uint64",
+                                        "minimum": 0
+                                      },
+                                      "at": {
+                                        "type": "string",
+                                        "description": "RFC 3339, UTC."
+                                      }
+                                    },
+                                    "required": [
+                                      "server",
+                                      "tab",
+                                      "at"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "pumi_state",
+                              "block",
+                              "block_version",
+                              "strategy"
+                            ],
+                            "description": "Everything needed to bring a tab back, here or on another server."
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "With `state`: its saved state."
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "project",
+                      "block",
+                      "traits",
+                      "place",
+                      "scroll",
+                      "neighbors",
+                      "isFocused",
+                      "isZoomed",
+                      "options"
+                    ],
+                    "description": "A tab, as `tab.get` answers it."
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "project",
+                "index",
+                "layout",
+                "tabs"
+              ]
+            },
+            "description": "With `deep`: every view, each with its tabs."
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "views"
+        ],
+        "description": "A project, as `project.get` answers it.",
+        "$defs": {
+          "ProjectInfo": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/ProjectRef"
+              },
+              "path": {
+                "type": "string",
+                "description": "Its folder, where its terminals start without a `cwd` of their own."
+              },
+              "views": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ViewRef"
+                },
+                "description": "Its views, in index order."
+              },
+              "activeView": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ViewRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tree": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/$defs/ViewTree"
+                },
+                "description": "With `deep`: every view, each with its tabs."
+              }
+            },
+            "required": [
+              "id",
+              "path",
+              "views"
+            ],
+            "description": "A project, as `project.get` answers it."
+          },
+          "ProjectRef": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+          },
+          "ViewRef": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
+          },
+          "ViewTree": {
+            "type": "object",
+            "description": "A view and its tabs, in `project.get {deep}`'s tree.",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/ViewRef"
+              },
+              "project": {
+                "$ref": "#/$defs/ProjectRef"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The name it was given; `null` while it takes its active tab's title."
+              },
+              "index": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0,
+                "description": "Its index in its project."
+              },
+              "layout": {
+                "$ref": "#/$defs/LayoutTree"
+              },
+              "activeTab": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The tab with the focus, in front of its pane."
+              },
+              "activePane": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PaneRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The pane with the focus."
+              },
+              "zoom": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PaneRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The pane zoomed to fill it."
+              },
+              "tabs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/TabInfo"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "project",
+              "index",
+              "layout",
+              "tabs"
+            ]
+          },
+          "LayoutTree": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/LayoutPane"
+              },
+              {
+                "$ref": "#/$defs/LayoutSplit"
+              }
+            ],
+            "description": "A view's panes: a pane, or a split of two halves along an axis."
+          },
+          "LayoutPane": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pane": {
+                "$ref": "#/$defs/PaneRef"
+              },
+              "tabs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/TabRef"
+                },
+                "description": "Its tabs, in its strip's order.",
+                "default": []
+              },
+              "active": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The tab in front."
+              }
+            },
+            "required": [
+              "pane"
+            ],
+            "description": "A pane of a layout. `view.update {layout}` names each pane, and its tabs stay as they are."
+          },
+          "PaneRef": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
+          },
+          "TabRef": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
+          },
+          "LayoutSplit": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "axis": {
+                "$ref": "#/$defs/LayoutAxis"
+              },
+              "ratio": {
+                "type": "number",
+                "format": "double",
+                "description": "The first half's share, between 0 and 1."
+              },
+              "first": {
+                "$ref": "#/$defs/LayoutTree"
+              },
+              "second": {
+                "$ref": "#/$defs/LayoutTree"
+              }
+            },
+            "required": [
+              "axis",
+              "ratio",
+              "first",
+              "second"
+            ]
+          },
+          "LayoutAxis": {
+            "type": "string",
+            "enum": [
+              "row",
+              "column"
+            ],
+            "description": "A `row` lays its halves out left to right, a `column` top to bottom."
+          },
+          "TabInfo": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/TabRef"
+              },
+              "project": {
+                "$ref": "#/$defs/ProjectRef"
+              },
+              "view": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ViewRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "block": {
+                "type": "string",
+                "description": "The block it holds (`file`, `owner.name.page`)."
+              },
+              "traits": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Each trait it has, with its fields: `{\"pumi_dev.files.file\": {path}}`."
+              },
+              "place": {
+                "$ref": "#/$defs/TabPlace"
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cwd": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Its directory: a terminal's program's."
+              },
+              "foregroundCwd": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The directory of its foreground process."
+              },
+              "process": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Process"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scroll": {
+                "$ref": "#/$defs/Scroll"
+              },
+              "neighbors": {
+                "$ref": "#/$defs/Neighbors"
+              },
+              "isFocused": {
+                "type": "boolean",
+                "description": "It is the tab a client is in: its view's active tab, in its project's active view."
+              },
+              "isZoomed": {
+                "type": "boolean",
+                "description": "It fills its view."
+              },
+              "options": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "The options set on it."
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabState"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "With `state`: its saved state."
+              }
+            },
+            "required": [
+              "id",
+              "project",
+              "block",
+              "traits",
+              "place",
+              "scroll",
+              "neighbors",
+              "isFocused",
+              "isZoomed",
+              "options"
+            ],
+            "description": "A tab, as `tab.get` answers it."
+          },
+          "TabPlace": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "$ref": "#/$defs/TabPlaceKind"
+              },
+              "view": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ViewRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Tiled: into this view, beside its active tab. Float: over this view."
+              },
+              "pane": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PaneTarget"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,\nbeside it, in a pane of its own. Where a tiled tab is, its pane."
+              },
+              "project": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProjectTarget"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "View: the project the new view goes in; `new` makes a project for the tab."
+              },
+              "split": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Side"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Tiled: which side of the pane it splits, making a pane for the tab; `down` by default."
+              },
+              "index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0,
+                "description": "View: the new view's index. Into a pane: where in its strip, after its front tab by\ndefault."
+              },
+              "swap": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Moving: trade places with this tab."
+              },
+              "ratio": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double",
+                "description": "Tiled: the new pane's share of what it splits, between 0 and 1."
+              },
+              "beside": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Tiled: the tab whose pane to split, the caller's by default. Float: the tab\n`relative: \"pane\"` is relative to."
+              },
+              "size": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Tiled: the new pane's size, `\"30%\"` or cells, instead of `ratio`."
+              },
+              "full": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Tiled: split the whole view, not one pane."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "View: its name."
+              },
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Project: its folder, the one project there is; the home folder without one."
+              },
+              "focus": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Make it the caller's tab; `true` by default."
+              },
+              "replace": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Opening: in this tab instead of the block it holds, keeping its id, place and options."
+              },
+              "relative": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Float: what it floats over, `view` (the default) or `client`."
+              },
+              "anchor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "NW",
+                      "N",
+                      "NE",
+                      "W",
+                      "center",
+                      "E",
+                      "SW",
+                      "S",
+                      "SE"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Float: the corner or edge it is pinned to (`NW` … `SE`, `center`)."
+              },
+              "row": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Float: how far in from its anchor: cells, `\"24px\"` or `\"10%\"`."
+              },
+              "col": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "width": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Float: cells, `\"480px\"` or a share of what it floats over (`\"50%\"`, the default)."
+              },
+              "height": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "border": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Float: `none` draws it bare."
+              },
+              "focusable": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Float: it takes the keyboard when it opens (`true` by default)."
+              },
+              "mouse": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Float: it takes the pointer (`focusable` by default)."
+              },
+              "dismiss": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "description": "Float: what closes it: `escape`, `key`, `press`, `scroll`."
+              },
+              "backdrop": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint8",
+                "minimum": 0,
+                "maximum": 255,
+                "description": "Float: dims what is under it, 0 to 100."
+              },
+              "zIndex": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int64",
+                "description": "Float: above floats with a lower one (50 by default)."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "description": "Where a tab is, and where `tab.open` and `tab.update` put one."
+          },
+          "TabPlaceKind": {
+            "type": "string",
+            "enum": [
+              "tiled",
+              "float",
+              "hidden",
+              "view",
+              "project"
+            ],
+            "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new project."
+          },
+          "PaneTarget": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PaneRef"
+              },
+              {
+                "$ref": "#/$defs/CurrentWord"
+              }
+            ],
+            "description": "A pane a place names: one there is, or `current`, the caller's tab's."
+          },
+          "CurrentWord": {
+            "type": "string",
+            "enum": [
+              "current"
+            ]
+          },
+          "ProjectTarget": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ProjectRef"
+              },
+              {
+                "$ref": "#/$defs/NewWord"
+              }
+            ],
+            "description": "A project a place names: one there is, or `new`."
+          },
+          "NewWord": {
+            "type": "string",
+            "enum": [
+              "new"
+            ]
+          },
+          "Side": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "up",
+              "down"
+            ],
+            "description": "Where a new pane goes beside an existing one."
+          },
+          "Process": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pid": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "command": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Its program, as the system names it."
+              }
+            },
+            "required": [
+              "pid",
+              "command"
+            ],
+            "description": "A tab's foreground process."
+          },
+          "Scroll": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "offsetFromBottom": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "offsetFromBottom"
+            ],
+            "description": "How far a tab is scrolled back."
+          },
+          "Neighbors": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "left": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "right": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "up": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "down": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TabRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "The tab beside a tab on each side, in its view."
+          },
+          "TabState": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pumi_state": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "block": {
+                "type": "string",
+                "description": "The block that saved it."
+              },
+              "block_version": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0,
+                "description": "The version of that block's `data`."
+              },
+              "options": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "The tab's own options, `@user` ones included.",
+                "default": {}
+              },
+              "data": {
+                "description": "What the block's `serialize` returned.",
+                "default": null
+              },
+              "blobs": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/Blob"
+                },
+                "description": "Large parts (scrollback, images), by name."
+              },
+              "extra": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "What other plugins added in `TabSavePre`, by plugin."
+              },
+              "strategy": {
+                "$ref": "#/$defs/Strategy"
+              },
+              "needs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Need"
+                },
+                "description": "What must be true where it is restored."
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Origin"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "pumi_state",
+              "block",
+              "block_version",
+              "strategy"
+            ],
+            "description": "Everything needed to bring a tab back, here or on another server."
+          },
+          "Blob": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "encoding": {
+                "type": "string",
+                "description": "How to read it: `vt` (terminal output), `png`, `bytes`."
+              },
+              "size": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "ref": {
+                "type": "string",
+                "description": "`blob:<sha256>`."
+              },
+              "data": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The bytes, in base64, when the state is to leave this server (`opts.blobs = \"inline\"`)."
+              }
+            },
+            "required": [
+              "encoding",
+              "size",
+              "ref"
+            ],
+            "description": "A blob: its content's hash, and the content itself when the state travels."
+          },
+          "Strategy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "exact",
+                "description": "As it was."
+              },
+              {
+                "type": "string",
+                "const": "relaunch",
+                "description": "By running something again: a terminal's command, in its directory, under its scrollback."
+              },
+              {
+                "type": "string",
+                "const": "reference",
+                "description": "It points at something that must still exist, such as a file."
+              }
+            ],
+            "description": "How a state comes back."
+          },
+          "Need": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "path"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "program"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "url"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "url"
+                ]
+              }
+            ]
+          },
+          "Origin": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "server": {
+                "type": "string"
+              },
+              "tab": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "at": {
+                "type": "string",
+                "description": "RFC 3339, UTC."
+              }
+            },
+            "required": [
+              "server",
+              "tab",
+              "at"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "args": [],
+          "desc": "The caller's."
+        },
+        {
+          "args": [
+            "$1",
+            {
+              "deep": true
+            }
+          ],
+          "result": {
+            "id": "$1",
+            "path": "/src",
+            "views": [
+              "@1"
+            ],
+            "activeView": "@1",
+            "tree": []
+          }
+        }
+      ],
+      "source": "core"
+    },
+    {
+      "name": "project.list",
+      "since": 1,
+      "provider": "core",
+      "runs_on": "server",
+      "effect": "read",
+      "desc": "List every project, in creation order.",
+      "parameters": [],
+      "params_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns": "Array",
+      "returns_schema": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
+        }
+      },
+      "examples": [
+        {
+          "args": [],
+          "result": [
+            "$1"
+          ]
         }
       ],
       "source": "core"
@@ -3265,2186 +5347,6 @@
       "source": "core"
     },
     {
-      "name": "session.close",
-      "since": 1,
-      "provider": "core",
-      "runs_on": "server",
-      "effect": "write",
-      "desc": "Close a session and its views and tabs. No id is the caller's.",
-      "parameters": [
-        [
-          "String",
-          "session"
-        ]
-      ],
-      "params_schema": {
-        "type": "object",
-        "properties": {
-          "session": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [],
-        "additionalProperties": false
-      },
-      "returns": "nil",
-      "returns_schema": {
-        "type": "null"
-      },
-      "examples": [
-        {
-          "args": [
-            "$1"
-          ],
-          "result": null
-        }
-      ],
-      "source": "core"
-    },
-    {
-      "name": "session.focus",
-      "since": 1,
-      "provider": "host",
-      "runs_on": "server",
-      "effect": "write",
-      "desc": "Show a session in the caller's client; or move from it to another by offset, or to the last\none (`-n`, `-p`, `-l`). No id is the caller's session.",
-      "parameters": [
-        [
-          "String",
-          "session"
-        ],
-        [
-          "Dict",
-          "opts"
-        ]
-      ],
-      "params_schema": {
-        "type": "object",
-        "properties": {
-          "session": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "opts": {
-            "anyOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "offset": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "format": "int64",
-                    "description": "To so many sessions on (or back), in the order they were made, wrapping.",
-                    "default": null
-                  },
-                  "last": {
-                    "type": "boolean",
-                    "description": "To the session used most recently before it.",
-                    "default": false
-                  }
-                },
-                "description": "Where `session.focus` moves from its session."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [],
-        "additionalProperties": false
-      },
-      "returns": "nil",
-      "returns_schema": {
-        "type": "null"
-      },
-      "examples": [
-        {
-          "args": [
-            "$1"
-          ],
-          "result": null
-        },
-        {
-          "args": [
-            null,
-            {
-              "offset": 1
-            }
-          ],
-          "result": null,
-          "desc": "The next session."
-        },
-        {
-          "args": [
-            null,
-            {
-              "last": true
-            }
-          ],
-          "result": null
-        }
-      ],
-      "source": "core"
-    },
-    {
-      "name": "session.get",
-      "since": 1,
-      "provider": "core",
-      "runs_on": "server",
-      "effect": "read",
-      "desc": "A session: its name, directory, views and active view; with `deep`, the whole tree in one call.\nNo id is the caller's: its tab's session, its client's, or the one used last.",
-      "parameters": [
-        [
-          "String",
-          "session"
-        ],
-        [
-          "Dict",
-          "opts"
-        ]
-      ],
-      "params_schema": {
-        "type": "object",
-        "properties": {
-          "session": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "opts": {
-            "anyOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "deep": {
-                    "type": "boolean",
-                    "description": "The whole tree: every view, each with its tabs.",
-                    "default": false
-                  }
-                },
-                "description": "What `session.get` adds."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [],
-        "additionalProperties": false
-      },
-      "returns": "Dict",
-      "returns_schema": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-          },
-          "name": {
-            "type": "string"
-          },
-          "cwd": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Its directory, where its terminals start without a `cwd` of their own."
-          },
-          "views": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
-            },
-            "description": "Its views, in index order."
-          },
-          "activeView": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "tree": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "type": "object",
-              "description": "A view and its tabs, in `session.get {deep}`'s tree.",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
-                },
-                "session": {
-                  "type": "string",
-                  "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-                },
-                "name": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "The name it was given; `null` while it takes its active tab's title."
-                },
-                "index": {
-                  "type": "integer",
-                  "format": "uint32",
-                  "minimum": 0,
-                  "description": "Its index in its session."
-                },
-                "layout": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "pane": {
-                          "type": "string",
-                          "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
-                        },
-                        "tabs": {
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                          },
-                          "description": "Its tabs, in its strip's order.",
-                          "default": []
-                        },
-                        "active": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "The tab in front."
-                        }
-                      },
-                      "required": [
-                        "pane"
-                      ],
-                      "description": "A pane of a layout. `view.update {layout}` names each pane, and its tabs stay as they are."
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "axis": {
-                          "type": "string",
-                          "enum": [
-                            "row",
-                            "column"
-                          ],
-                          "description": "A `row` lays its halves out left to right, a `column` top to bottom."
-                        },
-                        "ratio": {
-                          "type": "number",
-                          "format": "double",
-                          "description": "The first half's share, between 0 and 1."
-                        },
-                        "first": {
-                          "$ref": "#/$defs/LayoutTree"
-                        },
-                        "second": {
-                          "$ref": "#/$defs/LayoutTree"
-                        }
-                      },
-                      "required": [
-                        "axis",
-                        "ratio",
-                        "first",
-                        "second"
-                      ]
-                    }
-                  ],
-                  "description": "A view's panes: a pane, or a split of two halves along an axis."
-                },
-                "activeTab": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "The tab with the focus, in front of its pane."
-                },
-                "activePane": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "The pane with the focus."
-                },
-                "zoom": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "description": "The pane zoomed to fill it."
-                },
-                "tabs": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                      },
-                      "session": {
-                        "type": "string",
-                        "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-                      },
-                      "view": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "block": {
-                        "type": "string",
-                        "description": "The block it holds (`file`, `owner.name.page`)."
-                      },
-                      "traits": {
-                        "type": "object",
-                        "additionalProperties": true,
-                        "description": "Each trait it has, with its fields: `{\"pumi_dev.files.file\": {path}}`."
-                      },
-                      "place": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "tiled",
-                              "float",
-                              "hidden",
-                              "view",
-                              "session"
-                            ],
-                            "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new session."
-                          },
-                          "view": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Tiled: into this view, beside its active tab. Float: over this view."
-                          },
-                          "pane": {
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string",
-                                    "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": [
-                                      "current"
-                                    ]
-                                  }
-                                ],
-                                "description": "A pane a place names: one there is, or `current`, the caller's tab's."
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,\nbeside it, in a pane of its own. Where a tiled tab is, its pane."
-                          },
-                          "session": {
-                            "anyOf": [
-                              {
-                                "anyOf": [
-                                  {
-                                    "type": "string",
-                                    "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-                                  },
-                                  {
-                                    "type": "string",
-                                    "enum": [
-                                      "new"
-                                    ]
-                                  }
-                                ],
-                                "description": "A session a place names: one there is, or `new`."
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "View: the session the new view goes in; `new` makes a session for the tab."
-                          },
-                          "split": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "enum": [
-                                  "left",
-                                  "right",
-                                  "up",
-                                  "down"
-                                ],
-                                "description": "Where a new pane goes beside an existing one."
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Tiled: which side of the pane it splits, making a pane for the tab; `down` by default."
-                          },
-                          "index": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "format": "uint32",
-                            "minimum": 0,
-                            "description": "View: the new view's index. Into a pane: where in its strip, after its front tab by\ndefault."
-                          },
-                          "swap": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Moving: trade places with this tab."
-                          },
-                          "ratio": {
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "format": "double",
-                            "description": "Tiled: the new pane's share of what it splits, between 0 and 1."
-                          },
-                          "beside": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Tiled: the tab whose pane to split, the caller's by default. Float: the tab\n`relative: \"pane\"` is relative to."
-                          },
-                          "size": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Tiled: the new pane's size, `\"30%\"` or cells, instead of `ratio`."
-                          },
-                          "full": {
-                            "type": [
-                              "boolean",
-                              "null"
-                            ],
-                            "description": "Tiled: split the whole view, not one pane."
-                          },
-                          "name": {
-                            "type": [
-                              "string",
-                              "null"
-                            ],
-                            "description": "View, session: its name."
-                          },
-                          "cwd": {
-                            "type": [
-                              "string",
-                              "null"
-                            ],
-                            "description": "Session: its directory."
-                          },
-                          "focus": {
-                            "type": [
-                              "boolean",
-                              "null"
-                            ],
-                            "description": "Make it the caller's tab; `true` by default."
-                          },
-                          "replace": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Opening: in this tab instead of the block it holds, keeping its id, place and options."
-                          },
-                          "relative": {
-                            "type": [
-                              "string",
-                              "null"
-                            ],
-                            "description": "Float: what it floats over, `view` (the default) or `client`."
-                          },
-                          "anchor": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "enum": [
-                                  "NW",
-                                  "N",
-                                  "NE",
-                                  "W",
-                                  "center",
-                                  "E",
-                                  "SW",
-                                  "S",
-                                  "SE"
-                                ]
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Float: the corner or edge it is pinned to (`NW` … `SE`, `center`)."
-                          },
-                          "row": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Float: how far in from its anchor: cells, `\"24px\"` or `\"10%\"`."
-                          },
-                          "col": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "width": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Float: cells, `\"480px\"` or a share of what it floats over (`\"50%\"`, the default)."
-                          },
-                          "height": {
-                            "anyOf": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "border": {
-                            "type": [
-                              "string",
-                              "null"
-                            ],
-                            "description": "Float: `none` draws it bare."
-                          },
-                          "focusable": {
-                            "type": [
-                              "boolean",
-                              "null"
-                            ],
-                            "description": "Float: it takes the keyboard when it opens (`true` by default)."
-                          },
-                          "mouse": {
-                            "type": [
-                              "boolean",
-                              "null"
-                            ],
-                            "description": "Float: it takes the pointer (`focusable` by default)."
-                          },
-                          "dismiss": {
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "items": {
-                              "type": "string"
-                            },
-                            "description": "Float: what closes it: `escape`, `key`, `press`, `scroll`."
-                          },
-                          "backdrop": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "format": "uint8",
-                            "minimum": 0,
-                            "maximum": 255,
-                            "description": "Float: dims what is under it, 0 to 100."
-                          },
-                          "zIndex": {
-                            "type": [
-                              "integer",
-                              "null"
-                            ],
-                            "format": "int64",
-                            "description": "Float: above floats with a lower one (50 by default)."
-                          }
-                        },
-                        "required": [
-                          "kind"
-                        ],
-                        "description": "Where a tab is, and where `tab.open` and `tab.update` put one."
-                      },
-                      "title": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "cwd": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "description": "Its directory: a terminal's program's."
-                      },
-                      "foregroundCwd": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "description": "The directory of its foreground process."
-                      },
-                      "process": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "additionalProperties": false,
-                            "properties": {
-                              "pid": {
-                                "type": "integer",
-                                "format": "uint32",
-                                "minimum": 0
-                              },
-                              "command": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                },
-                                "description": "Its program, as the system names it."
-                              }
-                            },
-                            "required": [
-                              "pid",
-                              "command"
-                            ],
-                            "description": "A tab's foreground process."
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "scroll": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "offsetFromBottom": {
-                            "type": "integer",
-                            "format": "uint64",
-                            "minimum": 0
-                          }
-                        },
-                        "required": [
-                          "offsetFromBottom"
-                        ],
-                        "description": "How far a tab is scrolled back."
-                      },
-                      "neighbors": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "left": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "right": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "up": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "down": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "description": "The tab beside a tab on each side, in its view."
-                      },
-                      "isFocused": {
-                        "type": "boolean",
-                        "description": "It is the tab a client is in: its view's active tab, in its session's active view."
-                      },
-                      "isZoomed": {
-                        "type": "boolean",
-                        "description": "It fills its view."
-                      },
-                      "options": {
-                        "type": "object",
-                        "additionalProperties": true,
-                        "description": "The options set on it."
-                      },
-                      "state": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "additionalProperties": false,
-                            "properties": {
-                              "pumi_state": {
-                                "type": "integer",
-                                "format": "uint32",
-                                "minimum": 0
-                              },
-                              "block": {
-                                "type": "string",
-                                "description": "The block that saved it."
-                              },
-                              "block_version": {
-                                "type": "integer",
-                                "format": "uint32",
-                                "minimum": 0,
-                                "description": "The version of that block's `data`."
-                              },
-                              "options": {
-                                "type": "object",
-                                "additionalProperties": true,
-                                "description": "The tab's own options, `@user` ones included.",
-                                "default": {}
-                              },
-                              "data": {
-                                "description": "What the block's `serialize` returned.",
-                                "default": null
-                              },
-                              "blobs": {
-                                "type": "object",
-                                "additionalProperties": {
-                                  "type": "object",
-                                  "additionalProperties": false,
-                                  "properties": {
-                                    "encoding": {
-                                      "type": "string",
-                                      "description": "How to read it: `vt` (terminal output), `png`, `bytes`."
-                                    },
-                                    "size": {
-                                      "type": "integer",
-                                      "format": "uint64",
-                                      "minimum": 0
-                                    },
-                                    "ref": {
-                                      "type": "string",
-                                      "description": "`blob:<sha256>`."
-                                    },
-                                    "data": {
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ],
-                                      "description": "The bytes, in base64, when the state is to leave this server (`opts.blobs = \"inline\"`)."
-                                    }
-                                  },
-                                  "required": [
-                                    "encoding",
-                                    "size",
-                                    "ref"
-                                  ],
-                                  "description": "A blob: its content's hash, and the content itself when the state travels."
-                                },
-                                "description": "Large parts (scrollback, images), by name."
-                              },
-                              "extra": {
-                                "type": "object",
-                                "additionalProperties": true,
-                                "description": "What other plugins added in `TabSavePre`, by plugin."
-                              },
-                              "strategy": {
-                                "oneOf": [
-                                  {
-                                    "type": "string",
-                                    "const": "exact",
-                                    "description": "As it was."
-                                  },
-                                  {
-                                    "type": "string",
-                                    "const": "relaunch",
-                                    "description": "By running something again: a terminal's command, in its directory, under its scrollback."
-                                  },
-                                  {
-                                    "type": "string",
-                                    "const": "reference",
-                                    "description": "It points at something that must still exist, such as a file."
-                                  }
-                                ],
-                                "description": "How a state comes back."
-                              },
-                              "needs": {
-                                "type": "array",
-                                "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "path"
-                                        },
-                                        "path": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "path"
-                                      ]
-                                    },
-                                    {
-                                      "type": "object",
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "program"
-                                        },
-                                        "name": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "name"
-                                      ]
-                                    },
-                                    {
-                                      "type": "object",
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "url"
-                                        },
-                                        "url": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "url"
-                                      ]
-                                    }
-                                  ]
-                                },
-                                "description": "What must be true where it is restored."
-                              },
-                              "origin": {
-                                "anyOf": [
-                                  {
-                                    "type": "object",
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "server": {
-                                        "type": "string"
-                                      },
-                                      "tab": {
-                                        "type": "integer",
-                                        "format": "uint64",
-                                        "minimum": 0
-                                      },
-                                      "at": {
-                                        "type": "string",
-                                        "description": "RFC 3339, UTC."
-                                      }
-                                    },
-                                    "required": [
-                                      "server",
-                                      "tab",
-                                      "at"
-                                    ]
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              }
-                            },
-                            "required": [
-                              "pumi_state",
-                              "block",
-                              "block_version",
-                              "strategy"
-                            ],
-                            "description": "Everything needed to bring a tab back, here or on another server."
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ],
-                        "description": "With `state`: its saved state."
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "session",
-                      "block",
-                      "traits",
-                      "place",
-                      "scroll",
-                      "neighbors",
-                      "isFocused",
-                      "isZoomed",
-                      "options"
-                    ],
-                    "description": "A tab, as `tab.get` answers it."
-                  }
-                }
-              },
-              "required": [
-                "id",
-                "session",
-                "index",
-                "layout",
-                "tabs"
-              ]
-            },
-            "description": "With `deep`: every view, each with its tabs."
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "views"
-        ],
-        "description": "A session, as `session.get` answers it.",
-        "$defs": {
-          "SessionInfo": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "$ref": "#/$defs/SessionRef"
-              },
-              "name": {
-                "type": "string"
-              },
-              "cwd": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Its directory, where its terminals start without a `cwd` of their own."
-              },
-              "views": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ViewRef"
-                },
-                "description": "Its views, in index order."
-              },
-              "activeView": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/ViewRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "tree": {
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "#/$defs/ViewTree"
-                },
-                "description": "With `deep`: every view, each with its tabs."
-              }
-            },
-            "required": [
-              "id",
-              "name",
-              "views"
-            ],
-            "description": "A session, as `session.get` answers it."
-          },
-          "SessionRef": {
-            "type": "string",
-            "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-          },
-          "ViewRef": {
-            "type": "string",
-            "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
-          },
-          "ViewTree": {
-            "type": "object",
-            "description": "A view and its tabs, in `session.get {deep}`'s tree.",
-            "properties": {
-              "id": {
-                "$ref": "#/$defs/ViewRef"
-              },
-              "session": {
-                "$ref": "#/$defs/SessionRef"
-              },
-              "name": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "The name it was given; `null` while it takes its active tab's title."
-              },
-              "index": {
-                "type": "integer",
-                "format": "uint32",
-                "minimum": 0,
-                "description": "Its index in its session."
-              },
-              "layout": {
-                "$ref": "#/$defs/LayoutTree"
-              },
-              "activeTab": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The tab with the focus, in front of its pane."
-              },
-              "activePane": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/PaneRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The pane with the focus."
-              },
-              "zoom": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/PaneRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The pane zoomed to fill it."
-              },
-              "tabs": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/TabInfo"
-                }
-              }
-            },
-            "required": [
-              "id",
-              "session",
-              "index",
-              "layout",
-              "tabs"
-            ]
-          },
-          "LayoutTree": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/LayoutPane"
-              },
-              {
-                "$ref": "#/$defs/LayoutSplit"
-              }
-            ],
-            "description": "A view's panes: a pane, or a split of two halves along an axis."
-          },
-          "LayoutPane": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "pane": {
-                "$ref": "#/$defs/PaneRef"
-              },
-              "tabs": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/TabRef"
-                },
-                "description": "Its tabs, in its strip's order.",
-                "default": []
-              },
-              "active": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "The tab in front."
-              }
-            },
-            "required": [
-              "pane"
-            ],
-            "description": "A pane of a layout. `view.update {layout}` names each pane, and its tabs stay as they are."
-          },
-          "PaneRef": {
-            "type": "string",
-            "pattern": "^(?:[A-Za-z0-9._-]+/)?:[1-9][0-9]*$"
-          },
-          "TabRef": {
-            "type": "string",
-            "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
-          },
-          "LayoutSplit": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "axis": {
-                "$ref": "#/$defs/LayoutAxis"
-              },
-              "ratio": {
-                "type": "number",
-                "format": "double",
-                "description": "The first half's share, between 0 and 1."
-              },
-              "first": {
-                "$ref": "#/$defs/LayoutTree"
-              },
-              "second": {
-                "$ref": "#/$defs/LayoutTree"
-              }
-            },
-            "required": [
-              "axis",
-              "ratio",
-              "first",
-              "second"
-            ]
-          },
-          "LayoutAxis": {
-            "type": "string",
-            "enum": [
-              "row",
-              "column"
-            ],
-            "description": "A `row` lays its halves out left to right, a `column` top to bottom."
-          },
-          "TabInfo": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "$ref": "#/$defs/TabRef"
-              },
-              "session": {
-                "$ref": "#/$defs/SessionRef"
-              },
-              "view": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/ViewRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "block": {
-                "type": "string",
-                "description": "The block it holds (`file`, `owner.name.page`)."
-              },
-              "traits": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "Each trait it has, with its fields: `{\"pumi_dev.files.file\": {path}}`."
-              },
-              "place": {
-                "$ref": "#/$defs/TabPlace"
-              },
-              "title": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "cwd": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Its directory: a terminal's program's."
-              },
-              "foregroundCwd": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "The directory of its foreground process."
-              },
-              "process": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/Process"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "scroll": {
-                "$ref": "#/$defs/Scroll"
-              },
-              "neighbors": {
-                "$ref": "#/$defs/Neighbors"
-              },
-              "isFocused": {
-                "type": "boolean",
-                "description": "It is the tab a client is in: its view's active tab, in its session's active view."
-              },
-              "isZoomed": {
-                "type": "boolean",
-                "description": "It fills its view."
-              },
-              "options": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "The options set on it."
-              },
-              "state": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabState"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "With `state`: its saved state."
-              }
-            },
-            "required": [
-              "id",
-              "session",
-              "block",
-              "traits",
-              "place",
-              "scroll",
-              "neighbors",
-              "isFocused",
-              "isZoomed",
-              "options"
-            ],
-            "description": "A tab, as `tab.get` answers it."
-          },
-          "TabPlace": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "$ref": "#/$defs/TabPlaceKind"
-              },
-              "view": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/ViewRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Tiled: into this view, beside its active tab. Float: over this view."
-              },
-              "pane": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/PaneTarget"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,\nbeside it, in a pane of its own. Where a tiled tab is, its pane."
-              },
-              "session": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/SessionTarget"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "View: the session the new view goes in; `new` makes a session for the tab."
-              },
-              "split": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/Side"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Tiled: which side of the pane it splits, making a pane for the tab; `down` by default."
-              },
-              "index": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "format": "uint32",
-                "minimum": 0,
-                "description": "View: the new view's index. Into a pane: where in its strip, after its front tab by\ndefault."
-              },
-              "swap": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Moving: trade places with this tab."
-              },
-              "ratio": {
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "format": "double",
-                "description": "Tiled: the new pane's share of what it splits, between 0 and 1."
-              },
-              "beside": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Tiled: the tab whose pane to split, the caller's by default. Float: the tab\n`relative: \"pane\"` is relative to."
-              },
-              "size": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Tiled: the new pane's size, `\"30%\"` or cells, instead of `ratio`."
-              },
-              "full": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
-                "description": "Tiled: split the whole view, not one pane."
-              },
-              "name": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "View, session: its name."
-              },
-              "cwd": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Session: its directory."
-              },
-              "focus": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
-                "description": "Make it the caller's tab; `true` by default."
-              },
-              "replace": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Opening: in this tab instead of the block it holds, keeping its id, place and options."
-              },
-              "relative": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Float: what it floats over, `view` (the default) or `client`."
-              },
-              "anchor": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "NW",
-                      "N",
-                      "NE",
-                      "W",
-                      "center",
-                      "E",
-                      "SW",
-                      "S",
-                      "SE"
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Float: the corner or edge it is pinned to (`NW` … `SE`, `center`)."
-              },
-              "row": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Float: how far in from its anchor: cells, `\"24px\"` or `\"10%\"`."
-              },
-              "col": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "width": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "description": "Float: cells, `\"480px\"` or a share of what it floats over (`\"50%\"`, the default)."
-              },
-              "height": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "border": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Float: `none` draws it bare."
-              },
-              "focusable": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
-                "description": "Float: it takes the keyboard when it opens (`true` by default)."
-              },
-              "mouse": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
-                "description": "Float: it takes the pointer (`focusable` by default)."
-              },
-              "dismiss": {
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "type": "string"
-                },
-                "description": "Float: what closes it: `escape`, `key`, `press`, `scroll`."
-              },
-              "backdrop": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "format": "uint8",
-                "minimum": 0,
-                "maximum": 255,
-                "description": "Float: dims what is under it, 0 to 100."
-              },
-              "zIndex": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "format": "int64",
-                "description": "Float: above floats with a lower one (50 by default)."
-              }
-            },
-            "required": [
-              "kind"
-            ],
-            "description": "Where a tab is, and where `tab.open` and `tab.update` put one."
-          },
-          "TabPlaceKind": {
-            "type": "string",
-            "enum": [
-              "tiled",
-              "float",
-              "hidden",
-              "view",
-              "session"
-            ],
-            "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new session."
-          },
-          "PaneTarget": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/PaneRef"
-              },
-              {
-                "$ref": "#/$defs/CurrentWord"
-              }
-            ],
-            "description": "A pane a place names: one there is, or `current`, the caller's tab's."
-          },
-          "CurrentWord": {
-            "type": "string",
-            "enum": [
-              "current"
-            ]
-          },
-          "SessionTarget": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/SessionRef"
-              },
-              {
-                "$ref": "#/$defs/NewWord"
-              }
-            ],
-            "description": "A session a place names: one there is, or `new`."
-          },
-          "NewWord": {
-            "type": "string",
-            "enum": [
-              "new"
-            ]
-          },
-          "Side": {
-            "type": "string",
-            "enum": [
-              "left",
-              "right",
-              "up",
-              "down"
-            ],
-            "description": "Where a new pane goes beside an existing one."
-          },
-          "Process": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "pid": {
-                "type": "integer",
-                "format": "uint32",
-                "minimum": 0
-              },
-              "command": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Its program, as the system names it."
-              }
-            },
-            "required": [
-              "pid",
-              "command"
-            ],
-            "description": "A tab's foreground process."
-          },
-          "Scroll": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "offsetFromBottom": {
-                "type": "integer",
-                "format": "uint64",
-                "minimum": 0
-              }
-            },
-            "required": [
-              "offsetFromBottom"
-            ],
-            "description": "How far a tab is scrolled back."
-          },
-          "Neighbors": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "left": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "right": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "up": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "down": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/TabRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "description": "The tab beside a tab on each side, in its view."
-          },
-          "TabState": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "pumi_state": {
-                "type": "integer",
-                "format": "uint32",
-                "minimum": 0
-              },
-              "block": {
-                "type": "string",
-                "description": "The block that saved it."
-              },
-              "block_version": {
-                "type": "integer",
-                "format": "uint32",
-                "minimum": 0,
-                "description": "The version of that block's `data`."
-              },
-              "options": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "The tab's own options, `@user` ones included.",
-                "default": {}
-              },
-              "data": {
-                "description": "What the block's `serialize` returned.",
-                "default": null
-              },
-              "blobs": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/$defs/Blob"
-                },
-                "description": "Large parts (scrollback, images), by name."
-              },
-              "extra": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "What other plugins added in `TabSavePre`, by plugin."
-              },
-              "strategy": {
-                "$ref": "#/$defs/Strategy"
-              },
-              "needs": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/Need"
-                },
-                "description": "What must be true where it is restored."
-              },
-              "origin": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/Origin"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": [
-              "pumi_state",
-              "block",
-              "block_version",
-              "strategy"
-            ],
-            "description": "Everything needed to bring a tab back, here or on another server."
-          },
-          "Blob": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "encoding": {
-                "type": "string",
-                "description": "How to read it: `vt` (terminal output), `png`, `bytes`."
-              },
-              "size": {
-                "type": "integer",
-                "format": "uint64",
-                "minimum": 0
-              },
-              "ref": {
-                "type": "string",
-                "description": "`blob:<sha256>`."
-              },
-              "data": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "The bytes, in base64, when the state is to leave this server (`opts.blobs = \"inline\"`)."
-              }
-            },
-            "required": [
-              "encoding",
-              "size",
-              "ref"
-            ],
-            "description": "A blob: its content's hash, and the content itself when the state travels."
-          },
-          "Strategy": {
-            "oneOf": [
-              {
-                "type": "string",
-                "const": "exact",
-                "description": "As it was."
-              },
-              {
-                "type": "string",
-                "const": "relaunch",
-                "description": "By running something again: a terminal's command, in its directory, under its scrollback."
-              },
-              {
-                "type": "string",
-                "const": "reference",
-                "description": "It points at something that must still exist, such as a file."
-              }
-            ],
-            "description": "How a state comes back."
-          },
-          "Need": {
-            "oneOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "path"
-                  },
-                  "path": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "path"
-                ]
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "program"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name"
-                ]
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "const": "url"
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "url"
-                ]
-              }
-            ]
-          },
-          "Origin": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "server": {
-                "type": "string"
-              },
-              "tab": {
-                "type": "integer",
-                "format": "uint64",
-                "minimum": 0
-              },
-              "at": {
-                "type": "string",
-                "description": "RFC 3339, UTC."
-              }
-            },
-            "required": [
-              "server",
-              "tab",
-              "at"
-            ]
-          }
-        }
-      },
-      "examples": [
-        {
-          "args": [],
-          "desc": "The caller's."
-        },
-        {
-          "args": [
-            "$1",
-            {
-              "deep": true
-            }
-          ],
-          "result": {
-            "id": "$1",
-            "name": "work",
-            "cwd": "/src",
-            "views": [
-              "@1"
-            ],
-            "activeView": "@1",
-            "tree": []
-          }
-        }
-      ],
-      "source": "core"
-    },
-    {
-      "name": "session.list",
-      "since": 1,
-      "provider": "core",
-      "runs_on": "server",
-      "effect": "read",
-      "desc": "List every session, in creation order.",
-      "parameters": [],
-      "params_schema": {
-        "type": "object",
-        "properties": {},
-        "required": [],
-        "additionalProperties": false
-      },
-      "returns": "Array",
-      "returns_schema": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-        }
-      },
-      "examples": [
-        {
-          "args": [],
-          "result": [
-            "$1"
-          ]
-        }
-      ],
-      "source": "core"
-    },
-    {
-      "name": "session.update",
-      "since": 1,
-      "provider": "core",
-      "runs_on": "server",
-      "effect": "write",
-      "desc": "Change a session's name or directory. Fires `session.changed` with what changed. No id is the\ncaller's session.",
-      "parameters": [
-        [
-          "String",
-          "session"
-        ],
-        [
-          "Dict",
-          "patch"
-        ]
-      ],
-      "params_schema": {
-        "type": "object",
-        "properties": {
-          "session": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "patch": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "name": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Its name; `null` gives it a free one of its own (its folder's, else a number)."
-              },
-              "cwd": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Its directory, where its terminals start without a `cwd` of their own; `null` has none."
-              }
-            },
-            "description": "A patch to a session: what `session.update` changes."
-          }
-        },
-        "required": [
-          "patch"
-        ],
-        "additionalProperties": false
-      },
-      "returns": "nil",
-      "returns_schema": {
-        "type": "null"
-      },
-      "examples": [
-        {
-          "args": [
-            "$1",
-            {
-              "name": "work"
-            }
-          ],
-          "result": null
-        },
-        {
-          "args": [
-            "$1",
-            {
-              "cwd": "/src"
-            }
-          ],
-          "result": null,
-          "desc": "New terminals in it start in /src."
-        }
-      ],
-      "source": "core"
-    },
-    {
       "name": "tab.call",
       "since": 1,
       "provider": "host",
@@ -5620,7 +5522,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Make a tab its pane's front tab and its view's active tab, and its view and session current;\nor move from it: to the next tab of its pane (`offset`), to the pane beside it (`direction`),\nor to its view's tab used last (`last`). No id is the caller's tab. Moving out of a zoomed\npane unzooms the view; nothing there is not an error.",
+      "desc": "Make a tab its pane's front tab and its view's active tab, and its view and project current;\nor move from it: to the next tab of its pane (`offset`), to the pane beside it (`direction`),\nor to its view's tab used last (`last`). No id is the caller's tab. Moving out of a zoomed\npane unzooms the view; nothing there is not an error.",
       "parameters": [
         [
           "String",
@@ -5863,7 +5765,7 @@
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?%[1-9][0-9]*$"
           },
-          "session": {
+          "project": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           },
@@ -5898,9 +5800,9 @@
                   "float",
                   "hidden",
                   "view",
-                  "session"
+                  "project"
                 ],
-                "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new session."
+                "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new project."
               },
               "view": {
                 "anyOf": [
@@ -5937,7 +5839,7 @@
                 ],
                 "description": "Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,\nbeside it, in a pane of its own. Where a tiled tab is, its pane."
               },
-              "session": {
+              "project": {
                 "anyOf": [
                   {
                     "anyOf": [
@@ -5952,13 +5854,13 @@
                         ]
                       }
                     ],
-                    "description": "A session a place names: one there is, or `new`."
+                    "description": "A project a place names: one there is, or `new`."
                   },
                   {
                     "type": "null"
                   }
                 ],
-                "description": "View: the session the new view goes in; `new` makes a session for the tab."
+                "description": "View: the project the new view goes in; `new` makes a project for the tab."
               },
               "split": {
                 "anyOf": [
@@ -6045,14 +5947,14 @@
                   "string",
                   "null"
                 ],
-                "description": "View, session: its name."
+                "description": "View: its name."
               },
-              "cwd": {
+              "path": {
                 "type": [
                   "string",
                   "null"
                 ],
-                "description": "Session: its directory."
+                "description": "Project: its folder, the one project there is; the home folder without one."
               },
               "focus": {
                 "type": [
@@ -6329,7 +6231,7 @@
           },
           "isFocused": {
             "type": "boolean",
-            "description": "It is the tab a client is in: its view's active tab, in its session's active view."
+            "description": "It is the tab a client is in: its view's active tab, in its project's active view."
           },
           "isZoomed": {
             "type": "boolean",
@@ -6539,7 +6441,7 @@
         },
         "required": [
           "id",
-          "session",
+          "project",
           "block",
           "traits",
           "place",
@@ -6602,7 +6504,7 @@
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "session": {
+                  "project": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -6612,7 +6514,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Only this session's.",
+                    "description": "Only this project's.",
                     "default": null
                   },
                   "view": {
@@ -6968,7 +6870,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a\nblock or a plugin's `tab.new` action; while it names nothing installed, Launchpad's list, a\nshell or the first thing installed that starts one; refused while nothing is, as pumi has no\nblock of its own for one), placed as `place` says:\nin a pane split from a tab's, into a pane\nas one of its tabs (`{\"pane\": \":2\"}`), in a new view or session, floating; or in an open tab\ninstead of its block (`{\"kind\": \"tiled\", \"replace\": \"%1\"}`), which\nkeeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything\nappears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;\na page's `url`), or `{\"state\": …}` to restore a saved state into the tab. Returns the tab's id.",
+      "desc": "Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a\nblock or a plugin's `tab.new` action; while it names nothing installed, Launchpad's list, a\nshell or the first thing installed that starts one; refused while nothing is, as pumi has no\nblock of its own for one), placed as `place` says:\nin a pane split from a tab's, into a pane\nas one of its tabs (`{\"pane\": \":2\"}`), in a new view or project, floating; or in an open tab\ninstead of its block (`{\"kind\": \"tiled\", \"replace\": \"%1\"}`), which\nkeeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything\nappears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;\na page's `url`), or `{\"state\": …}` to restore a saved state into the tab. Returns the tab's id.",
       "parameters": [
         [
           "String",
@@ -7006,9 +6908,9 @@
                       "float",
                       "hidden",
                       "view",
-                      "session"
+                      "project"
                     ],
-                    "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new session."
+                    "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new project."
                   },
                   "view": {
                     "anyOf": [
@@ -7045,7 +6947,7 @@
                     ],
                     "description": "Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,\nbeside it, in a pane of its own. Where a tiled tab is, its pane."
                   },
-                  "session": {
+                  "project": {
                     "anyOf": [
                       {
                         "anyOf": [
@@ -7060,13 +6962,13 @@
                             ]
                           }
                         ],
-                        "description": "A session a place names: one there is, or `new`."
+                        "description": "A project a place names: one there is, or `new`."
                       },
                       {
                         "type": "null"
                       }
                     ],
-                    "description": "View: the session the new view goes in; `new` makes a session for the tab."
+                    "description": "View: the project the new view goes in; `new` makes a project for the tab."
                   },
                   "split": {
                     "anyOf": [
@@ -7153,14 +7055,14 @@
                       "string",
                       "null"
                     ],
-                    "description": "View, session: its name."
+                    "description": "View: its name."
                   },
-                  "cwd": {
+                  "path": {
                     "type": [
                       "string",
                       "null"
                     ],
-                    "description": "Session: its directory."
+                    "description": "Project: its folder, the one project there is; the home folder without one."
                   },
                   "focus": {
                     "type": [
@@ -7383,14 +7285,12 @@
             null,
             {},
             {
-              "kind": "tiled",
-              "session": "new",
-              "name": "work",
-              "cwd": "/src"
+              "kind": "project",
+              "path": "/src"
             }
           ],
           "result": "%5",
-          "desc": "A new session in /src, holding what a new tab does."
+          "desc": "A new project at /src, holding what a new tab does."
         },
         {
           "args": [
@@ -7487,9 +7387,9 @@
                           "float",
                           "hidden",
                           "view",
-                          "session"
+                          "project"
                         ],
-                        "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new session."
+                        "description": "What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or\ntiled in a new view or a new project."
                       },
                       "view": {
                         "anyOf": [
@@ -7526,7 +7426,7 @@
                         ],
                         "description": "Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,\nbeside it, in a pane of its own. Where a tiled tab is, its pane."
                       },
-                      "session": {
+                      "project": {
                         "anyOf": [
                           {
                             "anyOf": [
@@ -7541,13 +7441,13 @@
                                 ]
                               }
                             ],
-                            "description": "A session a place names: one there is, or `new`."
+                            "description": "A project a place names: one there is, or `new`."
                           },
                           {
                             "type": "null"
                           }
                         ],
-                        "description": "View: the session the new view goes in; `new` makes a session for the tab."
+                        "description": "View: the project the new view goes in; `new` makes a project for the tab."
                       },
                       "split": {
                         "anyOf": [
@@ -7634,14 +7534,14 @@
                           "string",
                           "null"
                         ],
-                        "description": "View, session: its name."
+                        "description": "View: its name."
                       },
-                      "cwd": {
+                      "path": {
                         "type": [
                           "string",
                           "null"
                         ],
-                        "description": "Session: its directory."
+                        "description": "Project: its folder, the one project there is; the home folder without one."
                       },
                       "focus": {
                         "type": [
@@ -7804,7 +7704,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "Where it goes: into a pane (`{\"kind\": \"tiled\", \"pane\": \":2\"}`, or along its own pane's\nstrip), in a pane split from another tab's, into a new view or session, floating, or into\nanother tab's place (`{\"kind\": \"tiled\", \"swap\": \"%2\"}`)."
+                "description": "Where it goes: into a pane (`{\"kind\": \"tiled\", \"pane\": \":2\"}`, or along its own pane's\nstrip), in a pane split from another tab's, into a new view or project, floating, or into\nanother tab's place (`{\"kind\": \"tiled\", \"swap\": \"%2\"}`)."
               },
               "size": {
                 "anyOf": [
@@ -8004,7 +7904,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Make a view its session's active view; or move from it to another of its session by offset\n(`next-window` is `{\"offset\": 1}`), by index, or the last one. No id is the caller's view.",
+      "desc": "Make a view its project's active view; or move from it to another of its project by offset\n(`next-window` is `{\"offset\": 1}`), by index, or the last one. No id is the caller's view.",
       "parameters": [
         [
           "String",
@@ -8051,16 +7951,16 @@
                     ],
                     "format": "uint32",
                     "minimum": 0,
-                    "description": "To the session's view at this index.",
+                    "description": "To the project's view at this index.",
                     "default": null
                   },
                   "last": {
                     "type": "boolean",
-                    "description": "To the view used before the session's active one.",
+                    "description": "To the view used before the project's active one.",
                     "default": false
                   }
                 },
-                "description": "Where `view.focus` moves from its view, in its session."
+                "description": "Where `view.focus` moves from its view, in its project."
               },
               {
                 "type": "null"
@@ -8119,7 +8019,7 @@
       "provider": "core",
       "runs_on": "server",
       "effect": "read",
-      "desc": "A view: its session, name, index, layout of panes (each with its tabs), active tab and pane,\nand zoom. No id is the caller's: its session's active view.",
+      "desc": "A view: its project, name, index, layout of panes (each with its tabs), active tab and pane,\nand zoom. No id is the caller's: its project's active view.",
       "parameters": [
         [
           "String",
@@ -8153,7 +8053,7 @@
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
           },
-          "session": {
+          "project": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           },
@@ -8168,7 +8068,7 @@
             "type": "integer",
             "format": "uint32",
             "minimum": 0,
-            "description": "Its index in its session."
+            "description": "Its index in its project."
           },
           "layout": {
             "anyOf": [
@@ -8280,7 +8180,7 @@
         },
         "required": [
           "id",
-          "session",
+          "project",
           "index",
           "layout"
         ],
@@ -8293,8 +8193,8 @@
               "id": {
                 "$ref": "#/$defs/ViewRef"
               },
-              "session": {
-                "$ref": "#/$defs/SessionRef"
+              "project": {
+                "$ref": "#/$defs/ProjectRef"
               },
               "name": {
                 "type": [
@@ -8307,7 +8207,7 @@
                 "type": "integer",
                 "format": "uint32",
                 "minimum": 0,
-                "description": "Its index in its session."
+                "description": "Its index in its project."
               },
               "layout": {
                 "$ref": "#/$defs/LayoutTree"
@@ -8348,7 +8248,7 @@
             },
             "required": [
               "id",
-              "session",
+              "project",
               "index",
               "layout"
             ],
@@ -8358,7 +8258,7 @@
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
           },
-          "SessionRef": {
+          "ProjectRef": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           },
@@ -8456,7 +8356,7 @@
           ],
           "result": {
             "id": "@1",
-            "session": "$1",
+            "project": "$1",
             "name": null,
             "index": 0,
             "layout": {
@@ -8480,7 +8380,7 @@
       "provider": "host",
       "runs_on": "server",
       "effect": "write",
-      "desc": "Change a view: its name, index or session, layout, and zoom. Each change fires `view.changed`\nwith what changed. No id is the caller's view.",
+      "desc": "Change a view: its name, index or project, layout, and zoom. Each change fires `view.changed`\nwith what changed. No id is the caller's view.",
       "parameters": [
         [
           "String",
@@ -8523,9 +8423,9 @@
                 ],
                 "format": "uint32",
                 "minimum": 0,
-                "description": "Its index in its session, which must be free."
+                "description": "Its index in its project, which must be free."
               },
-              "session": {
+              "project": {
                 "anyOf": [
                   {
                     "type": "string",
@@ -8535,7 +8435,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "The session it moves to, at `index` or its first free one."
+                "description": "The project it moves to, at `index` or its first free one."
               },
               "layout": {
                 "anyOf": [
@@ -8690,18 +8590,18 @@
                 ],
                 "format": "uint32",
                 "minimum": 0,
-                "description": "Its index in its session, which must be free."
+                "description": "Its index in its project, which must be free."
               },
-              "session": {
+              "project": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/SessionRef"
+                    "$ref": "#/$defs/ProjectRef"
                   },
                   {
                     "type": "null"
                   }
                 ],
-                "description": "The session it moves to, at `index` or its first free one."
+                "description": "The project it moves to, at `index` or its first free one."
               },
               "layout": {
                 "anyOf": [
@@ -8727,7 +8627,7 @@
             },
             "description": "A patch to a view: what `view.update` changes."
           },
-          "SessionRef": {
+          "ProjectRef": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           },
@@ -8880,17 +8780,17 @@
             }
           ],
           "result": null,
-          "desc": "To index 5 of its session."
+          "desc": "To index 5 of its project."
         },
         {
           "args": [
             "@1",
             {
-              "session": "$2"
+              "project": "$2"
             }
           ],
           "result": null,
-          "desc": "Into session $2, at its first free index."
+          "desc": "Into project $2, at its first free index."
         },
         {
           "args": [
@@ -9425,11 +9325,11 @@
     {
       "name": "view.opened",
       "provider": "core",
-      "desc": "A view opened in a session.",
+      "desc": "A view opened in a project.",
       "match": "the object id",
       "data": [
         "view",
-        "session"
+        "project"
       ],
       "params_schema": {
         "type": "object",
@@ -9438,14 +9338,14 @@
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
           },
-          "session": {
+          "project": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           }
         },
         "required": [
           "view",
-          "session"
+          "project"
         ],
         "additionalProperties": false
       },
@@ -9453,7 +9353,7 @@
         {
           "args": {
             "view": "@1",
-            "session": "$1"
+            "project": "$1"
           }
         }
       ]
@@ -9465,7 +9365,7 @@
       "match": "the object id",
       "data": [
         "view",
-        "session"
+        "project"
       ],
       "params_schema": {
         "type": "object",
@@ -9474,14 +9374,14 @@
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?@[1-9][0-9]*$"
           },
-          "session": {
+          "project": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           }
         },
         "required": [
           "view",
-          "session"
+          "project"
         ],
         "additionalProperties": false
       },
@@ -9489,7 +9389,7 @@
         {
           "args": {
             "view": "@1",
-            "session": "$1"
+            "project": "$1"
           }
         }
       ]
@@ -9497,7 +9397,7 @@
     {
       "name": "view.changed",
       "provider": "core",
-      "desc": "A view changed in the fields `keys` names (`name`, `index`, `session`, `layout`, `activeTab`, `activePane`, `zoom`); `patch` holds their new values.",
+      "desc": "A view changed in the fields `keys` names (`name`, `index`, `project`, `layout`, `activeTab`, `activePane`, `zoom`); `patch` holds their new values.",
       "match": "the object id",
       "data": [
         "view",
@@ -9518,7 +9418,7 @@
               "enum": [
                 "name",
                 "index",
-                "session",
+                "project",
                 "layout",
                 "activeTab",
                 "activePane",
@@ -9684,24 +9584,21 @@
       ]
     },
     {
-      "name": "session.opened",
+      "name": "project.opened",
       "provider": "core",
-      "desc": "A session opened.",
+      "desc": "A project opened.",
       "match": "the object id",
       "data": [
-        "session",
-        "name",
+        "project",
+        "path",
         "activeView"
       ],
       "params_schema": {
         "type": "object",
         "properties": {
-          "session": {
+          "project": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
-          },
-          "name": {
-            "type": "string"
           },
           "activeView": {
             "anyOf": [
@@ -9713,11 +9610,14 @@
                 "type": "null"
               }
             ]
+          },
+          "path": {
+            "type": "string"
           }
         },
         "required": [
-          "session",
-          "name",
+          "project",
+          "path",
           "activeView"
         ],
         "additionalProperties": false
@@ -9725,56 +9625,56 @@
       "examples": [
         {
           "args": {
-            "session": "$1",
-            "name": "work",
+            "project": "$1",
+            "path": "/src",
             "activeView": "@1"
           }
         }
       ]
     },
     {
-      "name": "session.closed",
+      "name": "project.closed",
       "provider": "core",
-      "desc": "A session closed.",
+      "desc": "A project closed.",
       "match": "the object id",
       "data": [
-        "session"
+        "project"
       ],
       "params_schema": {
         "type": "object",
         "properties": {
-          "session": {
+          "project": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           }
         },
         "required": [
-          "session"
+          "project"
         ],
         "additionalProperties": false
       },
       "examples": [
         {
           "args": {
-            "session": "$1"
+            "project": "$1"
           }
         }
       ]
     },
     {
-      "name": "session.changed",
+      "name": "project.changed",
       "provider": "core",
-      "desc": "A session changed in the fields `keys` names (`name`, `cwd`, `activeView`); `patch` holds their new values.",
+      "desc": "A project changed in the fields `keys` names (`activeView`); `patch` holds their new values.",
       "match": "the object id",
       "data": [
-        "session",
+        "project",
         "keys",
         "patch"
       ],
       "params_schema": {
         "type": "object",
         "properties": {
-          "session": {
+          "project": {
             "type": "string",
             "pattern": "^(?:[A-Za-z0-9._-]+/)?\\$[1-9][0-9]*$"
           },
@@ -9783,9 +9683,7 @@
             "items": {
               "type": "string",
               "enum": [
-                "name",
-                "activeView",
-                "cwd"
+                "activeView"
               ]
             },
             "minItems": 1
@@ -9798,7 +9696,7 @@
           }
         },
         "required": [
-          "session",
+          "project",
           "keys",
           "patch"
         ],
@@ -9807,12 +9705,12 @@
       "examples": [
         {
           "args": {
-            "session": "$1",
+            "project": "$1",
             "keys": [
-              "name"
+              "activeView"
             ],
             "patch": {
-              "name": "work"
+              "activeView": "@1"
             }
           }
         }
@@ -10023,14 +9921,14 @@
   ],
   "models": [
     {
-      "name": "Session",
-      "kind": "session",
+      "name": "Project",
+      "kind": "project",
       "idPrefix": "$",
-      "desc": "A session containing views.",
+      "desc": "A project containing views.",
       "fields": [
         {
           "name": "id",
-          "type": "SessionId",
+          "type": "ProjectId",
           "desc": "Its prefixed id.",
           "watch": false,
           "schema": {
@@ -10039,28 +9937,12 @@
           }
         },
         {
-          "name": "name",
+          "name": "path",
           "type": "string",
-          "desc": "Its name.",
-          "watch": true,
+          "desc": "Its folder: the one project there is in it.",
+          "watch": false,
           "schema": {
             "type": "string"
-          }
-        },
-        {
-          "name": "cwd",
-          "type": "string | null",
-          "desc": "Its directory.",
-          "watch": true,
-          "schema": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         {
@@ -10096,22 +9978,18 @@
       ],
       "methods": [
         {
-          "name": "update",
-          "fn": "session.update"
-        },
-        {
           "name": "focus",
-          "fn": "session.focus"
+          "fn": "project.focus"
         },
         {
           "name": "close",
-          "fn": "session.close"
+          "fn": "project.close"
         }
       ],
       "events": [
-        "session.opened",
-        "session.closed",
-        "session.changed"
+        "project.opened",
+        "project.closed",
+        "project.changed"
       ]
     },
     {
@@ -10131,9 +10009,9 @@
           }
         },
         {
-          "name": "session",
-          "type": "SessionId",
-          "desc": "Its session.",
+          "name": "project",
+          "type": "ProjectId",
+          "desc": "Its project.",
           "watch": true,
           "schema": {
             "type": "string",
@@ -10159,7 +10037,7 @@
         {
           "name": "index",
           "type": "number",
-          "desc": "Its index in the session.",
+          "desc": "Its index in the project.",
           "watch": true,
           "schema": {
             "type": "integer"
@@ -10419,9 +10297,9 @@
           }
         },
         {
-          "name": "session",
-          "type": "SessionId",
-          "desc": "Its session.",
+          "name": "project",
+          "type": "ProjectId",
+          "desc": "Its project.",
           "watch": true,
           "schema": {
             "type": "string",
@@ -10481,7 +10359,7 @@
                   "float",
                   "hidden",
                   "view",
-                  "session"
+                  "project"
                 ]
               },
               "view": {
@@ -10516,7 +10394,7 @@
                   }
                 ]
               },
-              "session": {
+              "project": {
                 "anyOf": [
                   {
                     "anyOf": [

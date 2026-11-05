@@ -28,7 +28,7 @@ pub enum Dir {
     State,
     /// What can be thrown away: `~/.cache/<app>`, `%LOCALAPPDATA%\<app>\cache`.
     Cache,
-    /// The server's own (its sockets' directory, the session, logs): `~/Library/Application
+    /// The server's own (its sockets' directory, what was open, logs): `~/Library/Application
     /// Support/<app>` on macOS, `~/.local/share/<app>` on Linux, `%LOCALAPPDATA%\<app>` on Windows.
     Server,
 }

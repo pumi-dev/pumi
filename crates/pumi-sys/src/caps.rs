@@ -4,8 +4,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capabilities {
     /// The server restarts as a new binary keeping its terminals running (`pumid` `exec`s itself
-    /// and the new process adopts each terminal's open PTY). Without it a restart saves the
-    /// session, and the terminals start again from it.
+    /// and the new process adopts each terminal's open PTY). Without it a restart saves what
+    /// was open, and the terminals start again from it.
     pub handoff: bool,
     /// Job control: a terminal's program can be stopped and continued (`STOP`, `CONT`).
     pub job_control: bool,

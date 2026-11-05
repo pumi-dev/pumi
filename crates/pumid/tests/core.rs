@@ -142,7 +142,7 @@ fn tabs_options_and_events_over_json_rpc() {
     let mut c = Conn::open(&core.socket);
     term(&mut c);
     c.ok("event.on", json!(["tab.opened", {}]));
-    let (tab, notes) = c.call("core.openTab", json!([TERM, { "command": ["/bin/cat"] }, { "kind": "session" }]));
+    let (tab, notes) = c.call("core.openTab", json!([TERM, { "command": ["/bin/cat"] }, { "kind": "project" }]));
     let tab = tab.unwrap().as_u64().expect("a tab id");
     let heard = notes.iter().any(|n| n["method"] == "rpc.event" && n["params"][1]["event"] == "tab.opened");
     assert!(heard, "the subscription heard the tab open, before the answer: {notes:?}");
@@ -156,7 +156,7 @@ fn tabs_options_and_events_over_json_rpc() {
     assert!(read["text"].as_str().unwrap().contains("hello core"), "{read}");
     c.ok("core.setBlocks", blocks(json!([{ "id": "pumi_dev.hello.badge", "provider": "pumi_dev/hello" }])));
     let badge =
-        c.ok("core.openTab", json!(["pumi_dev.hello.badge", { "x": 1 }, {"kind": "session"}])).as_u64().unwrap();
+        c.ok("core.openTab", json!(["pumi_dev.hello.badge", { "x": 1 }, {"kind": "project"}])).as_u64().unwrap();
     assert_eq!(c.ok("core.tabCall", json!([badge, "args"])), json!({ "x": 1 }));
 }
 #[test]
@@ -192,7 +192,7 @@ fn a_restart_keeps_the_program_and_clients_resume() {
     let core = Core::start();
     let mut c = Conn::open(&core.socket);
     term(&mut c);
-    let tab = c.ok("core.openTab", json!([TERM, { "command": ["/bin/cat"] }, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!([TERM, { "command": ["/bin/cat"] }, { "kind": "project" }])).as_u64().unwrap();
     let pid = c.ok("core.getOptionValue", json!(["tab_pid", { "tab": tab }]));
     c.ok("core.tabCall", json!([tab, "input", { "text": "before\n" }]));
     let mut stream = attach(&core.grid(), tab, None);
@@ -224,12 +224,12 @@ fn a_restored_shell_runs_the_line_its_program_left() {
     let mut c = Conn::open(&core.socket);
     term(&mut c);
     c.ok("core.setOptionValue", json!(["default_shell", "/bin/sh", {}]));
-    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "project" }])).as_u64().unwrap();
     let mut stream = attach(&core.grid(), tab, None);
     agent_runs(&mut c, &mut stream, tab, "echo restored-$((6*7))");
     let state = c.ok("tab.get", json!([tab_ref(tab), { "state": true }]))["state"].clone();
     assert_eq!(state["options"]["restore_command"], "echo restored-$((6*7))");
-    let again = c.ok("core.openTab", json!([TERM, { "state": state }, { "kind": "session" }])).as_u64().unwrap();
+    let again = c.ok("core.openTab", json!([TERM, { "state": state }, { "kind": "project" }])).as_u64().unwrap();
     let mut restored = attach(&core.grid(), again, None);
     read_until(&mut restored, "restored-42");
     read_until(&mut restored, "$ ");
@@ -245,7 +245,7 @@ fn a_core_that_died_brings_the_agent_back_in_its_tab() {
     let mut c = Conn::open(&core.socket);
     term(&mut c);
     c.ok("core.setOptionValue", json!(["default_shell", "/bin/sh", {}]));
-    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "project" }])).as_u64().unwrap();
     let mut stream = attach(&core.grid(), tab, None);
     agent_runs(&mut c, &mut stream, tab, "echo resumed-$((6*7))");
     let saved = core.dir.path().join("state.json");
@@ -266,7 +266,7 @@ fn a_package_tab_of_its_own_version_comes_back_before_its_package_is_told_again(
     let page = json!({"id": "pumi_dev.browser.page", "version": 2, "methods": ["navigate"]});
     c.ok("core.setBlocks", blocks(json!([page])));
     let args = json!({"url": "https://example.com/kept"});
-    let tab = c.ok("core.openTab", json!(["pumi_dev.browser.page", args, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!(["pumi_dev.browser.page", args, { "kind": "project" }])).as_u64().unwrap();
     let saved = core.dir.path().join("state.json");
     until("the model saved", || std::fs::read_to_string(&saved).is_ok_and(|s| s.contains("example.com/kept")));
     let mut core = core;
@@ -289,7 +289,7 @@ fn a_respawned_shell_stays_and_runs_its_restore_command() {
     let mut c = Conn::open(&core.socket);
     term(&mut c);
     c.ok("core.setOptionValue", json!(["default_shell", "/bin/sh", {}]));
-    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "session" }])).as_u64().unwrap();
+    let tab = c.ok("core.openTab", json!([TERM, {}, { "kind": "project" }])).as_u64().unwrap();
     let mut stream = attach(&core.grid(), tab, None);
     read_until(&mut stream, "$ ");
     c.ok("core.setOptionValue", json!(["restore_command", "echo back-$((6*7))", { "tab": tab }]));

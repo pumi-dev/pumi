@@ -8,7 +8,8 @@ pub use pumi_layout::{Dim, Layout, PaneId, Rect, Side};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-pub type SessionId = u64;
+use std::path::Path;
+pub type ProjectId = u64;
 pub type ViewId = u64;
 pub type TabId = u64;
 pub type ClientId = u64;
@@ -16,17 +17,17 @@ pub type ChanId = u64;
 /// The channel of calls the server makes itself (startup, terminals' notes, restores).
 pub const SERVER: ChanId = 0;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Session {
-    pub id: SessionId,
-    pub name: String,
-    pub cwd: Option<String>,
-    /// `(index, view)`, by index. A view linked into several sessions has an index in each.
+pub struct Project {
+    pub id: ProjectId,
+    /// Its folder: the one project there is in it.
+    pub path: String,
+    /// `(index, view)`, by index. A view linked into several projects has an index in each.
     pub views: Vec<(u32, ViewId)>,
     pub current: Option<ViewId>,
     pub last: Option<ViewId>,
     #[serde(default)]
     pub activity: u64,
-    /// When it was created, in seconds since the epoch (`session_created`).
+    /// When it was created, in seconds since the epoch (`project_created`).
     #[serde(default)]
     pub created: u64,
 }
@@ -113,7 +114,10 @@ impl View {
     /// Puts `tab` in `pane` at `index` of its strip (after the tab in front by default), and in
     /// front of it when `front`.
     pub fn insert(&mut self, pane: PaneId, tab: TabId, index: Option<usize>, front: bool) -> Result<()> {
-        let p = self.panes.get_mut(&pane).ok_or_else(|| Error::not_found(format!("no pane :{pane} in view @{}", self.id)))?;
+        let p = self
+            .panes
+            .get_mut(&pane)
+            .ok_or_else(|| Error::not_found(format!("no pane :{pane} in view @{}", self.id)))?;
         let after_front = p.tabs.iter().position(|t| *t == p.active).map_or(p.tabs.len(), |i| i + 1);
         let at = index.map_or(after_front, |i| i.min(p.tabs.len()));
         p.tabs.insert(at, tab);
@@ -125,7 +129,15 @@ impl View {
     }
     /// Splits `beside` (or the whole view, `full`) to make `pane`, holding `tab`, on its `side`
     /// with `share` of its space.
-    pub fn split(&mut self, beside: PaneId, pane: PaneId, tab: TabId, side: Side, share: f64, full: bool) -> Result<()> {
+    pub fn split(
+        &mut self,
+        beside: PaneId,
+        pane: PaneId,
+        tab: TabId,
+        side: Side,
+        share: f64,
+        full: bool,
+    ) -> Result<()> {
         self.layout.split_share(beside, pane, side, share, full)?;
         self.panes.insert(pane, Pane { id: pane, tabs: vec![tab], active: tab, last: None });
         Ok(())
@@ -224,7 +236,7 @@ impl Float {
         pumi_layout::float::rect(area, &self.anchor, self.row, self.col, self.width, self.height)
     }
 }
-/// Where a tab is. A new view or a new session is a tab `tiled` in it. A tiled tab's pane is
+/// Where a tab is. A new view or a new project is a tab `tiled` in it. A tiled tab's pane is
 /// the view's to say ([`View::pane_of`]).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -261,7 +273,7 @@ pub struct Tab {
 /// A client: a channel that attached as a UI (`client.attach`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Ui {
-    pub session: SessionId,
+    pub project: ProjectId,
     pub width: u32,
     pub height: u32,
     /// Events up to here were in the state it was sent when it attached.
@@ -291,17 +303,17 @@ pub struct Chan {
     pub tab: Option<TabId>,
     pub ui: Option<Ui>,
 }
-/// Where a call is: the session, view and tab that `0` means.
+/// Where a call is: the project, view and tab that `0` means.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Current {
-    pub session: SessionId,
+    pub project: ProjectId,
     pub view: ViewId,
     pub tab: TabId,
 }
 /// Ids are never reused, and are kept across restarts.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Ids {
-    pub session: u64,
+    pub project: u64,
     pub view: u64,
     pub pane: u64,
     pub tab: u64,
@@ -309,12 +321,12 @@ pub struct Ids {
 /// The objects of the model, the channels connected and every option: what every replica holds.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Model {
-    pub sessions: BTreeMap<SessionId, Session>,
+    pub projects: BTreeMap<ProjectId, Project>,
     pub views: BTreeMap<ViewId, View>,
     pub tabs: BTreeMap<TabId, Tab>,
     pub chans: BTreeMap<ChanId, Chan>,
-    /// The session used last, for callers with no client and no tab.
-    pub last_session: Option<SessionId>,
+    /// The project used last, for callers with no client and no tab.
+    pub last_project: Option<ProjectId>,
     pub options: Options,
 }
 impl Model {
@@ -346,38 +358,45 @@ impl Model {
             .or_else(focused)
             .filter(|t| self.tabs.contains_key(t))
     }
-    fn caller_session(&self, caller: &Caller) -> Option<SessionId> {
+    fn caller_project(&self, caller: &Caller) -> Option<ProjectId> {
         let ui = self.chans.get(&caller.channel)?.ui.as_ref()?;
-        self.sessions.contains_key(&ui.session).then_some(ui.session)
+        self.projects.contains_key(&ui.project).then_some(ui.project)
     }
-    /// The caller's session, view and tab: its tab (`PUMI_TAB`), else its client's session,
-    /// else the session used last, else the most active.
+    /// The project a call is about: the caller's, else the one used last, else the most active.
+    /// A project whose views all closed holds no current view, but it is still the project a new
+    /// tab goes into, with a view of its own.
+    pub fn current_project(&self, caller: &Caller) -> Option<ProjectId> {
+        self.caller_project(caller)
+            .or(self.last_project.filter(|s| self.projects.contains_key(s)))
+            .or_else(|| self.projects.values().max_by_key(|s| s.activity).map(|s| s.id))
+    }
+    pub fn project_at(&self, path: &str) -> Option<ProjectId> {
+        let want = Path::new(path);
+        self.projects.values().find(|p| Path::new(&p.path) == want).map(|p| p.id)
+    }
     pub fn current(&self, caller: &Caller) -> Option<Current> {
         if let Some(tab) = self.caller_tab(caller)
             && let Some(view) = self.tabs[&tab].place.view()
         {
-            let session = self
-                .caller_session(caller)
-                .filter(|s| self.sessions[s].views.iter().any(|(_, v)| *v == view))
-                .or_else(|| self.session_of_view(view))?;
-            return Some(Current { session, view, tab });
+            let project = self
+                .caller_project(caller)
+                .filter(|s| self.projects[s].views.iter().any(|(_, v)| *v == view))
+                .or_else(|| self.project_of_view(view))?;
+            return Some(Current { project, view, tab });
         }
-        let session = self
-            .caller_session(caller)
-            .or(self.last_session.filter(|s| self.sessions.contains_key(s)))
-            .or_else(|| self.sessions.values().max_by_key(|s| s.activity).map(|s| s.id))?;
+        let project = self.current_project(caller)?;
         let view =
-            self.sessions[&session].current.or_else(|| self.sessions[&session].views.first().map(|(_, t)| *t))?;
-        Some(Current { session, view, tab: self.views.get(&view)?.active })
+            self.projects[&project].current.or_else(|| self.projects[&project].views.first().map(|(_, t)| *t))?;
+        Some(Current { project, view, tab: self.views.get(&view)?.active })
     }
-    pub fn session_id(&self, caller: &Caller, id: SessionId) -> Result<SessionId> {
+    pub fn project_id(&self, caller: &Caller, id: ProjectId) -> Result<ProjectId> {
         if id == 0 {
             return self
                 .current(caller)
-                .map(|c| c.session)
-                .ok_or_else(|| Error::not_found("there is no current session"));
+                .map(|c| c.project)
+                .ok_or_else(|| Error::not_found("there is no current project"));
         }
-        self.sessions.contains_key(&id).then_some(id).ok_or_else(|| Error::not_found(format!("no session ${id}")))
+        self.projects.contains_key(&id).then_some(id).ok_or_else(|| Error::not_found(format!("no project ${id}")))
     }
     pub fn view_id(&self, caller: &Caller, id: ViewId) -> Result<ViewId> {
         if id == 0 {
@@ -391,9 +410,9 @@ impl Model {
         }
         self.tabs.contains_key(&id).then_some(id).ok_or_else(|| Error::not_found(format!("no tab %{id}")))
     }
-    /// The session a view is in; of several, the one used last.
-    pub fn session_of_view(&self, view: ViewId) -> Option<SessionId> {
-        self.sessions
+    /// The project a view is in; of several, the one used last.
+    pub fn project_of_view(&self, view: ViewId) -> Option<ProjectId> {
+        self.projects
             .values()
             .filter(|s| s.views.iter().any(|(_, v)| *v == view))
             .max_by_key(|s| s.activity)
@@ -414,26 +433,27 @@ impl Model {
     /// A pane by its id, `0` being the caller's tab's.
     pub fn pane_id(&self, caller: &Caller, id: PaneId) -> Result<(ViewId, PaneId)> {
         if id == 0 {
-            let tab = self.current(caller).map(|c| c.tab).ok_or_else(|| Error::not_found("there is no current pane"))?;
+            let tab =
+                self.current(caller).map(|c| c.tab).ok_or_else(|| Error::not_found("there is no current pane"))?;
             return self.pane_of_tab(tab).ok_or_else(|| Error::not_found(format!("tab %{tab} is not in a pane")));
         }
         self.view_of_pane(id).map(|v| (v, id)).ok_or_else(|| Error::not_found(format!("no pane :{id}")))
     }
     /// The objects whose options a tab reads, narrowest first.
-    pub fn chain(&self, tab: Option<TabId>, view: Option<ViewId>, session: Option<SessionId>) -> Vec<Key> {
+    pub fn chain(&self, tab: Option<TabId>, view: Option<ViewId>, project: Option<ProjectId>) -> Vec<Key> {
         let view = view.or_else(|| tab.and_then(|t| self.view_of_tab(t)));
-        let session = session.or_else(|| view.and_then(|v| self.session_of_view(v)));
+        let project = project.or_else(|| view.and_then(|v| self.project_of_view(v)));
         let mut chain = Vec::with_capacity(4);
         chain.extend(tab.map(Key::Tab));
         chain.extend(view.map(Key::View));
-        chain.extend(session.map(Key::Session));
+        chain.extend(project.map(Key::Project));
         chain.push(Key::Global);
         chain
     }
-    /// A session as the wire carries it.
-    pub fn session_value(&self, id: SessionId) -> Value {
-        let s = &self.sessions[&id];
-        json!({ "id": s.id, "name": s.name, "cwd": s.cwd, "views": s.views, "current": s.current, "last": s.last, "activity": s.activity, "created": s.created })
+    /// A project as the wire carries it.
+    pub fn project_value(&self, id: ProjectId) -> Value {
+        let s = &self.projects[&id];
+        json!({ "id": s.id, "path": s.path, "views": s.views, "current": s.current, "last": s.last, "activity": s.activity, "created": s.created })
     }
     /// A view as the wire carries it.
     pub fn view_value(&self, id: ViewId) -> Value {
@@ -441,15 +461,15 @@ impl Model {
         json!({ "id": v.id, "name": v.name, "layout": v.layout.to_value(), "panes": v.panes, "active": v.active, "last": v.last, "zoomed": v.zoomed })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    /// Two sessions sharing view 1, a second view in session 2, and a client showing session 2.
+    /// Two projects sharing view 1, a second view in project 2, and a client showing project 2.
     fn model() -> Model {
-        let session = |id, views: Vec<(u32, ViewId)>, activity| Session {
+        let project = |id, views: Vec<(u32, ViewId)>, activity| Project {
             id,
-            name: format!("s{id}"),
-            cwd: None,
+            path: format!("/p{id}"),
             current: views.first().map(|(_, v)| *v),
             views,
             last: None,
@@ -458,13 +478,13 @@ mod tests {
         };
         let view = |id, tab| View::new(id, None, tab + 100, tab);
         let tab = |id, view| Tab { id, block: "terminal".into(), place: Place::Tiled { view }, activity: 0 };
-        let ui = Ui { session: 2, width: 80, height: 24, from_seq: 0 };
+        let ui = Ui { project: 2, width: 80, height: 24, from_seq: 0 };
         Model {
-            sessions: BTreeMap::from([(1, session(1, vec![(0, 1)], 5)), (2, session(2, vec![(0, 2), (1, 1)], 3))]),
+            projects: BTreeMap::from([(1, project(1, vec![(0, 1)], 5)), (2, project(2, vec![(0, 2), (1, 1)], 3))]),
             views: BTreeMap::from([(1, view(1, 10)), (2, view(2, 20))]),
             tabs: BTreeMap::from([(10, tab(10, 1)), (20, tab(20, 2))]),
             chans: BTreeMap::from([(7, Chan { id: 7, ui: Some(ui), ..Chan::default() })]),
-            last_session: None,
+            last_project: None,
             options: Options::default(),
         }
     }
@@ -472,25 +492,25 @@ mod tests {
         Caller { channel, tab, ..Caller::default() }
     }
     #[test]
-    fn zero_is_the_callers_tab_in_its_clients_session() {
+    fn zero_is_the_callers_tab_in_its_clients_project() {
         let m = model();
-        assert_eq!(m.current(&caller(7, Some(10))), Some(Current { session: 2, view: 1, tab: 10 }));
-        assert_eq!(m.current(&caller(9, Some(10))), Some(Current { session: 1, view: 1, tab: 10 }));
+        assert_eq!(m.current(&caller(7, Some(10))), Some(Current { project: 2, view: 1, tab: 10 }));
+        assert_eq!(m.current(&caller(9, Some(10))), Some(Current { project: 1, view: 1, tab: 10 }));
     }
     #[test]
     fn zero_without_a_tab_is_the_client_then_the_last_then_the_most_active() {
         let mut m = model();
-        assert_eq!(m.current(&caller(7, None)).map(|c| c.session), Some(2));
-        assert_eq!(m.current(&caller(9, None)).map(|c| c.session), Some(1));
-        m.last_session = Some(2);
-        assert_eq!(m.current(&caller(9, None)), Some(Current { session: 2, view: 2, tab: 20 }));
+        assert_eq!(m.current(&caller(7, None)).map(|c| c.project), Some(2));
+        assert_eq!(m.current(&caller(9, None)).map(|c| c.project), Some(1));
+        m.last_project = Some(2);
+        assert_eq!(m.current(&caller(9, None)), Some(Current { project: 2, view: 2, tab: 20 }));
     }
     #[test]
     fn ids_resolve_zero_and_refuse_the_unknown() {
         let m = model();
         assert_eq!(m.tab_id(&caller(7, Some(20)), 0).unwrap(), 20);
         assert_eq!(m.view_id(&caller(7, None), 2).unwrap(), 2);
-        assert!(m.session_id(&caller(7, None), 9).is_err());
+        assert!(m.project_id(&caller(7, None), 9).is_err());
     }
     #[test]
     fn a_pane_is_found_by_its_id_or_by_the_callers_tab() {
@@ -551,6 +571,6 @@ mod tests {
     #[test]
     fn a_tabs_chain_runs_from_it_to_the_global_options() {
         let m = model();
-        assert_eq!(m.chain(Some(20), None, None), vec![Key::Tab(20), Key::View(2), Key::Session(2), Key::Global]);
+        assert_eq!(m.chain(Some(20), None, None), vec![Key::Tab(20), Key::View(2), Key::Project(2), Key::Global]);
     }
 }

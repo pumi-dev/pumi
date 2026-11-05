@@ -91,7 +91,7 @@ impl Iterator for Output {
 mod tests {
     use super::*;
     #[test]
-    fn stream_messages_become_session_output() {
+    fn stream_messages_become_project_output() {
         let snapshot = AttachServer::Snapshot { cols: 4, rows: 2, bytes: b"x".to_vec(), seq: 1, mode: Mode::Control };
         assert_eq!(
             translate(snapshot, false),

@@ -1,11 +1,11 @@
-// The window's state, as hooks: what the server says (sessions, views, tabs, layouts,
+// The window's state, as hooks: what the server says (projects, views, tabs, layouts,
 // options), the window this tree draws, and the theme's tokens. Every hook reads one store and
 // re-renders its component only when what it selects changed.
 import { createContext, useContext, useRef, useSyncExternalStore } from "react"
 import { store, type PaneLeaf, type Snapshot, type State, type Tree } from "./engine.ts"
 
 export type { PaneLeaf, Snapshot, State, Tree }
-export type Session = Snapshot["workspaces"][number]
+export type Project = Snapshot["projects"][number]
 export type View = Snapshot["views"][number]
 export type Tab = Snapshot["tabs"][number]
 
@@ -30,15 +30,15 @@ function shallowEqual(a: unknown, b: unknown): boolean {
   return ka.every((k) => Object.is((a as any)[k], (b as any)[k]))
 }
 
-/** The window a tree draws: its id, the session and view it shows, and its own controls. */
+/** The window a tree draws: its id, the project and view it shows, and its own controls. */
 export interface WindowInfo {
   id: number
-  /** The session shown (`$1`), if any. */
-  session?: string
+  /** The project shown (`$1`), if any. */
+  project?: string
   /** The view it shows of it (`@2`): its own, whichever view the server's focus is in. */
   view?: string
-  show(session: string, view?: string): void
-  /** Shows `view`, in whichever session holds it. */
+  show(project: string, view?: string): void
+  /** Shows `view`, in whichever project holds it. */
   showView(view: string): void
   close(): void
   minimize(): void
@@ -108,27 +108,27 @@ export function useWindow(): WindowInfo {
 
 const EMPTY: never[] = []
 
-export function useSessions(): Session[] {
-  return useApp((s) => s.snapshot?.workspaces ?? EMPTY)
+export function useProjects(): Project[] {
+  return useApp((s) => s.snapshot?.projects ?? EMPTY)
 }
 
-/** A session: `id`, or the one the window shows. */
-export function useSession(id?: string): Session | undefined {
+/** A project: `id`, or the one the window shows. */
+export function useProject(id?: string): Project | undefined {
   const window = useContext(WindowContext)
-  const want = id ?? window?.session
-  return useApp((s) => s.snapshot?.workspaces.find((w) => w.workspace_id === want))
+  const want = id ?? window?.project
+  return useApp((s) => s.snapshot?.projects.find((w) => w.project_id === want))
 }
 
-export function useViews(session?: string): View[] {
-  const shown = useSession(session)?.workspace_id
-  return useApp((s) => s.snapshot?.views.filter((v) => v.workspace_id === shown) ?? EMPTY)
+export function useViews(project?: string): View[] {
+  const shown = useProject(project)?.project_id
+  return useApp((s) => s.snapshot?.views.filter((v) => v.project_id === shown) ?? EMPTY)
 }
 
-/** A view: `id`, or the one the window shows, else the one in front of its session. */
+/** A view: `id`, or the one the window shows, else the one in front of its project. */
 export function useView(id?: string): View | undefined {
   const window = useContext(WindowContext)
-  const session = useSession()
-  const want = id ?? window?.view ?? session?.active_view_id ?? undefined
+  const project = useProject()
+  const want = id ?? window?.view ?? project?.active_view_id ?? undefined
   return useApp((s) => s.snapshot?.views.find((v) => v.view_id === want))
 }
 

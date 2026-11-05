@@ -66,8 +66,8 @@ export interface Init {
   paths?: Paths;
   /** The manifest; read from `dir`'s package.json when not given. */
   manifest?: Manifest;
-  /** A script's own session and tab (`pumi do --session --tab`), and what it was called with. */
-  session?: string | null;
+  /** A script's own project and tab (`pumi do --project --tab`), and what it was called with. */
+  project?: string | null;
   tab?: string | null;
   args?: Record<string, unknown>;
 }

@@ -1,14 +1,14 @@
-// Where a path macOS asked the app to open goes (`opened.ts`): which session, or a new one where.
+// Where a path macOS asked the app to open goes (`opened.ts`): which project, or a new one where.
 // Apart from the engine, so it is tested without the addon.
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-/** Where an opened path goes: a session there is, or a new one at a directory. */
-export type Where = { session: string } | { create: string }
+/** Where an opened path goes: a project there is, or a new one at a directory. */
+export type Where = { project: string } | { create: string }
 
-/** A directory as sessions are compared by it: `~` is home, no trailing separator (`C:\` keeps
+/** A directory as projects are compared by it: `~` is home, no trailing separator (`C:\` keeps
  *  its own: `C:` is the current directory on that drive). */
 export function normal(dir: string, home = homedir()): string {
   const full = dir === "~" ? home : /^~[\\/]/.test(dir) ? join(home, dir.slice(2)) : dir
@@ -26,28 +26,33 @@ const holds = (dir: string, path: string) => {
   return p === d || p.startsWith(d.endsWith("/") ? d : `${d}/`)
 }
 
+export function projectAt(projects: { id: string; path?: string | null }[], dir: string, home = homedir()): string | undefined {
+  const want = key(normal(dir, home))
+  return projects.find((s) => s.path != null && key(normal(s.path, home)) === want)?.id
+}
+
 /**
- * Where `path` goes among `sessions` (this server's, each by its directory). A folder: the session
+ * Where `path` goes among `projects` (this server's, each by its directory). A folder: the project
  * at it. A file: the one at the deepest directory holding it. Of equals, `shown`. Neither: a new
- * session at the folder, or at `rootOf` the file (its repository, else its folder).
+ * project at the folder, or at `rootOf` the file (its repository, else its folder).
  */
 export function route(
   path: string,
   folder: boolean,
-  sessions: { id: string; cwd?: string | null }[],
+  projects: { id: string; path?: string | null }[],
   shown: string | undefined,
   rootOf: (file: string) => string,
   home = homedir(),
 ): Where {
   let best: { id: string; depth: number } | undefined
-  for (const s of sessions) {
-    if (!s.cwd) continue
-    const dir = normal(s.cwd, home)
+  for (const s of projects) {
+    if (!s.path) continue
+    const dir = normal(s.path, home)
     if (folder ? key(dir) !== key(path) : !holds(dir, path)) continue
     const better = !best || dir.length > best.depth || (dir.length === best.depth && s.id === shown)
     if (better) best = { id: s.id, depth: dir.length }
   }
-  if (best) return { session: best.id }
+  if (best) return { project: best.id }
   return { create: folder ? path : rootOf(path) }
 }
 

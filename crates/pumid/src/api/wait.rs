@@ -17,7 +17,7 @@ pub struct WaitOpts {
     pub timeout: Option<f64>,
 }
 /// Wait for an event, by name or glob: the call answers when one that matches fires, with the
-/// event (`{event, match, session, view, tab, data}`), or with `null` when `timeout` passes or
+/// event (`{event, match, project, view, tab, data}`), or with `null` when `timeout` passes or
 /// the caller goes. A wait that times out is not an error.
 #[api(
     name = "event.wait",

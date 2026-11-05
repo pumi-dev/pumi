@@ -204,7 +204,7 @@ pub fn check(manual: bool, cx: &mut App) {
 }
 
 /// What an update does to the terminals where the server cannot hand them over to its new
-/// binary (`pumi_sys::caps().handoff`, Windows): they start again from the saved session.
+/// binary (`pumi_sys::caps().handoff`, Windows): they start again from what was saved.
 fn terminals_restart() -> &'static str {
     if pumi_sys::caps().handoff { "" } else { " Terminals restart with it." }
 }
