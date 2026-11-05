@@ -65,6 +65,16 @@ export function matches(e: Listing, query: string): boolean {
   return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => text.includes(w))
 }
 
+/** The plugin a listing installs as: the last part of its id (`pumi-dev/plugins/launcher` is `launcher`). */
+export function nameOf(e: Listing): string {
+  return ((e.id ?? "").split("/").pop() || e.name || "").toLowerCase()
+}
+
+/** Whether the store leaves a listing out: `bundled` are the plugins that ship with pumi, installed already. */
+export function shipped(e: Listing, bundled: ReadonlySet<string>): boolean {
+  return bundled.has(nameOf(e))
+}
+
 /** The listings in the order `sort` puts them, as the store's API sorts. */
 export function order(list: Listing[], sort: Sort): Listing[] {
   const n = (e: Listing, k: "downloads" | "downloads7d" | "starsDelta7d") => e[k] ?? 0
@@ -252,6 +262,8 @@ export function StorePage() {
   }
   useEffect(ask, [])
   const have = new Set((installed ?? []).map((p) => p.id.toLowerCase()))
+  // What ships with pumi is installed already: the store does not offer it (Launchpad, today).
+  const bundled = new Set((installed ?? []).filter((p) => p.bundled).map((p) => p.name.toLowerCase()))
   const install = (id: string, spec: string) => {
     setInstalling((s) => new Set(s).add(id))
     setStatus(undefined)
@@ -267,7 +279,7 @@ export function StorePage() {
       reload()
     })
   }
-  const shown = order((index.list ?? []).filter((e) => holds(kind, e) && matches(e, query)), sort)
+  const shown = order((index.list ?? []).filter((e) => holds(kind, e) && matches(e, query) && !shipped(e, bundled)), sort)
   return (
     <Page title="Plugins and themes" description="Listings are not reviewed, and a plugin has full access to pumi and your computer: install only ones you trust. Any public GitHub repository can be installed: `pumi plugin add owner/repo`.">
       <div style={{ display: "flex", flexDirection: "row", gap: 8 }}>

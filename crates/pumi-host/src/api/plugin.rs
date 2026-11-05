@@ -664,7 +664,7 @@ fn meta(dir: &Path, plugin: Option<&pumi_api::manifest::Plugin>) -> Value {
 }
 /// The installed plugins, or the ones named: `{spec, id, path, rev, kind, bundled, active,
 /// disabled, installed, meta, manifest, error, contributes}` each. Any plugins bundled with pumi
-/// (`<runtime>/bundled`, none today) are listed too: they can be turned off, not removed. `id` is `owner/name`
+/// (`<runtime>/bundled`: Launchpad, today) are listed too: they can be turned off, not removed. `id` is `owner/name`
 /// and `manifest` its package.json's `pumi`, read without running it; `error` is why that could
 /// not be read (a plugin without one is not run). `meta` is its name, display name, version and
 /// description, and `contributes` what it brings.

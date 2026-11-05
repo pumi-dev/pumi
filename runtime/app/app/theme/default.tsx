@@ -1029,10 +1029,10 @@ function StartScreen() {
 }
 
 /**
- * The first run's choices. Plugins: pumi opens nothing by itself, so it offers Launcher, Terminal,
- * Agents and Browser, as cards with a picture of each, each ticked, to install at once (with Agents,
- * whether agents open in a chat or their terminal). New tabs then open the first installed
- * (`starters.ts`). Look: a transparent window or not, and the colour scheme, set as picked.
+ * The first run's choices. Plugins: pumi opens nothing by itself but Launchpad, which ships with it,
+ * so it offers Terminal, Agents and Browser, as cards with a picture of each, each ticked, to install
+ * at once (with Agents, whether agents open in a chat or their terminal). New tabs keep opening
+ * Launchpad (`starters.ts`). Look: a transparent window or not, and the colour scheme, set as picked.
  */
 function StartPlugins({ starters }: { starters: Starters }) {
   const ts = useTextSize()
@@ -1330,7 +1330,7 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
   const color = focused ? t.text : undefined
   if (!tab || !front) return null
   const zoomable = zoomed || (!!tree && "axis" in tree)
-  // A split holds what a new tab does (`new_tab`: the Launcher's list, a shell, …).
+  // A split holds what a new tab does (`new_tab`: Launchpad's list, a shell, …).
   const split = (side: SplitSide) => {
     call(via(id, "tab.open"), null, {}, { kind: "tiled", pane: id, split: side }).catch(swallow)
   }
@@ -1492,8 +1492,9 @@ function SplitMenu({ split, close, onButton }: { split(side: SplitSide): void; c
 }
 
 /**
- * A pane bar's `+`: a press opens a menu under it of what the new tab can be (`NewTabMenu`),
- * which opens into the pane as one of its tabs. A press on the button while it is open closes it.
+ * A pane bar's `+`: a press opens one new tab in the pane, what `new_tab` names (Launchpad's list, a
+ * shell, …), with no menu in the way; a right press opens the menu of everything a new tab can be
+ * (`NewTabMenu`) instead, which opens into the pane as one of its tabs.
  */
 function NewTabButton({ pane, color, onOpen }: { pane: string; color?: string; onOpen(open: boolean): void }) {
   const [open, setOpenState] = useState(false)
@@ -1503,10 +1504,23 @@ function NewTabButton({ pane, color, onOpen }: { pane: string; color?: string; o
     setOpenState(now)
     onOpen(now)
   }
+  // The same as a split's, without the split: the server decides what a new tab holds (`new_tab`).
+  const add = () => {
+    if (open) setOpen(false)
+    call(via(pane, "tab.open"), null, {}, { kind: "tiled", pane }).catch(swallow)
+  }
   return (
-    <div style={{ display: "flex", position: "relative", flexShrink: 0 }}>
+    <div
+      style={{ display: "flex", position: "relative", flexShrink: 0 }}
+      onAuxClick={(e: any) => {
+        // A right press is the menu: the choice of what the tab holds.
+        e?.preventDefault?.()
+        e?.stopPropagation?.()
+        setOpen(!open)
+      }}
+    >
       <div onMouseEnter={() => (onButton.current = true)} onMouseLeave={() => (onButton.current = false)} style={{ display: "flex" }}>
-        <IconButton icon="plus" title="New Tab" active={open} color={color} onClick={() => setOpen(!open)} />
+        <IconButton icon="plus" title="New Tab" active={open} color={color} onClick={add} />
       </div>
       {open ? <NewTabMenu pane={pane} close={() => setOpen(false)} onButton={onButton} /> : null}
     </div>
@@ -1515,7 +1529,7 @@ function NewTabButton({ pane, color, onOpen }: { pane: string; color?: string; o
 
 /**
  * The `+` menu: what a new tab can be (`useNewTabs`), the most used first, as one list. It has the
- * keys while it is open: a row's letter (the same as in the Launcher's list) opens it, the arrows
+ * keys while it is open: a row's letter (the same as in Launchpad's list) opens it, the arrows
  * light one and Enter opens that, Escape closes the menu.
  */
 function NewTabMenu({ pane, close, onButton }: { pane: string; close(): void; onButton: { current: boolean } }) {

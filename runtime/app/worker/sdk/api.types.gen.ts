@@ -1246,7 +1246,7 @@ export interface Functions {
   })[] };
   /**
    * Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a
-   * block or a plugin's `tab.new` action; while it names nothing installed, the Launcher's list, a
+   * block or a plugin's `tab.new` action; while it names nothing installed, Launchpad's list, a
    * shell or the first thing installed that starts one; refused while nothing is, as pumi has no
    * block of its own for one), placed as `place` says:
    * in a pane split from a tab's, into a pane
@@ -2882,7 +2882,7 @@ export interface Nouns {
   })[]>;
     /**
      * Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a
-     * block or a plugin's `tab.new` action; while it names nothing installed, the Launcher's list, a
+     * block or a plugin's `tab.new` action; while it names nothing installed, Launchpad's list, a
      * shell or the first thing installed that starts one; refused while nothing is, as pumi has no
      * block of its own for one), placed as `place` says:
      * in a pane split from a tab's, into a pane

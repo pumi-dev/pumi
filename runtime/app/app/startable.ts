@@ -1,11 +1,11 @@
-// What a new tab can start: one list, which the `+` menu shows and Settings ▸ General ▸ New tabs
-// open picks from. Each plugin that is on brings its `tab.new` actions (Terminal, Pi, Claude
-// Code…), or, when it has none, each block it declares (the Launcher's list, Film, Diff), opened
-// with no arguments. Plugins come in the order the server lists them, each a group of its own.
+// What a new tab can start: one list, which the `+` menu (a right press) shows and Settings ▸
+// General ▸ New tabs open picks from. Each plugin that is on brings its `tab.new` actions (Terminal,
+// Pi, Claude Code…), or, when it has none, each block it declares (Launchpad's list, Film, Diff),
+// opened with no arguments. Plugins come in the order the server lists them, each a group of its own.
 //
 // The `new_tab` option names one: an action by its function (`pumi_dev.agents.new_claude`), a block
-// by its id (`pumi_dev.launcher.new`). While it names nothing installed, new tabs open the
-// Launcher's list, else a shell, else the first of the list: the server decides the same
+// by its id (`pumi.launchpad.new`). While it names nothing installed, new tabs open Launchpad's
+// list, else a shell, else the first of the list: the server decides the same
 // (`crates/pumi-host/src/api/tabs.rs`).
 import type { ActionPick, Entry } from "./plugins.ts"
 
@@ -31,8 +31,9 @@ export interface Startable {
   alias?: string
 }
 
-/** The blocks new tabs open, in this order, while `new_tab` names nothing installed. */
-export const PREFERRED = ["pumi_dev.launcher.new", "pumi_dev.terminal.shell"]
+/** The blocks new tabs open, in this order, while `new_tab` names nothing installed: Launchpad's
+ *  list, which ships with pumi, then a shell. */
+export const PREFERRED = ["pumi.launchpad.new", "pumi_dev.terminal.shell"]
 
 /** A plugin that loaded: one whose manifest could not be read, or is for another API, has none. */
 const loaded = (e: From) => !(e.state === "disabled" && e.error)
@@ -66,18 +67,18 @@ export function named(list: Startable[], value: string): Startable | undefined {
   return list.find((s) => settable(s) && (s.value === value || s.alias === value))
 }
 
-/** What new tabs open while `new_tab` is `value`: what it names, else the Launcher's list, else a shell, else the first. */
+/** What new tabs open while `new_tab` is `value`: what it names, else Launchpad's list, else a shell, else the first. */
 export function newTabOf(list: Startable[], value: string): Startable | undefined {
   return named(list, value) ?? PREFERRED.map((b) => named(list, b)).find(Boolean) ?? list.find(settable)
 }
 
 /**
- * The letter that picks each of `titles` while its list has the keys (the Launcher's tab, the `+`
+ * The letter that picks each of `titles` while its list has the keys (Launchpad's tab, the `+`
  * menu), in the same order: the same title in the same list gets the same letter wherever it is
  * shown, whatever order the list is drawn in. Each takes its first letter if no title before it
  * has; those left take the first letter of another of their words (`Cursor Agent`'s `A`,
  * `OpenCode`'s `C`), then any other of their letters or digits, in order; past those, a digit. One
- * of `reserved` (a list's own rows: the Launcher's `File…`) is no one's. `""` once all are taken.
+ * of `reserved` (a list's own rows: Launchpad's `File…`) is no one's. `""` once all are taken.
  */
 export function letters(titles: string[], reserved: Iterable<string> = []): string[] {
   const taken = new Set([...reserved].map((k) => k.toLowerCase()))

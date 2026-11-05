@@ -63,6 +63,10 @@ jobs:
       - run: cargo test --locked --workspace --exclude xtask
       - run: bun test
         working-directory: runtime/app
+      # The plugin that ships with pumi is tested as one.
+      - run: bun test runtime/bundled
+      - run: bunx tsc --noEmit -p ../bundled/launchpad
+        working-directory: runtime/app
 
   # The same code where it links GTK, X11, Wayland and WebKitGTK: what the macOS
   # run compiles for one OS and never runs.

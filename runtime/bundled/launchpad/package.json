@@ -1,0 +1,47 @@
+{
+  "name": "pumi-launchpad",
+  "displayName": "Launchpad",
+  "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
+  "description": "A tab that lists what you can open in it: a file, and whatever your plugins add to the + menu (a terminal, a page, an agent…). Pick one and it takes the tab's place. It ships with pumi and is what new tabs open.",
+  "keywords": [
+    "launchpad",
+    "new tab"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pumi-dev/pumi",
+    "directory": "runtime/bundled/launchpad"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  },
+  "pumi": {
+    "name": "launchpad",
+    "owner": "pumi",
+    "api": 1,
+    "minPumi": "0.44.0",
+    "icon": "icon.png",
+    "images": [
+      {
+        "path": "preview.svg",
+        "alt": "A new tab as the list of what it can open: a file, a terminal, a page, an agent, each with its key"
+      }
+    ],
+    "contributes": {
+      "blocks": [
+        {
+          "id": "new",
+          "title": "New Tab",
+          "icon": "plus"
+        }
+      ]
+    }
+  }
+}

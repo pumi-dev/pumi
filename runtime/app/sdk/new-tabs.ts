@@ -1,4 +1,4 @@
-// What a new tab can be, as one list: the `+` menu's and the Launcher's. It is `startable.ts`'s
+// What a new tab can be, as one list: the `+` menu's and Launchpad's. It is `startable.ts`'s
 // (each plugin's `tab.new` actions, or its blocks when it has none), drawn the most used first,
 // each row with the letter that picks it while the list has the keys (`letters`). A row opened
 // from either list counts as a use of it (`USES`, kept in window.json), so both keep one order.
@@ -14,10 +14,10 @@ import { byUse, letters, startables, type Uses } from "../app/startable.ts"
 import { keyGlyphs } from "./actions.ts"
 import { useSlot } from "./contributions.ts"
 
-/** Where a new tab goes: into a pane, as one of its tabs, or in a tab's place (the Launcher's). */
+/** Where a new tab goes: into a pane, as one of its tabs, or in a tab's place (Launchpad's). */
 export type NewTabPlace = { kind: "tiled"; pane: string } | { kind: "tiled"; replace: string }
 
-/** One thing a new tab can be: a row of the `+` menu and of the Launcher's list. */
+/** One thing a new tab can be: a row of the `+` menu and of Launchpad's list. */
 export interface NewTab {
   /** `owner/name/<action id>` for an action, `owner/name/<block>` for a block. */
   id: string
@@ -39,7 +39,7 @@ export interface NewTab {
 /** window.json's key: how many times each row was opened from either list, by its id. */
 export const USES = "new_tab.uses"
 
-/** The letters no row gets: the Launcher's own `File…` is `F`, so a row's letter is the same in both lists. */
+/** The letters no row gets: Launchpad's own `File…` is `F`, so a row's letter is the same in both lists. */
 export const RESERVED_LETTERS = ["f"]
 
 /** Counts one use of the row `id`. */
@@ -65,7 +65,7 @@ let pluginsVersion = 0
 plugins.subscribe(() => pluginsVersion++)
 
 /**
- * A row's icon, as the menu and the Launcher draw it: one of the app's by name (`terminal`), or the
+ * A row's icon, as the menu and Launchpad draw it: one of the app's by name (`terminal`), or the
  * mark a plugin brings for it — an agent's `tab.new` action carries a `data:` URI, and a block names
  * a file of its plugin (`plugin:icon.svg`), which the two lists read once, here, as bytes they can
  * draw. `dir` is where that plugin is. Nothing that resolves is the app's box.

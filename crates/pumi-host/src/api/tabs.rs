@@ -7,7 +7,7 @@ use pumi_api::{Cx, Error, Result, TabRef, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 /// Open a tab holding `block` (`null`: what a new tab holds, what the `new_tab` option names, a
-/// block or a plugin's `tab.new` action; while it names nothing installed, the Launcher's list, a
+/// block or a plugin's `tab.new` action; while it names nothing installed, Launchpad's list, a
 /// shell or the first thing installed that starts one; refused while nothing is, as pumi has no
 /// block of its own for one), placed as `place` says:
 /// in a pane split from a tab's, into a pane
@@ -80,9 +80,9 @@ pub fn pumi_tab_open(
 }
 /// What a refusal to open a new tab says while nothing installed can start one: the app knows it by this.
 pub const NO_NEW_TAB: &str = "no plugin opens new tabs";
-/// The blocks a new tab holds, in this order, while `new_tab` names nothing installed: the
-/// Launcher's list, then a shell.
-const PREFERRED: [&str; 2] = ["pumi_dev.launcher.new", "pumi_dev.terminal.shell"];
+/// The blocks a new tab holds, in this order, while `new_tab` names nothing installed:
+/// Launchpad's list, which ships with pumi, then a shell.
+const PREFERRED: [&str; 2] = ["pumi.launchpad.new", "pumi_dev.terminal.shell"];
 /// What a new tab starts: a block, or a plugin's `tab.new` action, by the function it calls.
 #[derive(Debug, PartialEq)]
 pub enum NewTab {
@@ -126,8 +126,8 @@ pub fn resolve_new_tab(named: &str, startables: Vec<NewTab>, blocks: &[String]) 
         NewTab::Action(_) => true,
     })
 }
-/// What a new tab starts: what the `new_tab` option names, while it is installed; else the
-/// Launcher's list, a shell, or the first thing installed that starts one. Refused while nothing does.
+/// What a new tab starts: what the `new_tab` option names, while it is installed; else
+/// Launchpad's list, a shell, or the first thing installed that starts one. Refused while nothing does.
 pub fn new_tab(k: &mut crate::kernel::Kernel, caller: &pumi_api::Caller) -> Result<NewTab> {
     let named = k.global_option("new_tab");
     let listed = k.call_core(caller, "core.blocks", json!([]))?;
@@ -135,7 +135,7 @@ pub fn new_tab(k: &mut crate::kernel::Kernel, caller: &pumi_api::Caller) -> Resu
         listed.as_array().into_iter().flatten().filter_map(|b| b.get("id")?.as_str().map(str::to_string)).collect();
     resolve_new_tab(named.as_str().unwrap_or(""), startables(), &blocks).ok_or_else(|| {
         Error::invalid_params(format!(
-            "{NO_NEW_TAB}: install one (Terminal, Launcher, Browser, Agents: `pumi plugin add pumi-dev/plugins/terminal`); Settings ▸ General ▸ New tabs open (the `new_tab` option) picks among them"
+            "{NO_NEW_TAB}: turn Launchpad back on (`pumi plugin update pumi/launchpad --enabled`) or install one (Terminal, Browser, Agents: `pumi plugin add pumi-dev/plugins/terminal`); Settings ▸ General ▸ New tabs open (the `new_tab` option) picks among them"
         ))
     })
 }
@@ -296,9 +296,9 @@ mod tests {
         assert_eq!(resolve_new_tab("amresyd.film.editor", list(), &all), Some(block("amresyd.film.editor")));
     }
     #[test]
-    fn with_nothing_named_a_new_tab_is_the_launcher_then_a_shell_then_the_first() {
-        let with_launcher = blocks(&["pumi_dev.launcher.new", "pumi_dev.terminal.shell"]);
-        assert_eq!(resolve_new_tab("", list(), &with_launcher), Some(block("pumi_dev.launcher.new")));
+    fn with_nothing_named_a_new_tab_is_launchpads_then_a_shell_then_the_first() {
+        let with_launchpad = blocks(&["pumi.launchpad.new", "pumi_dev.terminal.shell"]);
+        assert_eq!(resolve_new_tab("", list(), &with_launchpad), Some(block("pumi.launchpad.new")));
         let shell = blocks(&["pumi_dev.terminal.shell"]);
         assert_eq!(resolve_new_tab("gone.plugin.block", list(), &shell), Some(block("pumi_dev.terminal.shell")));
         assert_eq!(resolve_new_tab("", list(), &[]), Some(action("pumi_dev.agents.new_pi")));

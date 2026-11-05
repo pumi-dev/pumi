@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <!-- Launcher: a new tab as the list of what it can open, each with its key. -->
+  <clipPath id="w"><rect width="320" height="200" rx="10"/></clipPath>
+  <g clip-path="url(#w)">
+  <rect x="0" y="0" width="320" height="200" fill="#1e1f22"/>
+  <rect x="0" y="0" width="320" height="22" fill="#26282b"/>
+  <rect x="0" y="21" width="320" height="1" fill="#393b41"/>
+  <circle cx="11" cy="11" r="3" fill="#ff5f57"/>
+  <circle cx="21" cy="11" r="3" fill="#febc2e"/>
+  <circle cx="31" cy="11" r="3" fill="#28c840"/>
+  <rect x="44" y="0" width="80" height="22" fill="#1e1f22"/>
+  <rect x="124" y="0" width="1" height="22" fill="#393b41"/>
+  <path d="M55 8v6M52 11h6" stroke="#dfe1e5" stroke-width="1.2" stroke-linecap="round"/>
+  <rect x="62" y="9" width="36" height="4" rx="2" fill="#dfe1e5"/>
+  <rect x="125" y="0" width="66" height="21" fill="#26282b"/>
+  <rect x="191" y="0" width="1" height="22" fill="#393b41"/>
+  <rect x="133" y="8" width="6" height="6" rx="1.5" fill="#a6e3a1"/>
+  <rect x="143" y="9" width="30" height="4" rx="2" fill="#888a8f"/>
+  <!-- The list a new tab opens as: a file, then the + menu's entries with their keys. -->
+  <path d="M101 47h5l3 3v6h-8z" fill="none" stroke="#b0b1b3" stroke-width="1.1" stroke-linejoin="round"/>
+  <rect x="116" y="49" width="34" height="4" rx="2" fill="#dfe1e5"/>
+  <rect x="206" y="45" width="14" height="12" rx="3" fill="#323438"/>
+  <rect x="211" y="49" width="4" height="4" rx="2" fill="#b0b1b3"/>
+  <rect x="100" y="65" width="120" height="1" fill="#393b41"/>
+  <rect x="92" y="69" width="136" height="16" rx="4" fill="#494a4d"/>
+  <path d="M101 74l3 3-3 3M105.5 81h4" fill="none" stroke="#a6e3a1" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="116" y="75" width="40" height="4" rx="2" fill="#dfe1e5"/>
+  <rect x="206" y="71" width="14" height="12" rx="3" fill="#323438"/>
+  <rect x="211" y="75" width="4" height="4" rx="2" fill="#b0b1b3"/>
+  <circle cx="105.5" cy="95.5" r="4" fill="none" stroke="#89b4fa" stroke-width="1.1"/><path d="M101.5 95.5h8M105.5 91.5c-2.5 2.5-2.5 5.5 0 8M105.5 91.5c2.5 2.5 2.5 5.5 0 8" fill="none" stroke="#89b4fa" stroke-width="0.9"/>
+  <rect x="116" y="93" width="34" height="4" rx="2" fill="#dfe1e5"/>
+  <rect x="206" y="89" width="14" height="12" rx="3" fill="#323438"/>
+  <rect x="211" y="93" width="4" height="4" rx="2" fill="#b0b1b3"/>
+  <path d="M105.5 109l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3-3.3-1.2 3.3-1.2z" fill="#fab387"/>
+  <rect x="116" y="111" width="30" height="4" rx="2" fill="#dfe1e5"/>
+  <rect x="206" y="107" width="14" height="12" rx="3" fill="#323438"/>
+  <rect x="211" y="111" width="4" height="4" rx="2" fill="#b0b1b3"/>
+  <rect x="101" y="127" width="3.6" height="3.6" rx="0.8" fill="#cba6f7"/><rect x="101" y="132" width="3.6" height="3.6" rx="0.8" fill="#cba6f7"/><rect x="106" y="127" width="3.6" height="3.6" rx="0.8" fill="#cba6f7"/><rect x="106" y="132" width="3.6" height="3.6" rx="0.8" fill="#cba6f7"/>
+  <rect x="116" y="129" width="44" height="4" rx="2" fill="#dfe1e5"/>
+  <rect x="206" y="125" width="14" height="12" rx="3" fill="#323438"/>
+  <rect x="211" y="129" width="4" height="4" rx="2" fill="#b0b1b3"/>
+  <rect x="102.5" y="144.5" width="6" height="10" rx="1.6" fill="none" stroke="#f38ba8" stroke-width="1.1"/>
+  <rect x="116" y="147" width="52" height="4" rx="2" fill="#dfe1e5"/>
+  <rect x="206" y="143" width="14" height="12" rx="3" fill="#323438"/>
+  <rect x="211" y="147" width="4" height="4" rx="2" fill="#b0b1b3"/>
+  <rect x="100" y="170" width="104" height="3.5" rx="1.75" fill="#5c5f66"/>
+  <rect x="100" y="178" width="60" height="3.5" rx="1.75" fill="#5c5f66"/>
+  </g>
+</svg>
