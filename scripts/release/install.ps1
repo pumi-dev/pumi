@@ -1,4 +1,5 @@
-# pumi - the installer, for Windows 10 and 11 on x86_64.
+# pumi - the installer, for Windows 10 and 11 on x86_64, and on arm64 where Windows 11 runs that
+# build under its own x64 emulation.
 #
 #   irm https://pumi.dev/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://pumi.dev/install.ps1))) -Version 0.42.0
@@ -91,11 +92,57 @@ $Open = -not ($NoOpen -or $env:PUMI_NO_OPEN)
 
 # ---- what this machine is --------------------------------------------------
 
-$Arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-if ($Arch -ne "X64") { Fail "pumi is built for x86_64 Windows; this machine is $Arch." }
+# Not `RuntimeInformation` alone: Windows PowerShell 5.1 resolves the type but the property can
+# answer nothing at all, and the message then reads "this machine is ." - no way to tell someone
+# their machine is one pumi does not run on. The environment's own value is next: it is what the
+# shell was started with, except in a 32-bit shell on a 64-bit machine, where it says x86 and
+# PROCESSOR_ARCHITEW6432 says what the machine is. WMI answers if both are missing.
+function Get-MachineArch {
+  $arch = $null
+  # In a try, because on some .NET Framework builds the property throws rather than being empty.
+  try { $arch = [string][System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture } catch { $arch = $null }
+  if (-not $arch) { $arch = $env:PROCESSOR_ARCHITEW6432 }
+  if (-not $arch) { $arch = $env:PROCESSOR_ARCHITECTURE }
+  if (-not $arch) {
+    # Wrapped: a machine with no CIM, or a broken WMI, is still a machine to try the build on.
+    try {
+      $code = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue |
+        Select-Object -First 1).Architecture
+      $arch = switch ($code) { 0 { "x86" } 5 { "arm" } 9 { "x64" } 12 { "arm64" } default { $null } }
+    } catch { $arch = $null }
+  }
+  if (-not $arch) { return $null }
+  switch ($arch.ToUpperInvariant()) {
+    "AMD64" { "x86_64" }
+    "X64" { "x86_64" }
+    "ARM64" { "arm64" }
+    "X86" { "x86" }
+    "ARM" { "arm" }
+    default { $arch.ToLowerInvariant() }
+  }
+}
+
 # ConPTY, which every terminal runs in, arrived in Windows 10 1809 (build 17763).
 $Build = [Environment]::OSVersion.Version.Build
 if ($Build -lt 17763) { Fail "pumi needs Windows 10 1809 or later; this is build $Build." }
+
+$Arch = Get-MachineArch
+if (-not $Arch) {
+  # A machine that will not say is not a machine to refuse: the manifest names the build, and the
+  # download either starts or it does not.
+  Warn "this machine does not say which architecture it is; taking the x86_64 build"
+} elseif ($Arch -eq "arm64") {
+  # Only an x86_64 build is made. Windows 11 on ARM (22000) runs x64 code under its own emulation,
+  # so the bundle installs and runs there; Windows 10 on ARM emulates x86 alone, and it could not
+  # start there at all.
+  if ($Build -lt 22000) {
+    Fail "pumi is built for x86_64, and this arm64 machine is build ${Build}: Windows 10 on ARM
+   emulates x86 only, so it cannot run it. Windows 11 on ARM can, and pumi installs there."
+  }
+  Warn "pumi is built for x86_64: installing that, which Windows 11 on ARM runs under emulation"
+} elseif ($Arch -ne "x86_64") {
+  Fail "pumi is built for x86_64 Windows; this machine is $Arch."
+}
 $Platform = "windows-x86_64"
 
 $Dest = if ($Dir) { $Dir } else { Join-Path $env:LOCALAPPDATA "Programs\pumi" }
