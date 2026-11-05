@@ -31,6 +31,7 @@ const { setContextResolver } = await import("../sdk/context.ts")
 const opened = await import("./opened.ts")
 const links = await import("./links.ts")
 const { provideUpdates } = await import("./updates.ts")
+const commands = await import("./commands.ts")
 const ghostty = await import("./ghostty.ts")
 const { SETTINGS_FILE } = await import("./settings/store.ts")
 const layout = await import("./layout.ts")
@@ -41,6 +42,8 @@ const manager = new WindowManager(() => <Root safe={safe} />)
 // ⌘, and `openSettings`: the Settings window, React as the windows are.
 ;(await import("./settings/window.tsx")).installSettings(manager, safe)
 setContextResolver((id) => manager.windows.find((w) => w.id === id)?.context())
+// A command asked for by name (`command.run`, a plugin's `toggle_sidebar`) runs in the window in front.
+commands.setFrontResolver(() => (manager.windows.find((w) => w.active) ?? manager.windows[0])?.context())
 manager.restore()
 mark("restore")
 // In the app's worker: its windows are open (the main thread closes any of the last worker's it
@@ -62,6 +65,7 @@ const begin = () => {
   links.start()
   plugins.start(safe)
   provideUpdates()
+  commands.provideCommands()
   // The default theme's settings this Mac kept before they were settings.
   layout.moveLocalPrefs()
   // The terminals' settings: config.ghostty, followed as it changes.

@@ -4,6 +4,7 @@
 import { useEffect } from "react"
 import { Engine } from "../native/addon.js"
 import { call, engine, store, via } from "./engine.ts"
+import { APP_FUNCTIONS } from "./updates.ts"
 import { chordOf, humanize, Keymap, type Command } from "./keymap.ts"
 import * as plugins from "./plugins.ts"
 import * as serverKeys from "./serverkeys.ts"
@@ -29,7 +30,8 @@ export interface Context {
 }
 
 export interface CommandDef extends Command {
-  run(context: Context, index?: number): unknown
+  /** Runs it in that window. What it answers is not read: `run` waits for a promise, swallows a throw. */
+  run(context: Context, index?: number): void
 }
 
 const registry = new Map<string, CommandDef>()
@@ -434,3 +436,44 @@ store.subscribe(() => {
   }
 })
 plugins.subscribe(rebuild)
+
+/**
+ * How the app finds its window in front, for a command asked for by name rather than pressed in a
+ * window's own key handling (`command.run`). The app's: its window manager's.
+ */
+let front: () => Context | undefined = () => undefined
+
+/** The app's own: how to find the context of the window in front (`windows.tsx`). */
+export function setFrontResolver(get: () => Context | undefined) {
+  front = get
+}
+
+/**
+ * `command.run`: one of the app's own commands (`toggle_sidebar`, ⌘B), run in the window in front.
+ * A plugin draws inside a window but cannot press a key in it: the side bar's switch is the app's,
+ * and this is how it asks for it (a theme's `useBinding` goes the other way: a key to a command).
+ */
+export function provideCommands() {
+  APP_FUNCTIONS.set("command.run", (args) => {
+    const name = String(args[0] ?? "")
+    const context = front()
+    if (context) run(name, context)
+    return null
+  })
+  engine.provide({
+    name: "command.run",
+    since: 1,
+    provider: "app",
+    runs_on: "client",
+    effect: "write",
+    agent: false,
+    desc: "Run one of the app's commands in the window in front, by name: `toggle_sidebar` (⌘B), `settings`, `split_right`, `close_tab`, `reload_config`. What a plugin cannot press, it asks for.",
+    parameters: [["String", "command"]],
+    params_schema: { type: "object", properties: { command: { type: "string", description: "The command's name, as `pumi help` lists them." } }, required: ["command"] },
+    returns: "nil",
+    returns_schema: {},
+    examples: [{ args: ["toggle_sidebar"] }],
+    notes: [],
+    source: "app",
+  })
+}
