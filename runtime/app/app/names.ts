@@ -4,11 +4,28 @@
 import { basename } from "node:path"
 import type { Snapshot, Tree } from "./engine.ts"
 import { shownOf } from "./layout.ts"
+import { entries, prefixOf } from "./plugins.ts"
 
-/** A tab by what it shows: its name, its title, its directory, its type. */
+/**
+ * The name a block's plugin gives it in its manifest (`New Tab`, for the Launcher's `new`): what
+ * a tab of a plugin block goes by when it has no name, title or directory of its own, rather than
+ * the block's id (`pumi_dev.launcher.new`). `undefined` for a core block's, or one no plugin of
+ * ours declares (a tab whose plugin is gone keeps the id).
+ */
+export function blockTitle(block: string): string | undefined {
+  for (const e of entries.values()) {
+    const prefix = prefixOf(e.id)
+    if (!block.startsWith(prefix)) continue
+    const mine = e.manifest.contributes?.blocks?.find((b) => b.id === block.slice(prefix.length))
+    if (mine?.title) return mine.title
+  }
+  return undefined
+}
+
+/** A tab by what it shows: its name, its title, its directory, its block's (`New Tab`), its id. */
 export function tabLabel(p: { block: string; label?: string; terminal_title?: string | null; cwd?: string | null }): string {
   const dir = p.cwd ? basename(p.cwd) : undefined
-  return p.label || p.terminal_title || dir || p.block
+  return p.label || p.terminal_title || dir || blockTitle(p.block) || p.block
 }
 
 /** What a view with no tabs, and no name, is called. */
