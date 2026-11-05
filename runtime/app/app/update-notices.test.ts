@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { updateNotices } from "./update-notices.ts"
+import { answerNotice, updateNotices } from "./update-notices.ts"
 
 const idle = { app: { status: "idle" }, plugins: { found: null } }
 
@@ -33,5 +33,38 @@ describe("update notices", () => {
     expect(updateNotices(state, { app: app.key, plugins: plugins.key })).toEqual([])
     expect(updateNotices({ ...state, app: { status: "ready", version: "0.46.0" } }, { app: app.key })[0].title).toBe("pumi 0.46.0 is ready")
     expect(updateNotices({ ...state, plugins: { found: [{ name: "agents", to: "1.3.0" }] } }, { app: app.key, plugins: plugins.key })[0].kind).toBe("plugins")
+  })
+})
+
+describe("a check a person asked for", () => {
+  const asked = (app: Record<string, unknown>) => answerNotice({ app: { status: "idle", ...app }, plugins: { found: null }, manual: true })
+
+  test("is answered either way, up to date and all", () => {
+    const upToDate = asked({ status: "upToDate", current: "0.48.0", channel: "stable" })
+    expect(upToDate?.title).toBe("pumi 0.48.0 is up to date")
+    expect(upToDate?.detail).toBe("That is the newest version on the stable channel.")
+    expect(upToDate?.action).toBeUndefined()
+    expect(asked({ status: "upToDate" })?.title).toBe("pumi is up to date")
+  })
+
+  test("says why the check could not be made", () => {
+    const unavailable = asked({ status: "unavailable", error: "it is a development build" })
+    expect(unavailable?.title).toBe("This copy does not update itself")
+    expect(unavailable?.detail).toBe("it is a development build")
+    const failed = asked({ status: "failed", error: "no network" })
+    expect(failed?.title).toBe("Could not check for updates")
+    expect(failed?.detail).toBe("no network")
+  })
+
+  test("says a version is out where this copy installs nothing", () => {
+    const found = asked({ status: "found", version: "0.49.0", error: "it is a development build" })
+    expect(found?.title).toBe("pumi 0.49.0 is out")
+    expect(found?.detail).toBe("This copy does not install it: it is a development build.")
+  })
+
+  test("says nothing while a check runs, or when nobody asked", () => {
+    for (const status of ["idle", "checking", "downloading", "ready"]) expect(asked({ status, version: "0.49.0" })).toBeUndefined()
+    expect(answerNotice({ app: { status: "upToDate" }, plugins: { found: null } })).toBeUndefined()
+    expect(answerNotice(idle)).toBeUndefined()
   })
 })

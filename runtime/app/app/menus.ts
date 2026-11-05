@@ -1,7 +1,7 @@
-// The macOS menu bar. The application menu (About, Settings…, Keybindings…, Services, Hide, Quit)
-// is the addon's; everything else is here, built from the command registry so a theme's or a
-// plugin's command reaches the bar without a Rust change. A click comes back as a `menu` event
-// (`on("menu", …)`, see `windows.tsx`) and runs in the window in front.
+// The macOS menu bar. The application menu (About, Check for Updates…, Settings…, Keybindings…,
+// Services, Hide, Quit) is the addon's; everything else is here, built from the command registry so
+// a theme's or a plugin's command reaches the bar without a Rust change. A click comes back as a
+// `menu` event (`on("menu", …)`, see `windows.tsx`) and runs in the window in front.
 //
 // `Edit` is missing on purpose: AppKit takes a menu's key equivalent before the window sees it, so
 // ⌘C and ⌘V would never reach the text elements that handle them. `Pane` and `View` show what is

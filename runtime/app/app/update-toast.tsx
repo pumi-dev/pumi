@@ -1,7 +1,9 @@
 // The update toast: a card in the window's bottom right corner while pumi's update is ready or
-// plugins have new ones (`update-notices.ts`), each dismissed on its own. pumi's has a "What's new"
-// button beside Restart, opening its release page in the system's browser. The app draws it over
-// any theme's window, in the theme's colours; a theme does not replace it.
+// plugins have new ones (`update-notices.ts`), and for a moment when a check a person asked for is
+// answered either way ("pumi 0.48.0 is up to date"), each dismissed on its own. pumi's has a
+// "What's new" button beside Restart, opening its release page in the system's browser. The app
+// draws it over any theme's window, in the theme's colours; a theme does not replace it.
+import { useEffect, useState } from "react"
 import { Icon } from "../sdk/elements.tsx"
 import { useMetrics, useTheme } from "../sdk/theme.ts"
 import { useTextSize } from "../sdk/settings/controls.tsx"
@@ -9,21 +11,34 @@ import { engine } from "./engine.ts"
 import { useLocal } from "./local.ts"
 import { openSettings } from "./settings/open.ts"
 import { openPath, useUpdates } from "./settings/shared.tsx"
-import { updateNotices, type Dismissed, type UpdateNotice } from "./update-notices.ts"
+import { answerNotice, updateNotices, type Dismissed, type UpdateNotice } from "./update-notices.ts"
 
 const NONE: Dismissed = {}
+/** How long a check's answer stays: enough to read it (a found update's toast stays until applied). */
+const ANSWERED_MS = 8000
 
 export function UpdateToasts() {
   const updates = useUpdates()
   const [dismissed, setDismissed] = useLocal<Dismissed>("updateToast.dismissed", NONE)
+  const [answer, setAnswer] = useState<UpdateNotice | null>(null)
+  // A check a person asked for (the menu's Check for Updates, Settings' button): what came of it is
+  // said even when nothing did, then taken away — the state it describes outlives it in Settings.
+  useEffect(() => {
+    const said = answerNotice(updates)
+    if (!said) return
+    setAnswer(said)
+    const timer = setTimeout(() => setAnswer(null), ANSWERED_MS)
+    return () => clearTimeout(timer)
+  }, [updates.seq])
   const notices = updateNotices(updates, dismissed)
-  if (!notices.length) return null
+  if (!notices.length && !answer) return null
   return (
     <anchored side="bottom" align="end" anchor="bottomRight" offset={{ x: -12, y: -12 }} deferred priority={0} style={{ backgroundColor: "transparent" }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
         {notices.map((n) => (
           <Toast key={n.kind} notice={n} onDismiss={() => setDismissed((was) => ({ ...was, [n.kind]: n.key }))} />
         ))}
+        {answer ? <Toast key="check" notice={answer} onDismiss={() => setAnswer(null)} /> : null}
       </div>
     </anchored>
   )
@@ -31,7 +46,7 @@ export function UpdateToasts() {
 
 function act(notice: UpdateNotice) {
   if (notice.kind === "app") engine.restartToUpdate()
-  else openSettings("plugins")
+  else if (notice.kind === "plugins") openSettings("plugins")
 }
 
 function Toast({ notice, onDismiss }: { notice: UpdateNotice; onDismiss(): void }) {
@@ -45,7 +60,7 @@ function Toast({ notice, onDismiss }: { notice: UpdateNotice; onDismiss(): void 
     >
       <Words notice={notice} />
       {link ? <ToastButton label={link.label} onPress={() => openPath(link.url)} /> : null}
-      <ToastButton label={notice.action} primary onPress={() => act(notice)} />
+      {notice.action ? <ToastButton label={notice.action} primary onPress={() => act(notice)} /> : null}
       <div
         aria-label="Dismiss"
         title="Dismiss"

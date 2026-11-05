@@ -153,8 +153,20 @@ export function GroupSection({ group, title, skip, description, children }: { gr
 
 /** The updater, as `Engine.updateState` says and each `update` event tells again. */
 export interface UpdateState {
-  app: { status: string; version?: string | null; notes?: string | null; error?: string | null; current: string; channel: string; text: string; canCheck: boolean; busy: boolean }
+  app: {
+    status: string
+    version?: string | null
+    notes?: string | null
+    error?: string | null
+    current: string
+    channel: string
+    text: string
+    canCheck: boolean
+    busy: boolean
+  }
   plugins: { checking: boolean; found: { name: string; from?: string; to?: string }[] | null; error: string | null }
+  /** The event answers a check a person asked for: the app toasts the outcome, either way. */
+  manual?: boolean
 }
 
 const NO_UPDATES: UpdateState = {
@@ -171,8 +183,11 @@ function readUpdates(): UpdateState {
   }
 }
 
-export function useUpdates(): UpdateState {
-  const [state, setState] = useState<UpdateState>(readUpdates)
-  useEffect(() => on("update", (data: UpdateState) => setState(data ?? readUpdates())), [])
+export function useUpdates(): UpdateState & { /** How many `update` events have come: a fresh word each. */ seq: number } {
+  const [state, setState] = useState<UpdateState & { seq: number }>(() => ({ ...readUpdates(), seq: 0 }))
+  useEffect(
+    () => on("update", (data: UpdateState) => setState((was) => ({ ...(data ?? readUpdates()), seq: was.seq + 1 }))),
+    [],
+  )
   return state
 }
