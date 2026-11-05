@@ -6,9 +6,9 @@
 //
 // What `pumi do` passes, in the environment: PUMI_DO (the arguments, JSON), PUMI_DO_JSON,
 // PUMI_DO_FOR (with `--for`, in milliseconds, a script that listens keeps running that long),
-// PUMI_DO_SESSION and PUMI_DO_TAB (`--session`, `--tab`: `self`'s session and tab, else the
-// environment's PUMI_SESSION and PUMI_TAB), PUMI_DO_ALL (`--all`: its handlers hear every
-// session's events, not only its own session's) and PUMI_DO_FAIL_FAST (`--fail-fast`: a handler
+// PUMI_DO_PROJECT and PUMI_DO_TAB (`--project`, `--tab`: `self`'s project and tab, else the
+// environment's PUMI_PROJECT and PUMI_TAB), PUMI_DO_ALL (`--all`: its handlers hear every
+// project's events, not only its own project's) and PUMI_DO_FAIL_FAST (`--fail-fast`: a handler
 // that throws ends the script, exit status 1; without it the error is printed and it goes on).
 //
 // FILE's default export, when it is a function, is called with the arguments; what it answers is
@@ -29,25 +29,25 @@ const args = JSON.parse(process.env.PUMI_DO ?? "{}");
 const json = process.env.PUMI_DO_JSON === "1";
 const lasting = Number(process.env.PUMI_DO_FOR ?? "0");
 const given = (name: string) => process.env[name] || null;
-const session = given("PUMI_DO_SESSION") ?? given("PUMI_SESSION");
+const project = given("PUMI_DO_PROJECT") ?? given("PUMI_PROJECT");
 const tab = given("PUMI_DO_TAB") ?? given("PUMI_TAB");
 const all = process.env.PUMI_DO_ALL === "1";
 const failFast = process.env.PUMI_DO_FAIL_FAST === "1";
 
-/** The session an event is about: its own, or its view's or tab's; `null` when it names none. */
-async function sessionOf(event: any): Promise<string | null> {
-  if (typeof event?.session === "string") return event.session;
-  if (typeof event?.data?.session === "string") return event.data.session;
-  if (typeof event?.view === "string") return ((await cache.load("view", event.view))?.session as string) ?? null;
-  if (typeof event?.tab === "string") return ((await cache.load("tab", event.tab))?.session as string) ?? null;
+/** The project an event is about: its own, or its view's or tab's; `null` when it names none. */
+async function projectOf(event: any): Promise<string | null> {
+  if (typeof event?.project === "string") return event.project;
+  if (typeof event?.data?.project === "string") return event.data.project;
+  if (typeof event?.view === "string") return ((await cache.load("view", event.view))?.project as string) ?? null;
+  if (typeof event?.tab === "string") return ((await cache.load("tab", event.tab))?.project as string) ?? null;
   return null;
 }
 
-/** Without `--all`, a handler hears its own session's events and those about no session. */
+/** Without `--all`, a handler hears its own project's events and those about no project. */
 async function hears(event: any): Promise<boolean> {
-  if (all || !session) return true;
-  const of = await sessionOf(event).catch(() => null);
-  return of === null || of === session;
+  if (all || !project) return true;
+  const of = await projectOf(event).catch(() => null);
+  return of === null || of === project;
 }
 
 Bun.plugin({
@@ -66,7 +66,7 @@ rpc.closed.then(() => process.exit(process.exitCode ?? 1));
 
 rpc.request("channel.setInfo", [{ name: "pumi do" }]).catch(() => {});
 const full = resolve(file);
-connection.install(rpc.port, { pkg: "local/do", prefix: "local.do.", dir: dirname(full), session, tab, args });
+connection.install(rpc.port, { pkg: "local/do", prefix: "local.do.", dir: dirname(full), project, tab, args });
 // A handler's error is printed where it happens; with `--fail-fast` it ends the script too.
 if (failFast) connection.raised = () => {
   process.exitCode = 1;

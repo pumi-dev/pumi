@@ -2,7 +2,7 @@
 //! that matches it, or `null` when its time is up or its caller goes.
 use super::events::{Event, fnmatch, listens_to};
 use super::{ChanId, Kernel};
-use pumi_api::{SessionRef, TabRef, ViewRef};
+use pumi_api::{ProjectRef, TabRef, ViewRef};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -22,7 +22,7 @@ pub struct WaitedEvent {
     pub event: String,
     #[serde(rename = "match")]
     pub matched: String,
-    pub session: Option<SessionRef>,
+    pub project: Option<ProjectRef>,
     pub view: Option<ViewRef>,
     pub tab: Option<TabRef>,
     pub data: Value,
@@ -32,7 +32,7 @@ impl WaitedEvent {
         WaitedEvent {
             event: event.event.clone(),
             matched: event.matched.clone(),
-            session: event.about.session.map(SessionRef),
+            project: event.about.project.map(ProjectRef),
             view: event.about.view.map(ViewRef),
             tab: event.about.tab.map(TabRef),
             data: event.data.clone(),

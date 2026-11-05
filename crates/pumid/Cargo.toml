@@ -4,7 +4,7 @@ version = "0.49.0"
 edition = "2024"
 publish = false
 license = "Apache-2.0"
-description = "pumi's core: sessions, views, panes and tabs, options, events and terminals, routing every other call to the channel that provides it."
+description = "pumi's core: projects, views, panes and tabs, options, events and terminals, routing every other call to the channel that provides it."
 [lib]
 path = "src/lib.rs"
 [[bin]]

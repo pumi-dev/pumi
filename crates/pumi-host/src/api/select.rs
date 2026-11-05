@@ -1,12 +1,12 @@
-//! Moving the caller between sessions, views, panes and tabs (`session.focus`, `view.focus`,
+//! Moving the caller between projects, views, panes and tabs (`project.focus`, `view.focus`,
 //! `pane.focus`, `tab.focus`), and the changes that lay a view out again (`pane.update`'s and
 //! `tab.update`'s `size` and `zoom`). Focus is a change to the parent's `activeView`,
-//! `activeTab` or `activePane`, so it fires `session.changed` or `view.changed`.
+//! `activeTab` or `activePane`, so it fires `project.changed` or `view.changed`.
 use super::kernel;
 use crate::kernel::layout::Side;
 use crate::kernel::objects::neighbour;
 use crate::kernel::{Kernel, PaneId, TabId, ViewId};
-use pumi_api::{Cx, Error, PaneRef, Result, SessionRef, TabRef, ViewRef, api};
+use pumi_api::{Cx, Error, PaneRef, ProjectRef, Result, TabRef, ViewRef, api};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 /// The pane beside `pane` on `side`, the one used last of several (`{left-of}`).
@@ -40,7 +40,7 @@ pub struct TabFocus {
     #[serde(default)]
     pub last: bool,
 }
-/// Make a tab its pane's front tab and its view's active tab, and its view and session current;
+/// Make a tab its pane's front tab and its view's active tab, and its view and project current;
 /// or move from it: to the next tab of its pane (`offset`), to the pane beside it (`direction`),
 /// or to its view's tab used last (`last`). No id is the caller's tab. Moving out of a zoomed
 /// pane unzooms the view; nothing there is not an error.
@@ -93,7 +93,7 @@ pub struct PaneFocus {
     pub last: bool,
 }
 /// Give a pane its view's focus (its front tab becomes the view's active tab), and make its view
-/// and session current; or move from it to another: the one beside it (`direction`), so many
+/// and project current; or move from it to another: the one beside it (`direction`), so many
 /// on (`offset`), or the one used last (`last`). No id is the caller's tab's pane. Moving out of
 /// a zoomed pane unzooms the view; nothing there is not an error.
 #[api(
@@ -178,21 +178,21 @@ pub fn pumi_pane_update(cx: &mut Cx, pane: Option<PaneRef>, patch: PanePatch) ->
     }
     Ok(())
 }
-/// Where `view.focus` moves from its view, in its session.
+/// Where `view.focus` moves from its view, in its project.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ViewFocus {
     /// To so many views on (or back, negative), wrapping.
     #[serde(default)]
     pub offset: Option<i64>,
-    /// To the session's view at this index.
+    /// To the project's view at this index.
     #[serde(default)]
     pub index: Option<u32>,
-    /// To the view used before the session's active one.
+    /// To the view used before the project's active one.
     #[serde(default)]
     pub last: bool,
 }
-/// Make a view its session's active view; or move from it to another of its session by offset
+/// Make a view its project's active view; or move from it to another of its project by offset
 /// (`next-window` is `{"offset": 1}`), by index, or the last one. No id is the caller's view.
 #[api(
     name = "view.focus",
@@ -212,12 +212,12 @@ pub fn pumi_view_focus(cx: &mut Cx, view: Option<ViewRef>, opts: Option<ViewFocu
     if ways > 1 {
         return Err(Error::invalid_params("say one of `offset`, `index` and `last`"));
     }
-    let current = k.model.current(&caller).map(|c| c.session);
-    let session = current
-        .filter(|s| k.model.sessions[s].views.iter().any(|(_, x)| *x == origin))
-        .or_else(|| k.model.session_of_view(origin))
-        .ok_or_else(|| Error::not_found(format!("view @{origin} is in no session")))?;
-    let s = &k.model.sessions[&session];
+    let current = k.model.current(&caller).map(|c| c.project);
+    let project = current
+        .filter(|s| k.model.projects[s].views.iter().any(|(_, x)| *x == origin))
+        .or_else(|| k.model.project_of_view(origin))
+        .ok_or_else(|| Error::not_found(format!("view @{origin} is in no project")))?;
+    let s = &k.model.projects[&project];
     let target = if how.last {
         s.last.ok_or_else(|| Error::not_found("no last view"))?
     } else if let Some(index) = how.index {
@@ -237,49 +237,49 @@ pub fn pumi_view_focus(cx: &mut Cx, view: Option<ViewRef>, opts: Option<ViewFocu
     };
     k.call_core(&caller, "core.setCurrentView", json!([target])).map(|_| ())
 }
-/// Where `session.focus` moves from its session.
+/// Where `project.focus` moves from its project.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SessionFocus {
-    /// To so many sessions on (or back), in the order they were made, wrapping.
+pub struct ProjectFocus {
+    /// To so many projects on (or back), in the order they were made, wrapping.
     #[serde(default)]
     pub offset: Option<i64>,
-    /// To the session used most recently before it.
+    /// To the project used most recently before it.
     #[serde(default)]
     pub last: bool,
 }
-/// Show a session in the caller's client; or move from it to another by offset, or to the last
-/// one (`-n`, `-p`, `-l`). No id is the caller's session.
+/// Show a project in the caller's client; or move from it to another by offset, or to the last
+/// one (`-n`, `-p`, `-l`). No id is the caller's project.
 #[api(
-    name = "session.focus",
+    name = "project.focus",
     example(args = r#"["$1"]"#, result = "null"),
-    example(args = r#"[null, {"offset": 1}]"#, result = "null", desc = "The next session."),
+    example(args = r#"[null, {"offset": 1}]"#, result = "null", desc = "The next project."),
     example(args = r#"[null, {"last": true}]"#, result = "null")
 )]
-pub fn pumi_session_focus(cx: &mut Cx, session: Option<SessionRef>, opts: Option<SessionFocus>) -> Result<()> {
+pub fn pumi_project_focus(cx: &mut Cx, project: Option<ProjectRef>, opts: Option<ProjectFocus>) -> Result<()> {
     let (caller, k) = kernel(cx)?;
     let how = opts.unwrap_or_default();
-    let origin = k.model.session_ref(&caller, session)?;
+    let origin = k.model.project_ref(&caller, project)?;
     let target = if how.last {
         if how.offset.is_some() {
             return Err(Error::invalid_params("say `offset` or `last`, not both"));
         }
         k.model
-            .sessions
+            .projects
             .values()
             .filter(|s| s.id != origin)
             .max_by_key(|s| s.activity)
             .map(|s| s.id)
-            .ok_or_else(|| Error::not_found("no last session"))?
+            .ok_or_else(|| Error::not_found("no last project"))?
     } else if let Some(offset) = how.offset {
-        let ids: Vec<u64> = k.model.sessions.keys().copied().collect();
+        let ids: Vec<u64> = k.model.projects.keys().copied().collect();
         let at = ids.iter().position(|s| *s == origin).unwrap_or(0) as i64;
         *ids.get((at + offset).rem_euclid(ids.len().max(1) as i64) as usize)
-            .ok_or_else(|| Error::not_found("no sessions"))?
+            .ok_or_else(|| Error::not_found("no projects"))?
     } else {
         origin
     };
-    k.call_core(&caller, "core.setCurrentSession", json!([target])).map(|_| ())
+    k.call_core(&caller, "core.setCurrentProject", json!([target])).map(|_| ())
 }
 /// Grows or shrinks a tiled tab's pane from a side: its neighbour there gives or takes the cells.
 pub fn resize(cx: &mut Cx, tab: TabId, side: Side, cells: i64) -> Result<()> {

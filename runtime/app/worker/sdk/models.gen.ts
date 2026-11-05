@@ -1,18 +1,14 @@
 // Generated from api/pumi-api.json by `bun runtime/app/gen/index.ts` (`cargo xtask api` runs it); do not edit.
 
 import { Model, installClasses } from "./model.ts";
-import type { Layout, Neighbors, Notification, ObjectId, PaneData, PaneId, PaneKey, PluginData, PluginId, PluginKey, Process, RequestData, RequestId, RequestKey, Scroll, SessionData, SessionId, SessionKey, TabData, TabId, TabKey, TabPlace, TabTraits, ViewData, ViewId, ViewKey } from "./api.types.gen.ts";
+import type { Layout, Neighbors, Notification, ObjectId, PaneData, PaneId, PaneKey, PluginData, PluginId, PluginKey, Process, ProjectData, ProjectId, ProjectKey, RequestData, RequestId, RequestKey, Scroll, TabData, TabId, TabKey, TabPlace, TabTraits, ViewData, ViewId, ViewKey } from "./api.types.gen.ts";
 
-/** A session containing views. Its fields read the live cache; each method is one call. */
-export class Session extends Model<SessionData, SessionKey> {
-  static readonly kind = "session";
-  /** Its name. */
-  get name(): string {
-    return this.field("name") as string;
-  }
-  /** Its directory. */
-  get cwd(): string | null {
-    return this.field("cwd") as string | null;
+/** A project containing views. Its fields read the live cache; each method is one call. */
+export class Project extends Model<ProjectData, ProjectKey> {
+  static readonly kind = "project";
+  /** Its folder: the one project there is in it. */
+  get path(): string {
+    return this.field("path") as string;
   }
   /** Its views in order. */
   get views(): View[] {
@@ -23,58 +19,43 @@ export class Session extends Model<SessionData, SessionKey> {
     return this.model("view", this.field("activeView")) as View | null;
   }
   /**
-   * Change a session's name or directory. Fires `session.changed` with what changed. No id is the
-   * caller's session.
+   * Show a project in the caller's client; or move from it to another by offset, or to the last
+   * one (`-n`, `-p`, `-l`). No id is the caller's project.
    *
    * @example
-   * await session.update({ name: "work" })
-   */
-  update(patch: {
-    /** Its name; `null` gives it a free one of its own (its folder's, else a number). */
-    name?: string | null;
-    /** Its directory, where its terminals start without a `cwd` of their own; `null` has none. */
-    cwd?: string | null;
-  }): Promise<null> {
-    return this.invoke("session.update", [this.id, patch]);
-  }
-  /**
-   * Show a session in the caller's client; or move from it to another by offset, or to the last
-   * one (`-n`, `-p`, `-l`). No id is the caller's session.
-   *
-   * @example
-   * await session.focus()
+   * await project.focus()
    */
   focus(opts?: {
-    /** To so many sessions on (or back), in the order they were made, wrapping. */
+    /** To so many projects on (or back), in the order they were made, wrapping. */
     offset?: number | null;
-    /** To the session used most recently before it. */
+    /** To the project used most recently before it. */
     last?: boolean;
   } | null): Promise<null> {
-    return this.invoke("session.focus", [this.id, opts]);
+    return this.invoke("project.focus", [this.id, opts]);
   }
   /**
-   * Close a session and its views and tabs. No id is the caller's.
+   * Close a project and its views and tabs. No id is the caller's.
    *
    * @example
-   * await session.close()
+   * await project.close()
    */
   close(): Promise<null> {
-    return this.invoke("session.close", [this.id]);
+    return this.invoke("project.close", [this.id]);
   }
 }
 
 /** A view: a layout of panes, each holding tabs. Its fields read the live cache; each method is one call. */
 export class View extends Model<ViewData, ViewKey> {
   static readonly kind = "view";
-  /** Its session. */
-  get session(): Session {
-    return this.model("session", this.field("session")) as Session;
+  /** Its project. */
+  get project(): Project {
+    return this.model("project", this.field("project")) as Project;
   }
   /** Its given name. */
   get name(): string | null {
     return this.field("name") as string | null;
   }
-  /** Its index in the session. */
+  /** Its index in the project. */
   get index(): number {
     return this.field("index") as number;
   }
@@ -95,7 +76,7 @@ export class View extends Model<ViewData, ViewKey> {
     return this.model("pane", this.field("zoom")) as Pane | null;
   }
   /**
-   * Change a view: its name, index or session, layout, and zoom. Each change fires `view.changed`
+   * Change a view: its name, index or project, layout, and zoom. Each change fires `view.changed`
    * with what changed. No id is the caller's view.
    *
    * @example
@@ -104,10 +85,10 @@ export class View extends Model<ViewData, ViewKey> {
   update(patch: {
     /** Its name; `null` gives it back its automatic name (its active tab's title). */
     name?: string | null;
-    /** Its index in its session, which must be free. */
+    /** Its index in its project, which must be free. */
     index?: number | null;
-    /** The session it moves to, at `index` or its first free one. */
-    session?: SessionId | null;
+    /** The project it moves to, at `index` or its first free one. */
+    project?: ProjectId | null;
     layout?: "even-horizontal" | "even-vertical" | "main-horizontal" | "main-horizontal-mirrored" | "main-vertical" | "main-vertical-mirrored" | "tiled" | {
       offset: number;
     } | {
@@ -130,7 +111,7 @@ export class View extends Model<ViewData, ViewKey> {
     return this.invoke("view.update", [this.id, patch]);
   }
   /**
-   * Make a view its session's active view; or move from it to another of its session by offset
+   * Make a view its project's active view; or move from it to another of its project by offset
    * (`next-window` is `{"offset": 1}`), by index, or the last one. No id is the caller's view.
    *
    * @example
@@ -139,9 +120,9 @@ export class View extends Model<ViewData, ViewKey> {
   focus(opts?: {
     /** To so many views on (or back, negative), wrapping. */
     offset?: number | null;
-    /** To the session's view at this index. */
+    /** To the project's view at this index. */
     index?: number | null;
-    /** To the view used before the session's active one. */
+    /** To the view used before the project's active one. */
     last?: boolean;
   } | null): Promise<null> {
     return this.invoke("view.focus", [this.id, opts]);
@@ -204,7 +185,7 @@ export class Pane extends Model<PaneData, PaneKey> {
   }
   /**
    * Give a pane its view's focus (its front tab becomes the view's active tab), and make its view
-   * and session current; or move from it to another: the one beside it (`direction`), so many
+   * and project current; or move from it to another: the one beside it (`direction`), so many
    * on (`offset`), or the one used last (`last`). No id is the caller's tab's pane. Moving out of
    * a zoomed pane unzooms the view; nothing there is not an error.
    *
@@ -235,9 +216,9 @@ export class Pane extends Model<PaneData, PaneKey> {
 /** A tab holding one block. Its fields read the live cache; each method is one call. */
 export class Tab extends Model<TabData, TabKey> {
   static readonly kind = "tab";
-  /** Its session. */
-  get session(): Session {
-    return this.model("session", this.field("session")) as Session;
+  /** Its project. */
+  get project(): Project {
+    return this.model("project", this.field("project")) as Project;
   }
   /** Its view. */
   get view(): View | null {
@@ -307,15 +288,15 @@ export class Tab extends Model<TabData, TabKey> {
     title?: string | null;
     /**
      * Where it goes: into a pane (`{"kind": "tiled", "pane": ":2"}`, or along its own pane's
-     * strip), in a pane split from another tab's, into a new view or session, floating, or into
+     * strip), in a pane split from another tab's, into a new view or project, floating, or into
      * another tab's place (`{"kind": "tiled", "swap": "%2"}`).
      */
     place?: {
       /**
        * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-       * tiled in a new view or a new session.
+       * tiled in a new view or a new project.
        */
-      kind: "tiled" | "float" | "hidden" | "view" | "session";
+      kind: "tiled" | "float" | "hidden" | "view" | "project";
       /** Tiled: into this view, beside its active tab. Float: over this view. */
       view?: ViewId | null;
       /**
@@ -323,8 +304,8 @@ export class Tab extends Model<TabData, TabKey> {
        * beside it, in a pane of its own. Where a tiled tab is, its pane.
        */
       pane?: PaneId | "current" | null;
-      /** View: the session the new view goes in; `new` makes a session for the tab. */
-      session?: SessionId | "new" | null;
+      /** View: the project the new view goes in; `new` makes a project for the tab. */
+      project?: ProjectId | "new" | null;
       /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
       split?: "left" | "right" | "up" | "down" | null;
       /**
@@ -345,10 +326,10 @@ export class Tab extends Model<TabData, TabKey> {
       size?: number | string | null;
       /** Tiled: split the whole view, not one pane. */
       full?: boolean | null;
-      /** View, session: its name. */
+      /** View: its name. */
       name?: string | null;
-      /** Session: its directory. */
-      cwd?: string | null;
+      /** Project: its folder, the one project there is; the home folder without one. */
+      path?: string | null;
       /** Make it the caller's tab; `true` by default. */
       focus?: boolean | null;
       /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -398,7 +379,7 @@ export class Tab extends Model<TabData, TabKey> {
     return this.invoke("tab.update", [this.id, patch]);
   }
   /**
-   * Make a tab its pane's front tab and its view's active tab, and its view and session current;
+   * Make a tab its pane's front tab and its view's active tab, and its view and project current;
    * or move from it: to the next tab of its pane (`offset`), to the pane beside it (`direction`),
    * or to its view's tab used last (`last`). No id is the caller's tab. Moving out of a zoomed
    * pane unzooms the view; nothing there is not an error.
@@ -649,6 +630,6 @@ export class Plugin extends Model<PluginData, PluginKey> {
 }
 
 /** Each model's class, by its kind. */
-export const MODEL_CLASSES = { session: Session, view: View, pane: Pane, tab: Tab, request: Request, plugin: Plugin } as const;
+export const MODEL_CLASSES = { project: Project, view: View, pane: Pane, tab: Tab, request: Request, plugin: Plugin } as const;
 
 installClasses(MODEL_CLASSES);

@@ -139,10 +139,10 @@ fn said(cli: &Path, core: &Core, args: &[&str]) -> String {
     out
 }
 
-/// A terminal tab running `command`, in a session of its own: its id, as the API spells it.
+/// A terminal tab running `command`, in a project of its own: its id, as the API spells it.
 fn terminal(cli: &Path, core: &Core, command: &[&str]) -> String {
     let args = json!({ "command": command }).to_string();
-    let opened = said(cli, core, &["call", "tab.open", TERM, args.as_str(), r#"{"kind":"session"}"#]);
+    let opened = said(cli, core, &["call", "tab.open", TERM, args.as_str(), r#"{"kind":"project"}"#]);
     opened.trim().to_string()
 }
 
@@ -253,7 +253,7 @@ fn no_tmux_verb_is_a_command() {
     assert!(err.contains("no command `split-window`"), "{err}");
     let help = Command::new(&cli).arg("help").output().unwrap();
     let help = String::from_utf8_lossy(&help.stdout);
-    for gone in ["split-window", "send-keys", "capture-pane", "new-session", "list-panes"] {
+    for gone in ["split-window", "send-keys", "capture-pane", "new-project", "list-panes"] {
         assert!(!help.contains(gone), "`{gone}` is in the usage");
     }
 }
@@ -276,7 +276,7 @@ fn a_program_after_dashes_runs_and_its_screen_reads_as_rows() {
     let core = Core::start(&cli.with_file_name(pumi_sys::paths::exe("pumid")));
     // What a full-screen program writes: rows placed by cursor moves, no newline between them.
     let draw = r"printf '\033[2J\033[1;1Hfirst row\033[2;1Hsecond row\033[3;1Hthird row'; sleep 30";
-    let tab = said(&cli, &core, &["tab", "open", TERM, "--kind", "session", "--", "/bin/sh", "-c", draw]);
+    let tab = said(&cli, &core, &["tab", "open", TERM, "--kind", "project", "--", "/bin/sh", "-c", draw]);
     let tab = tab.trim();
     assert!(tab.starts_with('%'), "a tab's id: {tab}");
     let text = read_until(&cli, &core, &["tab", "read", tab, "--source", "visible"], "third row");

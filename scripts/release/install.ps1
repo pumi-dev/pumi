@@ -251,8 +251,8 @@ function Move-Dir($From, $To) {
 
 # Every process run from the copy this script replaces: the app, and its server (`pumid.exe`)
 # and host too. Windows cannot rename a directory a running program came from, so the server
-# goes as well, asked first (`--stop` saves the session), as the updater's swap does
-# (src/updater/install/windows.rs). Terminals start again from the saved session.
+# goes as well, asked first (`--stop` saves what was open), as the updater's swap does
+# (src/updater/install/windows.rs). Terminals start again from it.
 function Get-Installed {
   $inside = $AppPath.TrimEnd('\') + '\'
   @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
@@ -261,7 +261,7 @@ function Get-Installed {
 }
 function Stop-App {
   if ((Get-Installed).Count -eq 0) { return }
-  Say "quitting the running copy (terminals restart from the saved session)"
+  Say "quitting the running copy (terminals restart from what was saved)"
   $pumid = Join-Path $AppPath "bin\pumid.exe"
   if ((Get-Installed | Where-Object { $_.ProcessName -eq 'pumid' }) -and (Test-Path -LiteralPath $pumid)) {
     $stop = Start-Process -FilePath $pumid -ArgumentList '--stop' -WindowStyle Hidden -PassThru

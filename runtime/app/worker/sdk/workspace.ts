@@ -1,13 +1,13 @@
 // `workspace`: the root object the SDK's models and calls hang on, like Airtable's `base`. Its
-// current objects are the caller's own (its tab, the view it is in, that view's session); ids are
+// current objects are the caller's own (its tab, the view it is in, that view's project); ids are
 // prefixed strings everywhere, and a call for an id on another server goes to that server.
 import { cache, type Fill } from "./model.ts";
-import type { Pane, Plugin, Request, Session, Tab, View } from "./models.gen.ts";
+import type { Pane, Plugin, Request, Project, Tab, View } from "./models.gen.ts";
 import type { Wire } from "./transport.ts";
 
 /** Who the caller is: the objects a function means when its id is left out. */
 export interface CallerIds {
-  session?: string | null;
+  project?: string | null;
   view?: string | null;
   tab?: string | null;
 }
@@ -17,7 +17,7 @@ export type Caller = () => CallerIds;
 
 /** What `tabs` and `requests` filter by, as their `list` functions do. */
 export interface TabFilter {
-  session?: string;
+  project?: string;
   view?: string;
   block?: string;
   trait?: string;
@@ -29,7 +29,7 @@ export interface RequestFilter {
 }
 
 /**
- * The root: the caller's current session, view and tab, every session, and the calls that make
+ * The root: the caller's current project, view and tab, every project, and the calls that make
  * more of them. Reads come from the live cache (fill it once with `await workspace.ready`, and a
  * model it does not hold with `await model.ready`); the `open…` calls are one wire call each.
  */
@@ -44,7 +44,7 @@ class Workspace {
     this.caller = caller;
   }
 
-  /** Resolves once the cache holds the caller's own objects and the session list; a failure asks again next time. */
+  /** Resolves once the cache holds the caller's own objects and the project list; a failure asks again next time. */
   get ready(): Promise<void> {
     return (this.priming ??= this.prime().catch((err) => {
       this.priming = undefined;
@@ -54,36 +54,36 @@ class Workspace {
 
   private async prime() {
     if (cache.wire) await this.start();
-    const ids: string[] = await cache.call("session.list", []);
+    const ids: string[] = await cache.call("project.list", []);
     this.ids = ids;
-    await Promise.all(ids.map((id) => cache.load("session", id)));
+    await Promise.all(ids.map((id) => cache.load("project", id)));
     const own = this.caller();
     const loads: Promise<unknown>[] = [];
-    if (own.session) loads.push(cache.load("session", own.session));
+    if (own.project) loads.push(cache.load("project", own.project));
     if (own.view) loads.push(cache.load("view", own.view));
     if (own.tab) loads.push(cache.load("tab", own.tab));
     await Promise.all(loads);
   }
 
-  /** Hears the models' events, so the cache stays current, and keeps the session list. */
+  /** Hears the models' events, so the cache stays current, and keeps the project list. */
   private async start() {
     if (this.started) return;
     this.started = true;
     await cache.follow();
     const wire = cache.wire;
     if (!wire) return;
-    await wire.on(["session.opened", "session.closed"], {}, (e) => {
-      const id = (e.data as { session?: string }).session;
+    await wire.on(["project.opened", "project.closed"], {}, (e) => {
+      const id = (e.data as { project?: string }).project;
       if (!id) return;
-      if (e.event === "session.closed") this.ids = this.ids.filter((known) => known !== id);
+      if (e.event === "project.closed") this.ids = this.ids.filter((known) => known !== id);
       else if (!this.ids.includes(id)) this.ids = [...this.ids, id];
     });
   }
 
-  /** The caller's session. */
-  get currentSession(): Session | null {
+  /** The caller's project. */
+  get currentProject(): Project | null {
     this.ready.catch(() => {});
-    return cache.model<Session>("session", this.caller().session);
+    return cache.model<Project>("project", this.caller().project);
   }
 
   /** The caller's view. */
@@ -98,15 +98,15 @@ class Workspace {
     return cache.model<Tab>("tab", this.caller().tab);
   }
 
-  /** Every session, in creation order. */
-  get sessions(): Session[] {
+  /** Every project, in creation order. */
+  get projects(): Project[] {
     this.ready.catch(() => {});
-    return cache.models<Session>("session", this.ids);
+    return cache.models<Project>("project", this.ids);
   }
 
-  /** A session by its id; its fields read once the cache has it (`await session.ready`). */
-  getSession(id: string): Session | null {
-    return cache.model<Session>("session", id);
+  /** A project by its id; its fields read once the cache has it (`await project.ready`). */
+  getProject(id: string): Project | null {
+    return cache.model<Project>("project", id);
   }
 
   /** A view by its id; its fields read once the cache has it (`await view.ready`). */
@@ -179,8 +179,8 @@ export function connect(wire: Wire, fill: Fill, caller: Caller = () => ({})) {
 export function wireFill(wire: Wire): Fill {
   return async (kind, id) => {
     switch (kind) {
-      case "session":
-        return wire.call("session.get", [id]);
+      case "project":
+        return wire.call("project.get", [id]);
       case "view":
         return wire.call("view.get", [id]);
       case "pane":

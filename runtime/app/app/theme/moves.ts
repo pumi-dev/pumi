@@ -1,19 +1,19 @@
-// How the default theme moves tabs, views and sessions by dragging them: a tab by its chip in a
-// pane's strip or its row in the side bar, a view or a session by its row. What a drag carries, where on its
+// How the default theme moves tabs, views and projects by dragging them: a tab by its chip in a
+// pane's strip or its row in the side bar, a view or a project by its row. What a drag carries, where on its
 // target it lands, and what that does, as the server's calls. Nothing here draws (`default.tsx`
 // and `tiles.tsx` do) or calls (they run what `plan` says).
 import type { PaneLeaf, Snapshot } from "../engine.ts"
 import { serverOf } from "../ids.ts"
 
 /** What a drag carries. */
-export type Carried = { kind: "pumi.tab"; tab: string } | { kind: "pumi.view"; view: string } | { kind: "pumi.session"; session: string }
+export type Carried = { kind: "pumi.tab"; tab: string } | { kind: "pumi.view"; view: string } | { kind: "pumi.project"; project: string }
 
 export function carried(data: unknown): Carried | undefined {
   const it = data as Carried | undefined
   if (!it || typeof it !== "object") return undefined
   if (it.kind === "pumi.tab" && typeof it.tab === "string") return it
   if (it.kind === "pumi.view" && typeof it.view === "string") return it
-  if (it.kind === "pumi.session" && typeof it.session === "string") return it
+  if (it.kind === "pumi.project" && typeof it.project === "string") return it
   return undefined
 }
 
@@ -63,15 +63,15 @@ export function regionBox(region: Region): { x: number; y: number; w: number; h:
  * tab, drawn in the view's place: it stands for the view too.
  */
 export type Row =
-  | { kind: "session"; session: string }
-  | { kind: "view"; session: string; view: string }
-  | { kind: "tab"; session: string; view: string; tab: string; alone: boolean }
+  | { kind: "project"; project: string }
+  | { kind: "view"; project: string; view: string }
+  | { kind: "tab"; project: string; view: string; tab: string; alone: boolean }
 
 /** What a drop does. `after`: on the far side of `anchor`, not the near one. */
 export type Move =
-  | { kind: "session.order"; session: string; anchor: string; after: boolean }
-  | { kind: "view.move"; view: string; session: string; anchor?: string; after?: boolean }
-  | { kind: "tab.newView"; tab: string; session: string }
+  | { kind: "project.order"; project: string; anchor: string; after: boolean }
+  | { kind: "view.move"; view: string; project: string; anchor?: string; after?: boolean }
+  | { kind: "tab.newView"; tab: string; project: string }
   | { kind: "tab.join"; tab: string; view: string }
   | { kind: "tab.beside"; tab: string; target: string; side: Side }
   /** Into a pane, among its tabs: at `index` of its strip, or after the one in front. */
@@ -82,7 +82,7 @@ export type Move =
 /** What the moves need to know of where things are now. */
 export interface Where {
   viewOf(tab: string): string | undefined
-  sessionOf(view: string): string | undefined
+  projectOf(view: string): string | undefined
   /** How many tiled tabs a view holds. */
   tabsIn(view: string): number
 }
@@ -96,7 +96,7 @@ export function whereIn(snapshot: Snapshot | undefined): Where {
   }
   return {
     viewOf: (tab) => tabs.find((p) => p.tab_id === tab)?.view_id || undefined,
-    sessionOf: (view) => views.find((t) => t.view_id === view)?.workspace_id,
+    projectOf: (view) => views.find((t) => t.view_id === view)?.project_id,
     tabsIn: (view) => tabs.filter((p) => p.view_id === view && tiled(p)).length,
   }
 }
@@ -140,39 +140,39 @@ function slot(fy: number): "before" | "into" | "after" {
 
 /**
  * What `it` dropped on a row of the side bar's tree does, `fy` of the way down it; nothing when
- * it does nothing there. A session sorts among the sessions; a view among the views, into another
- * session too; a tab joins a view, goes beside a tab, or is a new view of a
- * session. A view of one tab is that tab's row: dragged to another view's edge, the view moves.
+ * it does nothing there. A project sorts among the projects; a view among the views, into another
+ * project too; a tab joins a view, goes beside a tab, or is a new view of a
+ * project. A view of one tab is that tab's row: dragged to another view's edge, the view moves.
  * A tab dropped on another tab's row goes before it or after it, never in its place.
  */
 export function rowDrop(it: Carried, row: Row, fy: number, where: Where): Move | undefined {
   const here = slot(fy)
   const after = fy >= 0.5
-  if (it.kind === "pumi.session") {
-    if (row.kind !== "session" || row.session === it.session) return undefined
-    return { kind: "session.order", session: it.session, anchor: row.session, after }
+  if (it.kind === "pumi.project") {
+    if (row.kind !== "project" || row.project === it.project) return undefined
+    return { kind: "project.order", project: it.project, anchor: row.project, after }
   }
   if (it.kind === "pumi.view") {
-    if (!together(it.view, row.session)) return undefined
-    if (row.kind === "session") {
-      return where.sessionOf(it.view) === row.session ? undefined : { kind: "view.move", view: it.view, session: row.session }
+    if (!together(it.view, row.project)) return undefined
+    if (row.kind === "project") {
+      return where.projectOf(it.view) === row.project ? undefined : { kind: "view.move", view: it.view, project: row.project }
     }
     // A tab inside a view of several is not where a view goes.
     if (row.view === it.view || (row.kind === "tab" && !row.alone)) return undefined
-    return { kind: "view.move", view: it.view, session: row.session, anchor: row.view, after }
+    return { kind: "view.move", view: it.view, project: row.project, anchor: row.view, after }
   }
   const tab = it.tab
   const from = where.viewOf(tab)
-  if (!together(tab, row.session)) return undefined
-  if (row.kind === "session") {
-    // Already a view of its own in that session.
-    if (from && where.sessionOf(from) === row.session && where.tabsIn(from) === 1) return undefined
-    return { kind: "tab.newView", tab, session: row.session }
+  if (!together(tab, row.project)) return undefined
+  if (row.kind === "project") {
+    // Already a view of its own in that project.
+    if (from && where.projectOf(from) === row.project && where.tabsIn(from) === 1) return undefined
+    return { kind: "tab.newView", tab, project: row.project }
   }
   // A tab alone in its view, dropped at another view's edge: its view is what moves.
   const viewRow = row.kind === "view" || row.alone
   if (viewRow && here !== "into" && from && from !== row.view && where.tabsIn(from) === 1) {
-    return { kind: "view.move", view: from, session: row.session, anchor: row.view, after }
+    return { kind: "view.move", view: from, project: row.project, anchor: row.view, after }
   }
   if (row.kind === "view") return from === row.view ? undefined : { kind: "tab.join", tab, view: row.view }
   if (row.tab === tab) return undefined
@@ -188,13 +188,13 @@ export function reorder(order: readonly string[], id: string, anchor?: string, a
   return rest
 }
 
-/** Sessions in the order the side bar keeps (`order`); one it has not sorted keeps its place after them. */
-export function sortSessions<T extends { workspace_id: string }>(sessions: readonly T[], order: readonly string[]): T[] {
+/** Projects in the order the side bar keeps (`order`); one it has not sorted keeps its place after them. */
+export function sortProjects<T extends { project_id: string }>(projects: readonly T[], order: readonly string[]): T[] {
   const rank = (s: T) => {
-    const at = order.indexOf(s.workspace_id)
+    const at = order.indexOf(s.project_id)
     return at < 0 ? order.length : at
   }
-  return sessions.map((s, i) => [s, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([s]) => s)
+  return projects.map((s, i) => [s, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([s]) => s)
 }
 
 /** One call to the server: `method` on the server `on` is on. */
@@ -204,14 +204,14 @@ export interface Step {
   params: unknown[]
 }
 
-/** The calls a move makes, in order (each after the last has answered). Sessions are sorted here, not on the server. */
+/** The calls a move makes, in order (each after the last has answered). Projects are sorted here, not on the server. */
 export function plan(move: Move, snapshot: Snapshot | undefined): Step[] {
   const place = (tab: string, to: Record<string, unknown>): Step => ({ on: tab, method: "tab.update", params: [tab, { place: to }] })
   switch (move.kind) {
-    case "session.order":
+    case "project.order":
       return []
     case "tab.newView":
-      return [place(move.tab, { kind: "view", session: move.session })]
+      return [place(move.tab, { kind: "view", project: move.project })]
     case "tab.join":
       return [place(move.tab, { kind: "tiled", view: move.view, split: "right" })]
     case "tab.beside":
@@ -221,15 +221,15 @@ export function plan(move: Move, snapshot: Snapshot | undefined): Step[] {
     case "tab.split":
       return [place(move.tab, { kind: "tiled", pane: move.pane, split: move.side })]
     case "view.move": {
-      const views = (snapshot?.views ?? []).filter((v) => v.workspace_id === move.session).sort((a, b) => a.number - b.number)
+      const views = (snapshot?.views ?? []).filter((v) => v.project_id === move.project).sort((a, b) => a.number - b.number)
       const moving = (snapshot?.views ?? []).find((v) => v.view_id === move.view)
       if (!moving) return []
       const steps: Step[] = []
       const order = views.map((v) => v.view_id)
       const viewPlace = (to: Record<string, unknown>): Step => ({ on: move.view, method: "view.update", params: [move.view, to] })
-      if (moving.workspace_id !== move.session) {
+      if (moving.project_id !== move.project) {
         // In at the end, then to its place: an index another view holds is the server's to refuse.
-        steps.push(viewPlace({ session: move.session, index: order.length }))
+        steps.push(viewPlace({ project: move.project, index: order.length }))
         order.push(move.view)
       }
       // TODO(api-server): `view.update` refuses an index another view holds, so a view cannot be

@@ -1,10 +1,10 @@
-//! The model's objects as the API shows them: what `session.get`, `view.get`, `pane.get` and
+//! The model's objects as the API shows them: what `project.get`, `view.get`, `pane.get` and
 //! `tab.get` answer, where a tab is (`TabPlace`), a view's layout as a tree of halves, and the
 //! `<noun>.changed` events' data. Ids here are the prefixed strings of `pumi_api::ids`; the model
 //! keeps numbers. It never reads a process or a tab's engine: the core fills those fields in.
 use crate::state::TabState;
-use crate::{Model, PaneId, Place, SERVER, SessionId, TabId, View, ViewId};
-use pumi_api::{Caller, Error, PaneRef, Result, SessionRef, TabRef, ViewRef};
+use crate::{Model, PaneId, Place, ProjectId, SERVER, TabId, View, ViewId};
+use pumi_api::{Caller, Error, PaneRef, ProjectRef, Result, TabRef, ViewRef};
 use pumi_layout::{Axis, Child, Node, PlaceKind, PlaceSpec, Rect, Side};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value, json};
@@ -15,14 +15,13 @@ pub fn patch_field<'de, T: Deserialize<'de>, D: Deserializer<'de>>(d: D) -> Resu
     Option::<T>::deserialize(d).map(Some)
 }
 
-/// A session, as `session.get` answers it.
+/// A project, as `project.get` answers it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SessionInfo {
-    pub id: SessionRef,
-    pub name: String,
-    /// Its directory, where its terminals start without a `cwd` of their own.
-    pub cwd: Option<String>,
+pub struct ProjectInfo {
+    pub id: ProjectRef,
+    /// Its folder, where its terminals start without a `cwd` of their own.
+    pub path: String,
     /// Its views, in index order.
     pub views: Vec<ViewRef>,
     pub active_view: Option<ViewRef>,
@@ -30,7 +29,7 @@ pub struct SessionInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tree: Option<Vec<ViewTree>>,
 }
-/// A view and its tabs, in `session.get {deep}`'s tree.
+/// A view and its tabs, in `project.get {deep}`'s tree.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewTree {
@@ -43,10 +42,10 @@ pub struct ViewTree {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ViewInfo {
     pub id: ViewRef,
-    pub session: SessionRef,
+    pub project: ProjectRef,
     /// The name it was given; `null` while it takes its active tab's title.
     pub name: Option<String>,
-    /// Its index in its session.
+    /// Its index in its project.
     pub index: u32,
     pub layout: LayoutTree,
     /// The tab with the focus, in front of its pane.
@@ -163,7 +162,7 @@ fn halves(axis: Axis, children: &[Child], view: &View) -> LayoutTree {
 }
 
 /// What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-/// tiled in a new view or a new session.
+/// tiled in a new view or a new project.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum TabPlaceKind {
@@ -171,13 +170,13 @@ pub enum TabPlaceKind {
     Float,
     Hidden,
     View,
-    Session,
+    Project,
 }
-/// A session a place names: one there is, or `new`.
+/// A project a place names: one there is, or `new`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
-pub enum SessionTarget {
-    Session(SessionRef),
+pub enum ProjectTarget {
+    Project(ProjectRef),
     New(NewWord),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -209,9 +208,9 @@ pub struct TabPlace {
     /// beside it, in a pane of its own. Where a tiled tab is, its pane.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pane: Option<PaneTarget>,
-    /// View: the session the new view goes in; `new` makes a session for the tab.
+    /// View: the project the new view goes in; `new` makes a project for the tab.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<SessionTarget>,
+    pub project: Option<ProjectTarget>,
     /// Tiled: which side of the pane it splits, making a pane for the tab; `down` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub split: Option<Side>,
@@ -236,12 +235,12 @@ pub struct TabPlace {
     /// Tiled: split the whole view, not one pane.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full: Option<bool>,
-    /// View, session: its name.
+    /// View: its name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Session: its directory.
+    /// Project: its folder, the one project there is; the home folder without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cwd: Option<String>,
+    pub path: Option<String>,
     /// Make it the caller's tab; `true` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub focus: Option<bool>,
@@ -303,7 +302,7 @@ impl TabPlace {
             kind,
             view: None,
             pane: None,
-            session: None,
+            project: None,
             split: None,
             index: None,
             swap: None,
@@ -312,7 +311,7 @@ impl TabPlace {
             size: None,
             full: None,
             name: None,
-            cwd: None,
+            path: None,
             focus: None,
             replace: None,
             relative: None,
@@ -359,11 +358,11 @@ impl TabPlace {
     }
     /// The place as the core's `PlaceSpec` says it, ids as numbers, before the host resolves it.
     pub fn spec(&self) -> Result<PlaceSpec> {
-        let kind = match (self.kind, &self.session) {
+        let kind = match (self.kind, &self.project) {
             (TabPlaceKind::Hidden, _) => {
                 return Err(Error::invalid_params("`hidden` is where a tab is while it moves, not a place to ask for"));
             }
-            (TabPlaceKind::Session, _) | (_, Some(SessionTarget::New(_))) => PlaceKind::Session,
+            (TabPlaceKind::Project, _) | (_, Some(ProjectTarget::New(_))) => PlaceKind::Project,
             (TabPlaceKind::Tiled, _) => PlaceKind::Tiled,
             (TabPlaceKind::Float, _) => PlaceKind::Float,
             (TabPlaceKind::View, _) => PlaceKind::View,
@@ -385,13 +384,13 @@ impl TabPlace {
                 PaneTarget::Pane(p) => p.0,
                 PaneTarget::Current(_) => 0,
             }),
-            session: match &self.session {
-                Some(SessionTarget::Session(s)) => Some(s.0),
+            project: match &self.project {
+                Some(ProjectTarget::Project(s)) => Some(s.0),
                 _ => None,
             },
             index: self.index,
             name: self.name.clone(),
-            cwd: self.cwd.clone(),
+            path: self.path.clone(),
             relative: self.relative.clone(),
             anchor: self.anchor.clone(),
             row: self.row.clone(),
@@ -439,7 +438,7 @@ pub struct Neighbors {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TabInfo {
     pub id: TabRef,
-    pub session: SessionRef,
+    pub project: ProjectRef,
     pub view: Option<ViewRef>,
     /// The block it holds (`file`, `owner.name.page`).
     pub block: String,
@@ -454,7 +453,7 @@ pub struct TabInfo {
     pub process: Option<Process>,
     pub scroll: Scroll,
     pub neighbors: Neighbors,
-    /// It is the tab a client is in: its view's active tab, in its session's active view.
+    /// It is the tab a client is in: its view's active tab, in its project's active view.
     pub is_focused: bool,
     /// It fills its view.
     pub is_zoomed: bool,
@@ -496,8 +495,8 @@ pub fn changed(noun: &str, id: &str, patch: Map<String, Value>) -> Value {
 }
 
 impl Model {
-    pub fn session_ref(&self, caller: &Caller, id: Option<SessionRef>) -> Result<SessionId> {
-        self.session_id(caller, id.map_or(0, |s| s.0))
+    pub fn project_ref(&self, caller: &Caller, id: Option<ProjectRef>) -> Result<ProjectId> {
+        self.project_id(caller, id.map_or(0, |s| s.0))
     }
     pub fn view_ref(&self, caller: &Caller, id: Option<ViewRef>) -> Result<ViewId> {
         self.view_id(caller, id.map_or(0, |v| v.0))
@@ -521,12 +520,11 @@ impl Model {
             is_zoomed: focused && v.zoomed,
         })
     }
-    pub fn session_info(&self, id: SessionId) -> SessionInfo {
-        let s = &self.sessions[&id];
-        SessionInfo {
-            id: SessionRef(id),
-            name: s.name.clone(),
-            cwd: s.cwd.clone(),
+    pub fn project_info(&self, id: ProjectId) -> ProjectInfo {
+        let s = &self.projects[&id];
+        ProjectInfo {
+            id: ProjectRef(id),
+            path: s.path.clone(),
             views: s.views.iter().map(|(_, v)| ViewRef(*v)).collect(),
             active_view: s.current.map(ViewRef),
             tree: None,
@@ -534,12 +532,12 @@ impl Model {
     }
     pub fn view_info(&self, id: ViewId) -> Result<ViewInfo> {
         let v = self.views.get(&id).ok_or_else(|| Error::not_found(format!("no view @{id}")))?;
-        let session =
-            self.session_of_view(id).ok_or_else(|| Error::not_found(format!("view @{id} is in no session")))?;
-        let index = self.sessions[&session].views.iter().find(|(_, x)| *x == id).map_or(0, |(i, _)| *i);
+        let project =
+            self.project_of_view(id).ok_or_else(|| Error::not_found(format!("view @{id} is in no project")))?;
+        let index = self.projects[&project].views.iter().find(|(_, x)| *x == id).map_or(0, |(i, _)| *i);
         Ok(ViewInfo {
             id: ViewRef(id),
-            session: SessionRef(session),
+            project: ProjectRef(project),
             name: v.name.clone(),
             index,
             layout: LayoutTree::of(v),
@@ -548,25 +546,25 @@ impl Model {
             zoom: v.zoomed.then(|| v.active_pane().map(PaneRef)).flatten(),
         })
     }
-    /// The session a tab's calls are in: its view's, else the one used last.
-    pub fn session_of_tab(&self, tab: TabId) -> Option<SessionId> {
+    /// The project a tab's calls are in: its view's, else the one used last.
+    pub fn project_of_tab(&self, tab: TabId) -> Option<ProjectId> {
         match self.view_of_tab(tab) {
-            Some(view) => self.session_of_view(view),
-            None => self.current(&Caller { channel: SERVER, ..Caller::default() }).map(|c| c.session),
+            Some(view) => self.project_of_view(view),
+            None => self.current(&Caller { channel: SERVER, ..Caller::default() }).map(|c| c.project),
         }
     }
-    /// Whether a client is in `tab`: its view's active tab, in its session's active view, in a
-    /// session a client shows (with no client, the one used last).
+    /// Whether a client is in `tab`: its view's active tab, in its project's active view, in a
+    /// project a client shows (with no client, the one used last).
     pub fn is_focused(&self, tab: TabId) -> bool {
         let Some(view) = self.view_of_tab(tab) else { return false };
-        let Some(session) = self.session_of_view(view) else { return false };
-        let shown = |s: SessionId| {
+        let Some(project) = self.project_of_view(view) else { return false };
+        let shown = |s: ProjectId| {
             let mut clients = self.chans.values().filter_map(|c| c.ui.as_ref()).peekable();
             if clients.peek().is_none() {
-                return self.current(&Caller { channel: SERVER, ..Caller::default() }).is_some_and(|c| c.session == s);
+                return self.current(&Caller { channel: SERVER, ..Caller::default() }).is_some_and(|c| c.project == s);
             }
-            clients.any(|ui| ui.session == s)
+            clients.any(|ui| ui.project == s)
         };
-        self.views[&view].active == tab && self.sessions[&session].current == Some(view) && shown(session)
+        self.views[&view].active == tab && self.projects[&project].current == Some(view) && shown(project)
     }
 }

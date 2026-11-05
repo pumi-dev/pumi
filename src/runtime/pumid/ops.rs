@@ -11,7 +11,7 @@ fn id(what: &str, s: &str) -> Result<String> {
 }
 fn sigil(what: &str) -> char {
     match what {
-        "session" => '$',
+        "project" => '$',
         "view" => '@',
         _ => '%',
     }
@@ -34,7 +34,7 @@ pub fn made(calls: &dyn Calls, tab: &str) -> Made {
     let read = wire::read(&state, &Default::default());
     let found = read.snapshot.tabs.iter().find(|t| t.tab_id == tab);
     Made {
-        workspace: found.map(|t| t.workspace_id.clone()).filter(|s| !s.is_empty()),
+        project: found.map(|t| t.project_id.clone()).filter(|s| !s.is_empty()),
         view: found.map(|t| t.view_id.clone()).filter(|s| !s.is_empty()),
         tabs: vec![tab.to_string()],
     }
@@ -47,27 +47,27 @@ pub fn apply(calls: &dyn Calls, op: Op) -> Result<Made> {
             let tab = calls.call("tab.open", json!([null, terminal_args(cwd, env), place]))?;
             Ok(made(calls, tab.as_str().unwrap_or_default()))
         }
-        Op::NewView { workspace, cwd, env } => {
-            let place = json!({ "kind": "view", "session": id("session", &workspace)?, "focus": false });
+        Op::NewView { project, cwd, env } => {
+            let place = json!({ "kind": "view", "project": id("project", &project)?, "focus": false });
             let tab = calls.call("tab.open", json!([null, terminal_args(cwd, env), place]))?;
             Ok(made(calls, tab.as_str().unwrap_or_default()))
         }
-        Op::NewWorkspace { cwd, env, .. } => {
-            let place = json!({ "kind": "session", "cwd": cwd, "focus": false });
-            let tab = calls.call("tab.open", json!([null, terminal_args(cwd, env), place]))?;
+        Op::NewProject { path, env, .. } => {
+            let place = json!({ "kind": "project", "path": path, "focus": false });
+            let tab = calls.call("tab.open", json!([null, terminal_args(path, env), place]))?;
             Ok(made(calls, tab.as_str().unwrap_or_default()))
         }
-        Op::OpenWorktree { path, .. } => apply(calls, Op::NewWorkspace { cwd: Some(path), env: None, server: None }),
+        Op::OpenWorktree { path, .. } => apply(calls, Op::NewProject { path: Some(path), env: None, server: None }),
         Op::NewWorktree { .. } => Err(Error::Refused("worktrees are not in the server yet".into())),
         Op::MoveTab { tab, to } => {
             let place = match to {
                 Destination::Beside { target, axis, .. } => {
                     json!({ "kind": "tiled", "split": wire::direction(axis), "beside": id("tab", &target)?, "focus": false })
                 }
-                Destination::NewView { workspace } => {
-                    json!({ "kind": "view", "session": id("session", &workspace)?, "focus": false })
+                Destination::NewView { project } => {
+                    json!({ "kind": "view", "project": id("project", &project)?, "focus": false })
                 }
-                Destination::NewWorkspace => json!({ "kind": "session", "focus": false }),
+                Destination::NewProject => json!({ "kind": "project", "focus": false }),
             };
             let tab = id("tab", &tab)?;
             calls.call("tab.update", json!([&tab, { "place": place }]))?;
@@ -104,10 +104,6 @@ pub fn apply(calls: &dyn Calls, op: Op) -> Result<Made> {
             cmd(calls, "send-keys", json!({ "t": tab }), keys)?;
             none()
         }
-        Op::RenameWorkspace { workspace, label } => {
-            calls.call("session.update", json!([id("session", &workspace)?, { "name": label }]))?;
-            none()
-        }
         Op::RenameView { view, label } => {
             calls.call("view.update", json!([id("view", &view)?, { "name": label }]))?;
             none()
@@ -117,7 +113,6 @@ pub fn apply(calls: &dyn Calls, op: Op) -> Result<Made> {
             calls.call("option.set", json!(["@label", label, { "id": &tab }]))?;
             none()
         }
-        Op::MoveWorkspace { .. } => none(),
         Op::SetRatio { view, path, ratio } => {
             let view = id("view", &view)?;
             let number = num(&view).unwrap_or(0);

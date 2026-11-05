@@ -1,7 +1,7 @@
 //! Windows: the zip unpacked with the system's `tar.exe`, and the swap a hidden PowerShell
 //! script. A running `.exe` cannot be replaced and the server cannot hand its terminals over
 //! (`pumi_sys::caps()`), so the script stops the old server before the renames: the
-//! terminals start again from the saved session.
+//! terminals start again from what was saved.
 use std::ffi::OsString;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -37,7 +37,7 @@ function Start-Pumi { Start-Process -FilePath $env:PUMI_EXE -WorkingDirectory $H
 function Get-Installed {
   Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($inside, [StringComparison]::OrdinalIgnoreCase) }
 }
-# The installed app's server is asked to stop (it saves the session), then whatever still runs
+# The installed app's server is asked to stop (it saves the project), then whatever still runs
 # from the app is ended: Windows renames no directory a running program came from.
 function Stop-Installed {
   if (Get-Installed | Where-Object { $_.ProcessName -eq 'pumid' }) {

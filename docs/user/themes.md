@@ -69,9 +69,9 @@ It also has settings for how it behaves, in sections under those: Panes (`ui_pan
 
 Each part of the window is a component. Give one in `components` and it draws that part; the app's own draw the rest, and a part you give draws the ones inside it with `useComponents()`.
 
-`Window` `Starting` `ViewBar` `View` `Layout` `Split` `Pane` `PaneTitle` `PaneTab` `TabBody` `Splitter` `Float` `Panel` `Sessions` `TabRow` `TabRowControls` `Action` `Menu` `Dialog` `IconButton` `TabIcon`
+`Window` `Starting` `ViewBar` `View` `Layout` `Split` `Pane` `PaneTitle` `PaneTab` `TabBody` `Splitter` `Float` `Panel` `Projects` `TabRow` `TabRowControls` `Action` `Menu` `Dialog` `IconButton` `TabIcon`
 
-`Sessions` is the side bar's tree of sessions, views and tabs. `TabRow` is a tab with a `@status` in it, and `TabRowControls` the `tab.row.controls` contributions on that row.
+`Projects` is the side bar's tree of projects, views and tabs. `TabRow` is a tab with a `@status` in it, and `TabRowControls` the `tab.row.controls` contributions on that row.
 
 `TabIcon` is a tab's icon wherever one is shown: its pane's strip, the side bar, a view's tabs, a tab being dragged. It is given `{tab, size, color}`. `useTabMeta(tab)` says all a tab has of its own: its `icon` (`{src, tint, from}`: its own `@icon`, its block's, or the core's; `IconImage` draws one, tinted by `color` when `tint` is set), its `color` while it has one (`@color`: `{background, text}`), and what it says it is doing (`status`, with `status_kind` while it is blocked, `progress`, and the `id`, `title` and `msg` of the report that says it). The app's own shows the status in place of the icon while it says something happened (`showsStatus`). Draw `<TabIcon tab={id} />` from `pumi` in your own parts and they show what the theme's `TabIcon` does.
 
@@ -111,7 +111,7 @@ function Window() {
   const C = useComponents();
   return (
     <div style={{ display: "flex", flexDirection: "row", width: "100%", height: "100%" }}>
-      <Dock name="sidebar" edge="left"><C.Sessions /></Dock>
+      <Dock name="sidebar" edge="left"><C.Projects /></Dock>
       <div style={{ flexGrow: 1 }}><C.Layout /></div>
       <Dock name="surfaces" edge="right"><Surfaces /></Dock>
     </div>

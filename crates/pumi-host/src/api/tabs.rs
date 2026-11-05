@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 /// shell or the first thing installed that starts one; refused while nothing is, as pumi has no
 /// block of its own for one), placed as `place` says:
 /// in a pane split from a tab's, into a pane
-/// as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
+/// as one of its tabs (`{"pane": ":2"}`), in a new view or project, floating; or in an open tab
 /// instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
 /// keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
 /// appears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;
@@ -34,9 +34,9 @@ use serde_json::{Map, Value, json};
         desc = "A page in a new view."
     ),
     example(
-        args = r#"[null, {}, {"kind": "tiled", "session": "new", "name": "work", "cwd": "/src"}]"#,
+        args = r#"[null, {}, {"kind": "project", "path": "/src"}]"#,
         result = r#""%5""#,
-        desc = "A new session in /src, holding what a new tab does."
+        desc = "A new project at /src, holding what a new tab does."
     ),
     example(
         args = r#"["pumi_dev.terminal.shell", {"command": ["vim"]}, {"kind": "float", "width": "80%", "height": "80%"}]"#,
@@ -197,7 +197,7 @@ pub struct TabPatch {
     #[serde(default, deserialize_with = "patch_field", skip_serializing_if = "Option::is_none")]
     pub title: Option<Option<String>>,
     /// Where it goes: into a pane (`{"kind": "tiled", "pane": ":2"}`, or along its own pane's
-    /// strip), in a pane split from another tab's, into a new view or session, floating, or into
+    /// strip), in a pane split from another tab's, into a new view or project, floating, or into
     /// another tab's place (`{"kind": "tiled", "swap": "%2"}`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<TabPlace>,

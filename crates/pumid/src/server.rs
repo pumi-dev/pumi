@@ -421,13 +421,13 @@ impl Loop<'_> {
                 break;
             }
             if let Some(after) = self.config.idle_exit {
-                let idle = self.kernel.model.sessions.is_empty()
+                let idle = self.kernel.model.projects.is_empty()
                     && self.others() == 0
                     && self.kernel.global_option("exit_empty") != json!(false);
                 match (idle, idle_since) {
                     (true, None) => idle_since = Some(Instant::now()),
                     (true, Some(since)) if since.elapsed() >= after => {
-                        log(&format!("no sessions and no one connected for {after:?}: exiting"));
+                        log(&format!("no projects and no one connected for {after:?}: exiting"));
                         break;
                     }
                     (false, _) => idle_since = None,

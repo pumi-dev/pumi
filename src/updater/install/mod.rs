@@ -14,7 +14,7 @@
 //! the new app hands the running server over to its own binary when that is newer
 //! (`runtime::pumid`). Windows cannot replace a running binary or hand a server over
 //! (`pumi_sys::caps()`), so its script stops the old server first, and the terminals start
-//! again from the saved session.
+//! again from what was saved.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

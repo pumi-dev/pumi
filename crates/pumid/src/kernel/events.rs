@@ -33,9 +33,9 @@ impl Autocmd {
 /// The events pumi fires for everyone, as the export lists them. The core fires others for
 /// itself (`core.started`, `client.*`), and a plugin fires its own, `owner.name.x`.
 pub const EVENTS: &[&str] = &[
-    "session.opened",
-    "session.closed",
-    "session.changed",
+    "project.opened",
+    "project.closed",
+    "project.changed",
     "view.opened",
     "view.closed",
     "view.changed",

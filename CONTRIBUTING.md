@@ -68,7 +68,7 @@ fails when it is stale. `api/plugin-manifest.schema.json` is not generated: keep
 
 | Path | |
 | --- | --- |
-| `crates/pumid` | The server: sessions, views, panes, tabs, options, events and terminals. It routes every other call to the channel that provides it. The core's options are in `src/kernel/options.rs`. |
+| `crates/pumid` | The server: projects, views, panes, tabs, options, events and terminals. It routes every other call to the channel that provides it. The core's options are in `src/kernel/options.rs`. |
 | `crates/pumi-host` | What runs beside the core: plugins (installing them, their files), keys, menus, settings, and the tab methods the core leaves to it (`wait`, `report`). |
 | `crates/pumi-cli` | The `pumi` command. |
 | `crates/pumi-api`, `crates/pumi-api-macros` | The API's registry and dispatcher, JSON-RPC 2.0, the plugin manifest, and `#[api]`. |

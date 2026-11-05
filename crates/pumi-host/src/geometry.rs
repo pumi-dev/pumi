@@ -1,9 +1,9 @@
 use crate::kernel::Kernel;
 use crate::kernel::events::Event;
 use serde_json::json;
-const RELAYOUT: &[&str] = &["view.opened", "tab.opened", "session.opened", "client.detached", "core.started"];
+const RELAYOUT: &[&str] = &["view.opened", "tab.opened", "project.opened", "client.detached", "core.started"];
 /// The fields whose change lays panes out again.
-const RELAYOUT_KEYS: &[&str] = &["layout", "zoom", "place", "session", "index"];
+const RELAYOUT_KEYS: &[&str] = &["layout", "zoom", "place", "project", "index"];
 pub fn follow(k: &Kernel, event: &Event) {
     let changed = matches!(event.event.as_str(), "view.changed" | "tab.changed")
         && event.data["keys"]

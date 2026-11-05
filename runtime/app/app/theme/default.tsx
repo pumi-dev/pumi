@@ -6,7 +6,7 @@ import { createContext, Fragment, memo, useCallback, useContext, useEffect, useM
 import { basename } from "node:path"
 import { assets } from "../assets.ts"
 import { call, store, via } from "../engine.ts"
-import { numberViews, openSession } from "../commands.ts"
+import { numberViews } from "../commands.ts"
 import { openView } from "../new-view.ts"
 import { FILE, renderComponent, useRenderer, useSlot } from "../../sdk/contributions.ts"
 import { grouped, heldShortcut, shortcut, type Action as ActionItem } from "../../sdk/actions.ts"
@@ -14,7 +14,7 @@ import { run as runCommand } from "../../sdk/context.ts"
 import { homedir } from "node:os"
 import { useMenu } from "../../sdk/menu.ts"
 import { useRename } from "../../sdk/rename.ts"
-import { equalize, equalized, editOf, leafOf, paneOfTab, panesOf, runMove, SESSION_ORDER, shownOf, tabsOf, useAutoEqualize, useFocusOnHover, useOutlineFocused, usePaneTabs, usePaneTitles, useSidebar, useSidebarSwipe, useViewIcons, PREFS } from "../layout.ts"
+import { equalize, equalized, editOf, leafOf, paneOfTab, panesOf, runMove, PROJECT_ORDER, shownOf, tabsOf, useAutoEqualize, useFocusOnHover, useOutlineFocused, usePaneTabs, usePaneTitles, useSidebar, useSidebarSwipe, useViewIcons, PREFS } from "../layout.ts"
 import { motion } from "../../react/index.ts"
 import { useAnimate } from "../theme-settings.ts"
 import { useDragState, useDraggable } from "../../sdk/drag.ts"
@@ -28,8 +28,8 @@ import {
   useFloats,
   useFocusedTab,
   useLayout,
-  useSession,
-  useSessions,
+  useProject,
+  useProjects,
   useTab,
   useView,
   useViews,
@@ -136,7 +136,7 @@ function Window() {
         {shown ? (
           <div cache onScroll={swipe} style={{ display: "flex", flexDirection: "column", width, flexShrink: 0, minWidth: 0, backgroundColor: t.surface, borderRightWidth: 1, borderColor: t.border, position: "relative" }}>
             <SidebarHeader />
-            <SessionHeader />
+            <ProjectHeader />
             <C.Panel point="panel" />
             <PanelButtons />
             <Resizer width={width} setWidth={setWidth} />
@@ -182,7 +182,7 @@ const TITLE_INSET = 78
 /** How far down from the window's top edge a press moves the window, whatever is under it. */
 const TOP_EDGE = 4
 
-/** The title bar while the side bar is hidden: the button that shows it, the session, the views. */
+/** The title bar while the side bar is hidden: the button that shows it, the project, the views. */
 function Header() {
   const t = useTheme()
   const C = useComponents()
@@ -192,13 +192,13 @@ function Header() {
       {/* The bar's bottom edge, drawn first so the front view can paint over it and open into the pane below. */}
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 1, backgroundColor: t.border }} />
       <IconButton icon="layout_sidebar_left" title="Show Side Bar" onClick={() => setOpen(true)} />
-      <SessionButton shrink={false} />
+      <ProjectButton shrink={false} />
       <C.ViewBar />
     </div>
   )
 }
 
-/** The side bar's top, the title bar while it shows: the traffic lights' room, the button that hides it, the session, and at its far end the button that opens a folder. */
+/** The side bar's top, the title bar while it shows: the traffic lights' room, the button that hides it, the project, and at its far end the button that opens a folder. */
 function SidebarHeader() {
   const t = useTheme()
   const window = useWindow()
@@ -207,19 +207,19 @@ function SidebarHeader() {
     // Its bottom edge is the top panes' title bars' bottom edge, in one line across the window.
     <div style={{ display: "flex", flexDirection: "row", alignItems: "center", height: TITLE_BAR, flexShrink: 0, gap: 4, paddingLeft: TITLE_INSET, paddingRight: 8, backgroundColor: t.surface, borderBottomWidth: 1, borderColor: t.border, appRegion: "drag" }}>
       <IconButton icon="layout_sidebar_left" title="Hide Side Bar" onClick={() => setOpen(false)} />
-      <SessionButton shrink />
+      <ProjectButton shrink />
       <div style={{ flexGrow: 1, minWidth: 0 }} />
-      <IconButton icon="plus" title="Open Folder…" onClick={() => openFolder(window).catch(swallow)} />
+      <IconButton icon="plus" title="Open Folder…" onClick={() => runCommand("open_folder", window.id)} />
     </div>
   )
 }
 
-/** The session the window shows, as a button that opens the session picker. `shrink`: it gives up width before what is beside it does. */
-function SessionButton({ shrink }: { shrink: boolean }) {
+/** The project the window shows, as a button that opens the project picker. `shrink`: it gives up width before what is beside it does. */
+function ProjectButton({ shrink }: { shrink: boolean }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
-  const session = useSession()
+  const project = useProject()
   const [picking, setPicking] = useState(false)
   // A press on the button while the picker is open closes it (the press outside does), and the
   // click that follows must not open it again.
@@ -234,7 +234,7 @@ function SessionButton({ shrink }: { shrink: boolean }) {
         }}
         style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 4, height: 24, paddingLeft: 8, paddingRight: 8, borderRadius: m.radius, cursor: "pointer", minWidth: 0, backgroundColor: picking ? t.active : undefined, hover: { backgroundColor: picking ? t.active : t.hover } }}
       >
-        <text style={{ fontWeight: 600, fontSize: ts(12), whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{session?.label || "pumi"}</text>
+        <text style={{ fontWeight: 600, fontSize: ts(12), whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{project?.label || "pumi"}</text>
         <Icon name="chevron_up_down" size={12} color={t.faint} />
       </div>
       {picking ? <ProjectPicker close={() => setPicking(false)} /> : null}
@@ -242,23 +242,23 @@ function SessionButton({ shrink }: { shrink: boolean }) {
   )
 }
 
-// The sessions a window has open ("This Window", in the order it opened them) and the order the
-// whole app last showed sessions in ("Recent", most recent first), kept across runs.
+// The projects a window has open ("This Window", in the order it opened them) and the order the
+// whole app last showed projects in ("Recent", most recent first), kept across runs.
 const hereKey = (window: { id: number }) => `default.projects.window.${window.id}`
 const RECENT = "default.projects.recent"
 const NONE: string[] = []
 
-/** Notes the session the window shows as open in it, and as the most recent. */
+/** Notes the project the window shows as open in it, and as the most recent. */
 function ProjectTracker() {
   const window = useWindow()
   const [, setHere] = useLocal(hereKey(window), NONE)
   const [, setRecent] = useLocal(RECENT, NONE)
   useEffect(() => {
-    const shown = window.session
+    const shown = window.project
     if (!shown) return
     setHere((list) => (list.includes(shown) ? list : [...list, shown]))
     setRecent((list) => (list[0] === shown ? list : [shown, ...list.filter((id) => id !== shown)].slice(0, 50)))
-  }, [window.session])
+  }, [window.project])
   return null
 }
 
@@ -266,39 +266,39 @@ type PickerRow =
   | { kind: "here" | "recent"; id: string; label: string; current: boolean }
   | { kind: "action"; id: string; label: string; icon: string; run(): void }
 
-/** The session picker, under the session button: a search field, this window's sessions, the
+/** The project picker, under the project button: a search field, this window's projects, the
  * recent ones, and what opens another. The arrow keys move the highlight, Enter picks, Escape
- * closes, and the x on a row takes that session out of the window without closing it. */
+ * closes, and the x on a row takes that project out of the window without closing it. */
 function ProjectPicker({ close }: { close(): void }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
   const window = useWindow()
-  const sessions = useSessions()
+  const projects = useProjects()
   const [here, setHere] = useLocal(hereKey(window), NONE)
   const [recent] = useLocal(RECENT, NONE)
   const [query, setQuery] = useState("")
   const [lit, setLit] = useState(0)
 
   const rows = useMemo(() => {
-    const byId = new Map(sessions.map((s) => [s.workspace_id, s]))
+    const byId = new Map(projects.map((s) => [s.project_id, s]))
     const q = query.trim().toLowerCase()
     const entry = (kind: "here" | "recent") => (id: string) => {
       const s = byId.get(id)!
-      return { kind, id, label: s.label || id, current: id === window.session }
+      return { kind, id, label: s.label || id, current: id === window.project }
     }
-    const open = [...here, ...(window.session && !here.includes(window.session) ? [window.session] : [])].filter((id) => byId.has(id))
-    const rest = [...recent, ...sessions.map((s) => s.workspace_id)].filter((id, i, all) => byId.has(id) && !open.includes(id) && all.indexOf(id) === i)
+    const open = [...here, ...(window.project && !here.includes(window.project) ? [window.project] : [])].filter((id) => byId.has(id))
+    const rest = [...recent, ...projects.map((s) => s.project_id)].filter((id, i, all) => byId.has(id) && !open.includes(id) && all.indexOf(id) === i)
     const matches = (r: { label: string }) => !q || r.label.toLowerCase().includes(q)
     const actions: PickerRow[] = [
-      { kind: "action", id: "open-folder", label: "Open Local Folder…", icon: "folder_open", run: () => openFolder(window).catch(swallow) },
+      { kind: "action", id: "open-folder", label: "Open Local Folder…", icon: "folder_open", run: () => runCommand("open_folder", window.id) },
     ]
     return {
       here: open.map(entry("here")).filter(matches) as PickerRow[],
       recent: rest.map(entry("recent")).filter(matches) as PickerRow[],
       actions,
     }
-  }, [sessions, here, recent, query, window])
+  }, [projects, here, recent, query, window])
   const all = [...rows.here, ...rows.recent, ...rows.actions]
   const at = Math.min(lit, all.length - 1)
 
@@ -392,24 +392,13 @@ function ProjectPicker({ close }: { close(): void }) {
   )
 }
 
-/** Asks for a folder and shows its session in `window`: the one already there, or a new one. */
-async function openFolder(window: { id: number; show(session: string): void }) {
-  const picked = await call("fs.pick", { kind: "directory", title: "Open Local Folder" })
-  const dir = typeof picked === "string" ? picked : Array.isArray(picked) ? picked[0] : undefined
-  if (!dir) return
-  const found = store.get().snapshot?.workspaces.find((w) => w.cwd === dir)
-  if (found) return window.show(found.workspace_id)
-  const name = basename(dir) || dir
-  await openSession(window, { cwd: dir, name })
-}
-
-function ViewBar({ session }: { session?: string }) {
+function ViewBar({ project }: { project?: string }) {
   const t = useTheme()
   const C = useComponents()
   const window = useWindow()
   // By index, as the side bar has them: dragging a view there trades its index with its neighbours'.
-  const views = [...useViews(session)].sort((a, b) => a.number - b.number)
-  const front = window.view ?? useSession(session)?.active_view_id
+  const views = [...useViews(project)].sort((a, b) => a.number - b.number)
+  const front = window.view ?? useProject(project)?.active_view_id
   return (
     <div style={{ display: "flex", flexDirection: "row", alignSelf: "stretch", alignItems: "stretch", minWidth: 0, flexShrink: 1, overflowX: "scroll", borderLeftWidth: 1, borderColor: t.border }}>
       {views.map((view, index) => (
@@ -430,7 +419,7 @@ function View({ view: id, active }: { view: string; active: boolean; index: numb
   const label = useViewName(id)
   const [hovered, hover] = useHover()
   const { open, menu } = useMenu(["view.menu", "view.actions"], { view: id })
-  // The bar shows the window's session: each view's keys by its number (⌘1…⌘9), while held.
+  // The bar shows the window's project: each view's keys by its number (⌘1…⌘9), while held.
   const keys = useHeldKeys("switch_view", view?.number ?? -1)
   if (!view) return null
   return (
@@ -481,7 +470,7 @@ function View({ view: id, active }: { view: string; active: boolean; index: numb
         <Icon name="close" size={10} />
       </div>
       {/* A tab dropped on the view joins it; at its left or right edge, a view moves beside it (as on its row in the side bar). */}
-      <RowDrop row={{ kind: "view", session: view.workspace_id, view: id }} across />
+      <RowDrop row={{ kind: "view", project: view.project_id, view: id }} across />
       {menu}
     </div>
   )
@@ -725,7 +714,7 @@ function SubMenu({ title, lit, onEnter, children }: { title: string; lit?: boole
       {open ? (
         <anchored side="right" align="start" gap={6} offset={{ x: 0, y: -5 }} fit="snap" snapMargin={8} deferred occlude priority={2} style={{ backgroundColor: "transparent" }}>
           <MenuContext.Provider value={own}>
-            {/* A long one (a session's views) a few rows' worth, then it scrolls. */}
+            {/* A long one (a project's views) a few rows' worth, then it scrolls. */}
             <div onMouseEnter={() => menu?.over(true)} onMouseLeave={() => menu?.over(false)} style={{ ...menuCard(t, m), maxHeight: 22 * 14 + 8, overflowY: "scroll" }}>
               {children}
             </div>
@@ -926,7 +915,7 @@ function Layout({ view }: { view?: string }) {
 const HOME = homedir()
 const tildePath = (path: string) => (HOME && (path === HOME || path.startsWith(`${HOME}/`)) ? `~${path.slice(HOME.length)}` : path)
 
-/** How many sessions the start screen lists under Recent. */
+/** How many projects the start screen lists under Recent. */
 const START_RECENT = 5
 /** The start screen's width, but while it shows the first run's choices (`SETUP_WIDTH`). */
 const START_WIDTH = 420
@@ -936,7 +925,7 @@ const SetupContext = createContext<(on: boolean) => void>(() => {})
 
 /**
  * What the panes' room shows while there are none: pumi's mark, what starts something (a view of
- * the session shown, a session, a folder), the sessions shown last, and the settings. On the first
+ * the project shown, a project, a folder), the projects shown last, and the settings. On the first
  * run, until its plugins are installed, a welcome and the choices instead (`StartPlugins`).
  */
 function StartScreen() {
@@ -944,16 +933,16 @@ function StartScreen() {
   const t = useTheme()
   const m = useMetrics()
   const window = useWindow()
-  const sessions = useSessions()
+  const projects = useProjects()
   const [recent] = useLocal(RECENT, NONE)
   const animate = useAnimate()
-  const shown = useSession()
-  // The sessions shown last first, then the rest, without the one this window shows.
+  const shown = useProject()
+  // The projects shown last first, then the rest, without the one this window shows.
   const others = useMemo(() => {
-    const byId = new Map(sessions.map((s) => [s.workspace_id, s]))
-    const ids = [...recent, ...sessions.map((s) => s.workspace_id)].filter((id, i, all) => byId.has(id) && id !== window.session && all.indexOf(id) === i)
+    const byId = new Map(projects.map((s) => [s.project_id, s]))
+    const ids = [...recent, ...projects.map((s) => s.project_id)].filter((id, i, all) => byId.has(id) && id !== window.project && all.indexOf(id) === i)
     return ids.slice(0, START_RECENT).map((id) => byId.get(id)!)
-  }, [sessions, recent, window.session])
+  }, [projects, recent, window.project])
   const command = (name: string) => () => runCommand(name, window.id)
   const starters = useStarters()
   const appIcon = assets.appIcon()
@@ -991,18 +980,17 @@ function StartScreen() {
         {logo(72)}
         <text style={{ fontSize: ts(20), fontWeight: 600, color: t.text, marginTop: 4 }}>{shown ? shown.label || "pumi" : "Welcome to pumi"}</text>
         <text style={{ fontSize: ts(12), color: t.muted, textAlign: "center" }}>
-          {shown ? (shown.cwd ? tildePath(shown.cwd) : "Nothing is open in this session.") : "A terminal workspace for your coding agents."}
+          {shown ? tildePath(shown.path) : "A terminal workspace for your coding agents."}
         </text>
       </div>
       <StartSection title="Start">
         {shown ? <StartRow icon="terminal" title="New View" command="new_view" onClick={command("new_view")} /> : null}
-        <StartRow icon={shown ? "square_plus" : "terminal"} title="New Session" command="new_workspace" onClick={command("new_workspace")} />
-        <StartRow icon="folder_open" title="Open Folder…" onClick={() => openFolder(window).catch(swallow)} />
+        <StartRow icon="folder_open" title="Open Folder…" command="open_folder" onClick={command("open_folder")} />
       </StartSection>
       {others.length ? (
         <StartSection title="Recent">
           {others.map((s) => (
-            <StartRow key={s.workspace_id} icon="folder" title={s.label || s.workspace_id} detail={s.cwd ? tildePath(s.cwd) : undefined} onClick={() => window.show(s.workspace_id)} />
+            <StartRow key={s.project_id} icon="folder" title={s.label || s.project_id} detail={tildePath(s.path)} onClick={() => window.show(s.project_id)} />
           ))}
         </StartSection>
       ) : null}
@@ -2160,7 +2148,7 @@ function usePanel(point: string) {
   // Whether the group shown is put away: its button clicked again.
   const [closed, setClosed] = useLocal(`default.${point}.closed`, false)
   const sections: Section[] = [
-    ...(point === TREE_POINT ? [{ key: sidebar.TREE, title: "Sessions", icon: TREE_ICON, body: <C.Sessions /> }] : []),
+    ...(point === TREE_POINT ? [{ key: sidebar.TREE, title: "Projects", icon: TREE_ICON, body: <C.Projects /> }] : []),
     ...components.map((v) => ({ key: `${v.plugin}/${v.id}`, title: v.title ?? v.id, icon: v.icon ?? "blocks", body: renderComponent(v) })),
   ]
   const keys = sections.map((s) => s.key)
@@ -2620,9 +2608,9 @@ function DragGhost({ drag, it, byKey, groups }: { drag: { x: number; y: number }
 const GHOST_HOLD = 24
 
 /**
- * What a tab, view or session drag carries (`moves.ts`), by the mouse. A tab is its strip chip,
+ * What a tab, view or project drag carries (`moves.ts`), by the mouse. A tab is its strip chip,
  * lifted, as Zed's is: the mouse holds it near its start, so it reads where it will land. A view or
- * a session is its icon and its name, beside the mouse.
+ * a project is its icon and its name, beside the mouse.
  */
 function MoveGhost() {
   const ts = useTextSize()
@@ -2669,7 +2657,7 @@ function MoveGhost() {
     label = viewName(snapshot, store.get().trees, it.view)
   } else {
     icon = "folder"
-    label = snapshot?.workspaces.find((x) => x.workspace_id === it.session)?.label || it.session
+    label = snapshot?.projects.find((x) => x.project_id === it.project)?.label || it.project
   }
   if (!label) return null
   return (
@@ -2682,22 +2670,22 @@ function MoveGhost() {
   )
 }
 
-function SessionHeader() {
+function ProjectHeader() {
   const t = useTheme()
-  const session = useSession()
-  const { components, actions } = useSlot("session.header")
-  if (!session || (!components.length && !actions.length)) return null
+  const project = useProject()
+  const { components, actions } = useSlot("project.header")
+  if (!project || (!components.length && !actions.length)) return null
   return (
     <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 4, minHeight: 30, paddingLeft: 8, paddingRight: 4, flexShrink: 0, borderBottomWidth: 1, borderColor: t.border }}>
       <div style={{ display: "flex", flexGrow: 1, minWidth: 0 }}>
-        <Slot slot="session.header" args={{ session: session.workspace_id }} />
+        <Slot slot="project.header" args={{ project: project.project_id }} />
       </div>
     </div>
   )
 }
 
-// ── The sessions tree ────────────────────────────────────────────────
-// Sessions, their views, and the tabs in them, as a file tree draws folders: a chevron to fold a
+// ── The projects tree ────────────────────────────────────────────────
+// Projects, their views, and the tabs in them, as a file tree draws folders: a chevron to fold a
 // level, and a rail under each open level down the left of what it holds.
 
 const TREE_ROW = 28
@@ -2729,32 +2717,32 @@ const RowDrop = memo(function RowDrop({ row, across }: { row: moves.Row; across?
   return <RowDropZone row={row} across={across} />
 })
 
-/** What a tab dragged makes at a session's foot: a view of its own there, or nothing. */
-function newViewDrop(data: unknown, session: string): moves.Move | undefined {
+/** What a tab dragged makes at a project's foot: a view of its own there, or nothing. */
+function newViewDrop(data: unknown, project: string): moves.Move | undefined {
   const it = moves.carried(data)
   if (it?.kind !== "pumi.tab") return undefined
-  return moves.rowDrop(it, { kind: "session", session }, 0.5, moves.whereIn(store.get().snapshot))
+  return moves.rowDrop(it, { kind: "project", project }, 0.5, moves.whereIn(store.get().snapshot))
 }
 
 /**
- * A row at the foot of an open session's views, there only while a tab that could be a view of its
- * own in it drags: dropped on it, the tab is a new view, last in the session.
+ * A row at the foot of an open project's views, there only while a tab that could be a view of its
+ * own in it drags: dropped on it, the tab is a new view, last in the project.
  */
-const NewViewDrop = memo(function NewViewDrop({ session }: { session: string }) {
+const NewViewDrop = memo(function NewViewDrop({ project }: { project: string }) {
   const drag = useDragState()
-  if (!drag || !newViewDrop(drag.data, session)) return null
-  return <NewViewDropZone session={session} />
+  if (!drag || !newViewDrop(drag.data, project)) return null
+  return <NewViewDropZone project={project} />
 })
 
-function NewViewDropZone({ session }: { session: string }) {
+function NewViewDropZone({ project }: { project: string }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
   const window = useWindow()
   const zone = drop.useDropBox(
-    (data): data is moves.Carried => !!newViewDrop(data, session),
+    (data): data is moves.Carried => !!newViewDrop(data, project),
     (it) => {
-      const move = newViewDrop(it, session)
+      const move = newViewDrop(it, project)
       if (move) runMove(move, window)
     },
   )
@@ -2809,7 +2797,7 @@ function RowDropZone({ row, across }: { row: moves.Row; across?: boolean }) {
   const move = zone.isOver && zone.drag && it ? moves.rowDrop(it, row, along(zone.drag, zone.box()), where()) : undefined
   const lit = !move
     ? undefined
-    : move.kind === "session.order" || (move.kind === "view.move" && move.anchor !== undefined)
+    : move.kind === "project.order" || (move.kind === "view.move" && move.anchor !== undefined)
       ? move.after
         ? "after"
         : "before"
@@ -2849,22 +2837,22 @@ const NO_VIEWS: never[] = []
 const NO_SNAPSHOT_TABS: never[] = []
 
 /**
- * Brings a session to this window, and in it a view and a tab of it: the window shows only the
- * session it is given, so a view or tab of another session switches it first.
+ * Brings a project to this window, and in it a view and a tab of it: the window shows only the
+ * project it is given, so a view or tab of another project switches it first.
  */
-function goTo(window: ReturnType<typeof useWindow>, session: string, view?: string, tab?: string) {
-  window.show(session, view)
+function goTo(window: ReturnType<typeof useWindow>, project: string, view?: string, tab?: string) {
+  window.show(project, view)
   if (tab) call(via(tab, "tab.focus"), tab).catch(swallow)
 }
 
 
 /**
- * A row of the side bar that ⌘1…⌘9 go to: a tab that needs attention, or a session's view.
+ * A row of the side bar that ⌘1…⌘9 go to: a tab that needs attention, or a project's view.
  * `key` names the row (`tab:…`, `view:…`), as the row asks for its number by it.
  */
 interface Numbered {
   key: string
-  session: string
+  project: string
   view?: string
   tab?: string
 }
@@ -2878,9 +2866,9 @@ interface Numbering {
 const NO_NUMBERED: Numbered[] = []
 
 /**
- * By window id: the rows the side bar numbers, top to bottom, as `Sessions` draws them (the tabs
- * that need attention, then each session's views, whichever session they are in). Empty while
- * the side bar is hidden: then ⌘1…⌘9 go to the shown session's views.
+ * By window id: the rows the side bar numbers, top to bottom, as `Projects` draws them (the tabs
+ * that need attention, then each project's views, whichever project they are in). Empty while
+ * the side bar is hidden: then ⌘1…⌘9 go to the shown project's views.
  */
 const numberings = new Map<number, Numbering>()
 
@@ -2902,7 +2890,7 @@ function numbering(window: number): Numbering {
 
 function setNumbered(window: number, rows: Numbered[]) {
   const n = numbering(window)
-  const same = n.rows.length === rows.length && n.rows.every((r, i) => r.key === rows[i].key && r.session === rows[i].session)
+  const same = n.rows.length === rows.length && n.rows.every((r, i) => r.key === rows[i].key && r.project === rows[i].project)
   if (same) return
   n.rows = rows
   for (const listener of n.listeners) listener()
@@ -3042,22 +3030,22 @@ const StatusIcon = memo(function StatusIcon({ status, size = 14 }: { status: str
   )
 })
 
-/** The `Sessions` part: every session, and its views under it, with a search over them. */
-function Sessions() {
+/** The `Projects` part: every project, and its views under it, with a search over them. */
+function Projects() {
   const ts = useTextSize()
   const t = useTheme()
-  const sessions = useSessions()
+  const projects = useProjects()
   const views = useApp((s) => s.snapshot?.views ?? NO_VIEWS)
   const [folded, setFolded] = useLocal<string[]>("default.tree.folded", [])
-  // Sessions in the order they were dragged into; views by their index.
-  const [order] = useLocal<string[]>(SESSION_ORDER, NONE)
+  // Projects in the order they were dragged into; views by their index.
+  const [order] = useLocal<string[]>(PROJECT_ORDER, NONE)
   // One function for every row (it is given the row's id), so a memoized row keeps its props.
   const toggle = useCallback((id: string) => setFolded((now) => (now.includes(id) ? now.filter((k) => k !== id) : [...now, id])), [setFolded])
   const [query, setQuery] = useState("")
   const [expanded] = useLocal(TREE_EXPANDED, false)
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
   const layouts = useApp((s) => s.trees)
-  // ⌘1…⌘9 go to the rows as they are drawn, top to bottom, across every session: what this
+  // ⌘1…⌘9 go to the rows as they are drawn, top to bottom, across every project: what this
   // draw numbers (`numbered`) is given to the window once it is drawn.
   const window = useWindow()
   const latest = useRef(window)
@@ -3068,17 +3056,17 @@ function Sessions() {
     const n = numbering(window.id)
     const off = numberViews(window.id, (at) => {
       const row = n.rows[at - 1]
-      if (row) goTo(latest.current, row.session, row.view, row.tab)
+      if (row) goTo(latest.current, row.project, row.view, row.tab)
     })
     return () => {
       off()
       setNumbered(window.id, NO_NUMBERED)
     }
   }, [window.id])
-  if (!sessions.length) {
-    return <text style={{ padding: 10, fontSize: ts(12), color: t.faint }}>No sessions</text>
+  if (!projects.length) {
+    return <text style={{ padding: 10, fontSize: ts(12), color: t.faint }}>No projects</text>
   }
-  // While searching: only what matches (a session that matches keeps all its views), unfolded. A
+  // While searching: only what matches (a project that matches keeps all its views), unfolded. A
   // view matches by its name or any of its tabs'.
   const q = query.trim().toLowerCase()
   const has = (...texts: (string | null | undefined)[]) => !q || texts.some((x) => !!x && x.toLowerCase().includes(q))
@@ -3095,28 +3083,28 @@ function Sessions() {
     const rank = (tab: string) => (at.indexOf(tab) < 0 ? at.length : at.indexOf(tab))
     return tabs.filter((p) => p.view_id === view).sort((a, b) => rank(a.tab_id) - rank(b.tab_id))
   }
-  const leaves = (session: string, held: typeof tabs, view: string, whole: boolean) => {
-    // Searching, a view that matches by its own name (or its session's) keeps all its tabs.
+  const leaves = (project: string, held: typeof tabs, view: string, whole: boolean) => {
+    // Searching, a view that matches by its own name (or its project's) keeps all its tabs.
     const shown = whole ? held : held.filter((p) => has(tabLabel(p)))
-    return shown.map((p) => <TreeLeaf key={p.tab_id} tab={p.tab_id} depth={1} status={!!p.status} session={session} view={view} alone={false} />)
+    return shown.map((p) => <TreeLeaf key={p.tab_id} tab={p.tab_id} depth={1} status={!!p.status} project={project} view={view} alone={false} />)
   }
   let shownAny = false
-  if (!q) for (const p of loudTabs(tabs)) numbered.push({ key: `tab:${p.tab_id}`, session: p.workspace_id, view: p.view_id, tab: p.tab_id })
+  if (!q) for (const p of loudTabs(tabs)) numbered.push({ key: `tab:${p.tab_id}`, project: p.project_id, view: p.view_id, tab: p.tab_id })
   return (
     <div style={{ display: "flex", flexDirection: "column", paddingBottom: 4 }}>
       <TreeSearch query={query} setQuery={setQuery} />
       {q ? null : <NeedsAttention />}
-      {moves.sortSessions(sessions, order).map((session) => {
-        const id = session.workspace_id
-        const own = views.filter((view) => view.workspace_id === id).sort((a, b) => a.number - b.number)
-        const shown = has(session.label || id) ? own : own.filter((view) => viewHit(view.view_id))
-        if (q && !shown.length && !has(session.label || id)) return null
+      {moves.sortProjects(projects, order).map((project) => {
+        const id = project.project_id
+        const own = views.filter((view) => view.project_id === id).sort((a, b) => a.number - b.number)
+        const shown = has(project.label || id) ? own : own.filter((view) => viewHit(view.view_id))
+        if (q && !shown.length && !has(project.label || id)) return null
         shownAny = true
         const shut = !q && folded.includes(id)
-        if (!shut) for (const view of shown) numbered.push({ key: `view:${view.view_id}`, session: id, view: view.view_id })
+        if (!shut) for (const view of shown) numbered.push({ key: `view:${view.view_id}`, project: id, view: view.view_id })
         return (
           <div key={id} style={{ display: "flex", flexDirection: "column", flexShrink: 0, borderBottomWidth: 1, borderColor: t.border }}>
-            <SessionRow session={id} label={session.label || id} folded={shut} toggle={toggle} status={shut ? lead(own) : undefined} views={own.length} />
+            <ProjectRow project={id} label={project.label || id} folded={shut} toggle={toggle} status={shut ? lead(own) : undefined} views={own.length} />
             {shut
               ? null
               : shown.map((view) => {
@@ -3125,12 +3113,12 @@ function Sessions() {
                   const grouped = held.length > 1
                   return (
                     <Fragment key={view.view_id}>
-                      <ViewRow view={view.view_id} session={id} expanded={grouped} />
-                      {grouped ? leaves(id, held, view.view_id, has(session.label || id, viewName(snapshot, trees, view.view_id))) : null}
+                      <ViewRow view={view.view_id} project={id} expanded={grouped} />
+                      {grouped ? leaves(id, held, view.view_id, has(project.label || id, viewName(snapshot, trees, view.view_id))) : null}
                     </Fragment>
                   )
                 })}
-            {shut ? null : <NewViewDrop session={id} />}
+            {shut ? null : <NewViewDrop project={id} />}
           </div>
         )
       })}
@@ -3141,7 +3129,7 @@ function Sessions() {
 
 /**
  * The tabs that need attention (`needsAttention`, by their `@status`), the most urgent first, on a
- * yellow band over the sessions; a click brings one up. Nothing is drawn while none do. A block
+ * yellow band over the projects; a click brings one up. Nothing is drawn while none do. A block
  * sets its own tabs' status; a terminal's comes from its program, which reports it (OSC 7501) or
  * is read by a fallback (OSC 9;4, a spinning title, a notification), as its icon in the tree shows.
  */
@@ -3160,7 +3148,7 @@ function NeedsAttention() {
       {loud.map((a) => (
         <div
           key={a.tab_id}
-          onClick={() => goTo(window, a.workspace_id, a.view_id, a.tab_id)}
+          onClick={() => goTo(window, a.project_id, a.view_id, a.tab_id)}
           style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6, minHeight: TREE_ROW, flexShrink: 0, paddingLeft: ROW_PAD, paddingRight: 8, cursor: "pointer", userSelect: "none", hover: { backgroundColor: "#0000001f" } }}
         >
           {/* In the ink, not the status's colour, which washes out on yellow: the shape tells them apart. */}
@@ -3179,8 +3167,8 @@ function NumberKeys({ row, color }: { row: string; color?: string }) {
   return keys ? <HeldKeys keys={keys} color={color} /> : null
 }
 
-/** A side bar row's height: a session's, and each of its views'. */
-const SESSION_ROW = 32
+/** A side bar row's height: a project's, and each of its views'. */
+const PROJECT_ROW = 32
 const VIEW_ROW = 34
 /** How far in a row's content starts. */
 const ROW_PAD = 12
@@ -3191,47 +3179,42 @@ function useViewName(view: string): string {
 }
 
 /**
- * A session's row, as Zed's project header: a click folds its views; its name, and on hover a
- * chevron by it (the same fold), a `+` (a new view in it; in a repository, `NewViewMenu`: in which worktree) and a `…` (its menu: `session.menu`, the
- * app's Rename, New View, Open in New Window, Close); a right click opens the menu too. Folded, it says what its views
+ * A project's row, as Zed's project header: a click folds its views; its name, and on hover a
+ * chevron by it (the same fold), a `+` (a new view in it; in a repository, `NewViewMenu`: in which worktree) and a `…` (its menu: `project.menu`, the
+ * app's New View, Open in New Window, Close); a right click opens the menu too. Folded, it says what its views
  * say (`status`) and how many views it has. Memoized: a change to one of its views does not draw it.
  */
-const SessionRow = memo(function SessionRow({ session: id, label, folded, toggle, status, views }: { session: string; label: string; folded: boolean; toggle(id: string): void; status?: string; views: number }) {
+const ProjectRow = memo(function ProjectRow({ project: id, label, folded, toggle, status, views }: { project: string; label: string; folded: boolean; toggle(id: string): void; status?: string; views: number }) {
   const ts = useTextSize()
   const t = useTheme()
   const window = useWindow()
   const [hovered, setHovered] = useState(false)
-  const current = id === window.session
-  const { open, show, menu, shown } = useMenu("session.menu", { session: id })
+  const current = id === window.project
+  const { open, show, menu, shown } = useMenu("project.menu", { project: id })
   const [adding, setAdding] = useState<{ x: number; y: number } | undefined>()
   const newView = () => {
     openView(id)
       .then(({ view }) => (current ? view && window.showView(view) : window.show(id, view)))
       .catch(swallow)
   }
-  const { renaming, input } = useRename({ session: id }, label)
-  const draggable = useDraggable<moves.Carried>({ kind: "pumi.session", session: id }, { disabled: renaming })
-  const lit = (hovered || shown || !!adding) && !renaming
+  const draggable = useDraggable<moves.Carried>({ kind: "pumi.project", project: id })
+  const lit = hovered || shown || !!adding
   // Read while the row is lit, so the `+` knows by its click whether there are worktrees to offer.
   const worktrees = worktreeViews.useWorktrees(id, lit)
   return (
     <>
       <div
         {...draggable.props}
-        onClick={() => draggable.wasDragged() || renaming || toggle(id)}
+        onClick={() => draggable.wasDragged() || toggle(id)}
         onAuxClick={open}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         aria-expanded={!folded}
-        style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 4, height: SESSION_ROW, flexShrink: 0, paddingLeft: ROW_PAD, paddingRight: 8, position: "relative", cursor: "pointer", userSelect: "none" }}
+        style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 4, height: PROJECT_ROW, flexShrink: 0, paddingLeft: ROW_PAD, paddingRight: 8, position: "relative", cursor: "pointer", userSelect: "none" }}
       >
-        {input ? (
-          <RenameField input={input} />
-        ) : (
-          <text style={{ fontSize: ts(13), fontWeight: current ? 500 : 400, color: current || lit ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{label}</text>
-        )}
+        <text style={{ fontSize: ts(13), fontWeight: current ? 500 : 400, color: current || lit ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{label}</text>
         {lit ? <RowButton icon={folded ? "chevron_right" : "chevron_down"} title={folded ? "Expand" : "Collapse"} onClick={() => toggle(id)} /> : null}
-        {renaming ? null : <div style={{ flexGrow: 1 }} />}
+        <div style={{ flexGrow: 1 }} />
         {lit ? (
           <RowButtons menu={show}>
             <RowButton
@@ -3240,16 +3223,16 @@ const SessionRow = memo(function SessionRow({ session: id, label, folded, toggle
               onClick={(e: any) => (worktrees.length ? setAdding({ x: e?.x ?? 0, y: e?.y ?? 0 }) : newView())}
             />
           </RowButtons>
-        ) : folded && !renaming ? (
+        ) : folded ? (
           <>
             {status && status !== "unknown" ? <StatusIcon status={status} size={12} /> : null}
             <text style={{ fontSize: ts(11), color: t.faint }}>{String(views)}</text>
           </>
         ) : null}
-        <RowDrop row={{ kind: "session", session: id }} />
+        <RowDrop row={{ kind: "project", project: id }} />
       </div>
       {menu}
-      {adding ? <NewViewMenu session={id} at={adding} close={() => setAdding(undefined)} /> : null}
+      {adding ? <NewViewMenu project={id} at={adding} close={() => setAdding(undefined)} /> : null}
     </>
   )
 })
@@ -3268,15 +3251,15 @@ const WorktreeBadge = memo(function WorktreeBadge({ path, size = 11, color }: { 
 })
 
 /**
- * What a session's `+` opens when it is in a repository, as Zed's: a new view in one of its
+ * What a project's `+` opens when it is in a repository, as Zed's: a new view in one of its
  * worktrees (the one the window's front view is in checked), and a new worktree, on a new branch
  * or on one no worktree has checked out. Its field searches both as you type: ↑ ↓ (⌃N ⌃P) move,
  * Enter opens, → and ← go into and out of `Create New Worktree…`, Escape backs out.
  */
-function NewViewMenu({ session, at, close }: { session: string; at: { x: number; y: number }; close(): void }) {
+function NewViewMenu({ project, at, close }: { project: string; at: { x: number; y: number }; close(): void }) {
   return (
     <MenuCard at={at} close={close}>
-      <NewViewRows session={session} close={close} />
+      <NewViewRows project={project} close={close} />
     </MenuCard>
   )
 }
@@ -3284,24 +3267,24 @@ function NewViewMenu({ session, at, close }: { session: string; at: { x: number;
 const CREATE_WORKTREE = "Create New Worktree…"
 
 /** `NewViewMenu`'s field and rows: inside its card, so the keys can open its submenu. */
-function NewViewRows({ session, close }: { session: string; close(): void }) {
+function NewViewRows({ project, close }: { project: string; close(): void }) {
   const ts = useTextSize()
   const t = useTheme()
   const m = useMetrics()
   const window = useWindow()
   const menu = useContext(MenuContext)
-  const worktrees = worktreeViews.useWorktrees(session)
-  const home = useApp((s) => s.snapshot?.workspaces.find((w) => w.workspace_id === session))
-  const frontView = useApp((s) => (window.session === session && window.view ? s.snapshot?.views.find((x) => x.view_id === window.view) : undefined))
-  const here = frontView ? (frontView.worktree ?? home?.cwd) : home?.cwd
+  const worktrees = worktreeViews.useWorktrees(project)
+  const home = useApp((s) => s.snapshot?.projects.find((w) => w.project_id === project))
+  const frontView = useApp((s) => (window.project === project && window.view ? s.snapshot?.views.find((x) => x.view_id === window.view) : undefined))
+  const here = frontView ? (frontView.worktree ?? home?.path) : home?.path
   const [free, setFree] = useState<string[] | undefined>()
   useEffect(() => {
     let live = true
-    worktreeViews.freeBranchesFor(session).then((list) => live && setFree(list), () => live && setFree([]))
+    worktreeViews.freeBranchesFor(project).then((list) => live && setFree(list), () => live && setFree([]))
     return () => {
       live = false
     }
-  }, [session])
+  }, [project])
   const [query, setQuery] = useState("")
   // The lit row: of the worktrees, then `Create New Worktree…` after them; and in its submenu.
   const [lit, setLit] = useState(0)
@@ -3319,12 +3302,12 @@ function NewViewRows({ session, close }: { session: string; close(): void }) {
 
   const openIn = (path: string) => {
     close()
-    worktreeViews.open(window, session, path).catch(worktreeViews.report)
+    worktreeViews.open(window, project, path).catch(worktreeViews.report)
   }
   const createOn = (branch?: string) => {
     close()
-    if (branch === undefined) worktreeViews.createAsking(window, session)
-    else worktreeViews.create(window, session, branch).catch(worktreeViews.report)
+    if (branch === undefined) worktreeViews.createAsking(window, project)
+    else worktreeViews.create(window, project, branch).catch(worktreeViews.report)
   }
   const enterSub = () => {
     setLit(create)
@@ -3419,26 +3402,26 @@ function NewWorktreeRows({ branches, lit, onLit, pick }: { branches: string[]; l
 }
 
 /**
- * A view's row under its session: its tabs' icons, as the view bar has them, and its name; the
+ * A view's row under its project: its tabs' icons, as the view bar has them, and its name; the
  * window's front view is lit. On hover its menu (rename, close) and its close; a tab dropped on
- * it joins it, and dragged, it moves among its session's views or to another session. `expanded`:
+ * it joins it, and dragged, it moves among its project's views or to another project. `expanded`:
  * its tabs are listed under it, so it draws no icons of them. Memoized.
  */
-const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: string; session: string; expanded?: boolean }) {
+const ViewRow = memo(function ViewRow({ view: id, project, expanded }: { view: string; project: string; expanded?: boolean }) {
   const ts = useTextSize()
   const t = useTheme()
   const window = useWindow()
   const label = useViewName(id)
   const worktree = useApp((s) => s.snapshot?.views.find((x) => x.view_id === id)?.worktree)
-  const front = window.session === session && window.view === id
-  // ⌘1…⌘9 go to the side bar's rows top to bottom, in whichever session (`Sessions`).
+  const front = window.project === project && window.view === id
+  // ⌘1…⌘9 go to the side bar's rows top to bottom, in whichever project (`Projects`).
   const keys = useHeldKeys("switch_view", useNumber(`view:${id}`) ?? -1)
   const [hovered, setHovered] = useState(false)
   const close = () => call(via(id, "view.close"), id).catch(swallow)
   const { renaming, input } = useRename({ view: id }, label)
   const { open, show, menu, shown } = useMenu(["view.menu", "view.actions"], { view: id })
   const draggable = useDraggable<moves.Carried>({ kind: "pumi.view", view: id }, { disabled: renaming })
-  const row = useMemo<moves.Row>(() => ({ kind: "view", session, view: id }), [session, id])
+  const row = useMemo<moves.Row>(() => ({ kind: "view", project, view: id }), [project, id])
   const background = front ? t.selected : hovered ? t.hover : t.surface
   return (
     <>
@@ -3446,7 +3429,7 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
       <div compartment>
         <div
           {...draggable.props}
-          onClick={() => draggable.wasDragged() || renaming || goTo(window, session, id)}
+          onClick={() => draggable.wasDragged() || renaming || goTo(window, project, id)}
           onAuxClick={open}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
@@ -3476,9 +3459,9 @@ const ViewRow = memo(function ViewRow({ view: id, session, expanded }: { view: s
  * (`@status`), else a plain row. Where it is makes it a drop target (`moves.Row`). Memoized on
  * those, so a change to another tab does not draw it again.
  */
-const TreeLeaf = memo(function TreeLeaf({ tab, depth, status, session, view, alone }: { tab: string; depth: number; status: boolean; session: string; view: string; alone: boolean }) {
+const TreeLeaf = memo(function TreeLeaf({ tab, depth, status, project, view, alone }: { tab: string; depth: number; status: boolean; project: string; view: string; alone: boolean }) {
   const C = useComponents()
-  const spot = useMemo<moves.Row>(() => ({ kind: "tab", session, view, tab, alone }), [session, view, tab, alone])
+  const spot = useMemo<moves.Row>(() => ({ kind: "tab", project, view, tab, alone }), [project, view, tab, alone])
   return (
     <TreeDepth.Provider value={depth}>
       <TreeSpot.Provider value={spot}>{status ? <C.TabRow tab={tab} /> : <PlainTabRow tab={tab} />}</TreeSpot.Provider>
@@ -3510,7 +3493,7 @@ function PlainTabRow({ tab }: { tab: string }) {
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onAuxClick={open}
-          onClick={() => draggable.wasDragged() || goTo(window, p.workspace_id, p.view_id, tab)}
+          onClick={() => draggable.wasDragged() || goTo(window, p.project_id, p.view_id, tab)}
           style={treeRow(depth, selected, t)}
         >
           <Guides depth={depth} />
@@ -3528,7 +3511,7 @@ function PlainTabRow({ tab }: { tab: string }) {
 }
 
 /**
- * The field over the sessions tree, as Zed's: a strip the side bar's width, under the title bar's
+ * The field over the projects tree, as Zed's: a strip the side bar's width, under the title bar's
  * edge and over its own. What it types narrows the tree; Escape (or the ×) clears it.
  */
 function TreeSearch({ query, setQuery }: { query: string; setQuery(q: string): void }) {
@@ -3540,8 +3523,8 @@ function TreeSearch({ query, setQuery }: { query: string; setQuery(q: string): v
       <Icon name="magnifying_glass" size={14} color={focused ? t.muted : t.faint} />
       <input
         value={query}
-        placeholder="Search sessions…"
-        aria-label="Search sessions"
+        placeholder="Search projects…"
+        aria-label="Search projects"
         onChange={(e: any) => setQuery(e.value ?? "")}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -3593,7 +3576,7 @@ function TabRow({ tab }: { tab: string }) {
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onAuxClick={open}
-          onClick={() => draggable.wasDragged() || goTo(window, p.workspace_id, p.view_id, tab)}
+          onClick={() => draggable.wasDragged() || goTo(window, p.project_id, p.view_id, tab)}
           title={p.label && p.terminal_title && p.label !== p.terminal_title ? `${p.label} · ${p.terminal_title}` : undefined}
           style={treeRow(depth, tab === focused && p.view_id === front, t)}
         >
@@ -3666,7 +3649,7 @@ export const DEFAULT: Components = {
   TabBody,
   Splitter,
   Panel,
-  Sessions,
+  Projects,
   Float,
   TabRow,
   TabRowControls,

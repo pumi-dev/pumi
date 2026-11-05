@@ -315,8 +315,8 @@ export interface Components {
   Window: ComponentType
   /** What the window shows before the server answers: it starting, or why it could not. */
   Starting: ComponentType<{ title: string; detail: string; gaveUp: boolean; lines: string[] }>
-  /** The bar of the window's session's views. */
-  ViewBar: ComponentType<{ session?: string }>
+  /** The bar of the window's project's views. */
+  ViewBar: ComponentType<{ project?: string }>
   /** One view in it. */
   View: ComponentType<{ view: string; active: boolean; index: number }>
   /** A view's panes, as its layout splits them. */
@@ -352,9 +352,9 @@ export interface Components {
   Float: ComponentType<{ tab: string }>
   /** What contributes to a slot (`panel`), stacked, tabbed or collapsed as the theme likes. */
   Panel: ComponentType<{ point: string }>
-  /** Every session, its views and their tabs, as a tree: the default side bar's own, heading the first page of its sections. */
-  Sessions: ComponentType
-  /** A tab with a status (`@status`), as a list of tabs (the `Sessions` tree) shows it. */
+  /** Every project, its views and their tabs, as a tree: the default side bar's own, heading the first page of its sections. */
+  Projects: ComponentType
+  /** A tab with a status (`@status`), as a list of tabs (the `Projects` tree) shows it. */
   TabRow: ComponentType<{ tab: string }>
   /** A tab row's actions: the `tab.row.controls` contributions, given the tab. */
   TabRowControls: ComponentType<{ tab: string }>

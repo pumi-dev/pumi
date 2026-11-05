@@ -23,9 +23,9 @@ There are no tmux verbs. `pumi NOUN VERB [ID] [ARGS…] [--flags]` is a function
 
 An argument is JSON when it reads as JSON (`3`, `true`, `{"a":1}`) and text when it does not. A function whose one argument is an object takes its required fields first, as words: `pumi tab cells %3 --lines 5` is `tab.cells({tab: "%3", lines: 5})`. After `--` come a program and its words, for a command that runs one: `pumi tab open pumi_dev.terminal.shell -- htop` is `{command: ["htop"]}`, and `pumi tab run %3 -- npm test`. `pumi_dev.terminal.shell` is the [Terminal plugin](https://github.com/pumi-dev/plugins/tree/main/terminal)'s block, a shell in a tab. `get` prints the model; `tab read` prints the text; `list` prints a table on a terminal and JSON when it is piped. `pumi tab list` is a table either way, and `--json` says JSON (`tab list --json` is the ids).
 
-A tab is an id, `%3` (`3` will do, where a tab is what is asked for); a pane `:4`, a view `@2`, a session `$1`, a request `+4`. `$PUMI_TAB`, `$PUMI_VIEW` and `$PUMI_SESSION` are yours, and a command that leaves its session or view out means them; one that leaves its pane out means your tab's.
+A tab is an id, `%3` (`3` will do, where a tab is what is asked for); a pane `:4`, a view `@2`, a project `$1`, a request `+4`. `$PUMI_TAB`, `$PUMI_VIEW` and `$PUMI_PROJECT` are yours, and a command that leaves its project or view out means them; one that leaves its pane out means your tab's.
 
-Where a tab opens is its place, and its kind follows from its flags: `--split`, `--pane`, `--beside`, `--size` are a tiled place's, `--anchor`, `--width`, `--row` a floating one's; otherwise say `--kind tiled|float|view|session`. `--split right` opens it in a pane of its own beside yours; `--pane :4` opens it as a tab of pane `:4` (`--pane current` is yours), after the tab in front, and brings it there unless `--no-focus`. `pumi tab update %3 --place '{"kind": "tiled", "pane": ":4", "index": 0}'` moves a tab to the start of a pane's strip. `pumi pane focus --direction left`, `pumi pane update --zoom toggle` and `pumi pane close` act on a pane; `pumi tab focus --offset 1` goes to the next tab in yours.
+Where a tab opens is its place, and its kind follows from its flags: `--split`, `--pane`, `--beside`, `--size` are a tiled place's, `--anchor`, `--width`, `--row` a floating one's; otherwise say `--kind tiled|float|view|project` (`--path` says which folder a project opens, the home folder without one). `--split right` opens it in a pane of its own beside yours; `--pane :4` opens it as a tab of pane `:4` (`--pane current` is yours), after the tab in front, and brings it there unless `--no-focus`. `pumi tab update %3 --place '{"kind": "tiled", "pane": ":4", "index": 0}'` moves a tab to the start of a pane's strip. `pumi pane focus --direction left`, `pumi pane update --zoom toggle` and `pumi pane close` act on a pane; `pumi tab focus --offset 1` goes to the next tab in yours.
 
 | | |
 | --- | --- |
@@ -53,7 +53,7 @@ Global flags: `--json`, `--server NAME` (or a socket's path), `--socket PATH`, `
 
 A tab's `@status` says how what runs in it is doing: `working`, `blocked`, `error`, `done`, `idle` or `unknown`. The side bar shows a row for each tab that has one. A terminal's program reports it with an escape sequence (OSC 7501), and until one does pumi reads what it says otherwise: OSC 9;4 progress is `working` (or `error`), a braille spinner at the start of its title (OSC 0/2) is `working` until it stops, and a desktop notification (OSC 9, 99, 777) is `done` until you look at the tab. A plugin's block may set its own tabs' `@status`.
 
-pumi has no agents of its own: they are the [Agents plugin](https://github.com/pumi-dev/plugins/tree/main/agents). It opens Claude Code, Codex and pi in terminals with their hooks on, which set the tab's status, and can show each as a chat of the same session, which queues prompts while the agent works.
+pumi has no agents of its own: they are the [Agents plugin](https://github.com/pumi-dev/plugins/tree/main/agents). It opens Claude Code, Codex and pi in terminals with their hooks on, which set the tab's status, and can show each as a chat of the same project, which queues prompts while the agent works.
 
 ```sh
 pumi plugin add pumi-dev/plugins/agents     # the Agents plugin
@@ -69,7 +69,7 @@ Window ▸ Diagnostics (`diagnostics` in the palette) opens a window that measur
 
 ## Settings
 
-Every setting is an option. `pumi option set` changes it, and the server keeps it with the rest of its state; `settings.json` is where you write one yourself, and edits to it apply within a second. Options can be set globally, on one session, view or tab, or for one plugin (`--scope`, `--id`, `--plugin`).
+Every setting is an option. `pumi option set` changes it, and the server keeps it with the rest of its state; `settings.json` is where you write one yourself, and edits to it apply within a second. Options can be set globally, on one project, view or tab, or for one plugin (`--scope`, `--id`, `--plugin`).
 
 ```sh
 pumi option set linespace 10

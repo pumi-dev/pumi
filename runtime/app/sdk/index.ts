@@ -7,8 +7,8 @@ export {
   useOption,
   useRequests,
   useRegistry,
-  useSession,
-  useSessions,
+  useProject,
+  useProjects,
   useTab,
   useTabs,
   useView,
@@ -23,7 +23,7 @@ export {
 } from "./state.ts"
 // The models, as `main.ts` has them: one cache serves both halves.
 export { cache, Model } from "../worker/sdk/model.ts"
-export { Pane, Plugin, Request, Session, Tab, View } from "../worker/sdk/models.gen.ts"
+export { Pane, Plugin, Request, Project, Tab, View } from "../worker/sdk/models.gen.ts"
 export type { Data, Fields } from "../worker/sdk/model.ts"
 export { defineTheme, useMetrics, usePalette, useTheme, type DockSpec, type IconButtonProps, type Metrics, type TabIconProps, type TerminalPalette, type ThemeSpec, type Tokens } from "./theme.ts"
 export { usePlugin } from "./contributions.ts"

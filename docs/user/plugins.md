@@ -141,7 +141,7 @@ A slot is a place in the window. Give it a `component`, an export of `ui.tsx`, o
 | Slot | Props |
 | --- | --- |
 | `window.overlay` `panel` `palette.actions` | |
-| `session.header` `session.menu` | `session` |
+| `project.header` `project.menu` | `project` |
 | `view.actions` `view.badge` `view.menu` | `view` |
 | `tab.toolbar` `tab.strip` `tab.overlay` `tab.menu` | `tab` |
 | `tab.new` | actions only, run with `{tab, place}`: the pane or tab it opens beside, and where (`tab.open`'s place); with `path` or `paths` too when it has a `pick` |
@@ -213,7 +213,7 @@ await call("option.set", "@icon", { src: favicon, tint: false }, { scope: "tab",
 pumi option set @icon sparkle --scope tab --id %3
 ```
 
-`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `session`, and leaving the place out puts the tab below the caller's. A `null` block is what a new tab holds: what the `new_tab` option names, a block (`pumi.launchpad.new`, `pumi_dev.terminal.shell`, …) or a `tab.new` action by its function (`pumi_dev.agents.new_claude`), which is called with `{tab, place}` and the block's `args` and answers the tab it opened. While it names nothing installed, it is Launchpad's list, else a shell, else the first `tab.new` action (or block of a plugin with none). With nothing installed, `tab.open` refuses with `no plugin opens new tabs`.
+`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `project`, and leaving the place out puts the tab below the caller's. A `null` block is what a new tab holds: what the `new_tab` option names, a block (`pumi.launchpad.new`, `pumi_dev.terminal.shell`, …) or a `tab.new` action by its function (`pumi_dev.agents.new_claude`), which is called with `{tab, place}` and the block's `args` and answers the tab it opened. While it names nothing installed, it is Launchpad's list, else a shell, else the first `tab.new` action (or block of a plugin with none). With nothing installed, `tab.open` refuses with `no plugin opens new tabs`.
 
 ```ts
 await call("tab.open", "pumi_dev.terminal.shell", { command: ["make", "test"] }, { kind: "tiled", split: "right", size: "30%" });
@@ -235,13 +235,13 @@ The renderer whose glob fits a file best draws it. For one tab alone, set its `@
 
 ## Models and `workspace`
 
-Everything the server holds is a model: `Session`, `View`, `Pane`, `Tab`, `Request` and `Plugin`. A field is a getter over a live cache, a method is one call, and `watch(keys, fn)` hears the keys it names.
+Everything the server holds is a model: `Project`, `View`, `Pane`, `Tab`, `Request` and `Plugin`. A field is a getter over a live cache, a method is one call, and `watch(keys, fn)` hears the keys it names.
 
 ```ts
 import { workspace } from "pumi";
 
 await workspace.ready;                                  // the cache is filled: reads are sync
-const view = workspace.currentSession?.activeView;
+const view = workspace.currentProject?.activeView;
 const tests = await workspace.openTab("pumi_dev.terminal.shell", { command: ["make", "test"] }, { kind: "tiled", split: "right" });
 await tests.update({ title: "tests" });
 const { exitCode } = await tests.wait({ exit: true, timeout: 60 });
@@ -250,24 +250,24 @@ tests.watch(["title", "cwd"], () => console.log(tests.title));
 
 | `workspace` | |
 | --- | --- |
-| `currentSession` `currentView` `currentTab` | the caller's own |
-| `sessions` | every session |
-| `getSession(id)` `getView(id)` `getPane(id)` `getTab(id)` `getPlugin(id)` | one by its id (`getPlugin` is a call) |
+| `currentProject` `currentView` `currentTab` | the caller's own |
+| `projects` | every project |
+| `getProject(id)` `getView(id)` `getPane(id)` `getTab(id)` `getPlugin(id)` | one by its id (`getPlugin` is a call) |
 | `tabs(filter)` `requests(filter)` `panes(view)` | what `tab.list`, `request.list` and `pane.list` find |
 | `openTab(block, args, place)` `openRequest(request, opts)` | one call, answered with the model |
 
-A model's fields read `undefined` until the cache holds it. What `openTab`, `tabs()`, `panes()` and `requests()` answer is filled, and so are the caller's own objects and every session after `workspace.ready`; a model reached through another's field (`session.views`, `pane.tabs`) or by its id may not be, so `await model.ready` first. It answers the model, and rejects when the object is gone.
+A model's fields read `undefined` until the cache holds it. What `openTab`, `tabs()`, `panes()` and `requests()` answer is filled, and so are the caller's own objects and every project after `workspace.ready`; a model reached through another's field (`project.views`, `pane.tabs`) or by its id may not be, so `await model.ready` first. It answers the model, and rejects when the object is gone.
 
 ```ts
 const pane = await workspace.getPane(":4")!.ready;
 const tabs = await Promise.all(pane.tabs.map((tab) => tab.ready));
 ```
 
-What a tab is, in one read: `tab.block`, `tab.traits`, `tab.place`, `tab.title`, `tab.cwd`, `tab.foregroundCwd`, `tab.process`, `tab.scroll`, `tab.neighbors`, `tab.isFocused`, `tab.isZoomed`, `tab.options`. A view holds `layout` (its panes as they split, each with its `tabs` and the one in front), `activeTab`, `activePane` and `zoom`; a pane (`workspace.getPane(":4")`, `workspace.panes(view)`) holds its `view`, `tabs` and `activeTab`; a session holds its `views` and `activeView`. `pane.opened`, `pane.changed` and `pane.closed` say what changed of a view's panes.
+What a tab is, in one read: `tab.block`, `tab.traits`, `tab.place`, `tab.title`, `tab.cwd`, `tab.foregroundCwd`, `tab.process`, `tab.scroll`, `tab.neighbors`, `tab.isFocused`, `tab.isZoomed`, `tab.options`. A view holds `layout` (its panes as they split, each with its `tabs` and the one in front), `activeTab`, `activePane` and `zoom`; a pane (`workspace.getPane(":4")`, `workspace.panes(view)`) holds its `view`, `tabs` and `activeTab`; a project holds its `path` (its folder, and what it is), `views` and `activeView`. `pane.opened`, `pane.changed` and `pane.closed` say what changed of a view's panes.
 
-The focus is the server's, and every client showing a session shares it: a view's `activeTab` and `activePane`, a session's `activeView`, and `isFocused` (a client is in that tab) are the same for all of them, and `tab.focus` and `view.focus` move them for all. A component that draws where its window's focus is takes it from the window (a theme's `focused` prop, `useFocusedTab`), not from these.
+The focus is the server's, and every client showing a project shares it: a view's `activeTab` and `activePane`, a project's `activeView`, and `isFocused` (a client is in that tab) are the same for all of them, and `tab.focus` and `view.focus` move them for all. A component that draws where its window's focus is takes it from the window (a theme's `focused` prop, `useFocusedTab`), not from these.
 
-A window shows a view of its own: `useView()` in a `ui.tsx` is that window's view, and `useWindow().view` names it (`showView(view)` switches it). Two windows on one session can show two views of it, so a session's `activeView` — which `view.focus` moves — is not what a window draws.
+A window shows a view of its own: `useView()` in a `ui.tsx` is that window's view, and `useWindow().view` names it (`showView(view)` switches it). Two windows on one project can show two views of it, so a project's `activeView` — which `view.focus` moves — is not what a window draws.
 
 ## Tab methods
 
@@ -306,7 +306,7 @@ Every setting is an option. `option.get(name, opts)` reads one and `option.set(n
 | Scope | |
 | --- | --- |
 | `global` | the whole app: `{scope: "global"}` |
-| `session` `view` `tab` | one object: `{scope: "tab", id: "%3"}`, the caller's own without `id` |
+| `project` `view` `tab` | one object: `{scope: "tab", id: "%3"}`, the caller's own without `id` |
 | `plugin` | one plugin's own store, kept across a restart, `{scope: "plugin", plugin: "me/hello"}`: what `main.ts` gets when it names no scope |
 
 ```ts
@@ -383,7 +383,7 @@ One call describes everything that is registered: `registry.list(kind, opts)`, w
 
 ## Events
 
-Each session, view, pane and tab has `opened`, `closed` and `changed {keys, patch}`; a model's `watch` is a filter over `changed`. What else fires: `tab.alerted {kind, message}`, `request.opened` and `request.closed {answer, reason}`, `option.changed`, `registry.changed {kind, names}`, and `app.changed {client, keys, patch}` (whether one of a client's app's windows has the focus, `isFocused`; its `match` is the client's id).
+Each project, view, pane and tab has `opened`, `closed` and `changed {keys, patch}`; a model's `watch` is a filter over `changed`. What else fires: `tab.alerted {kind, message}`, `request.opened` and `request.closed {answer, reason}`, `option.changed`, `registry.changed {kind, names}`, and `app.changed {client, keys, patch}` (whether one of a client's app's windows has the focus, `isFocused`; its `match` is the client's id).
 
 `on(event, opts, fn)` runs `fn` with each one and returns its disposer; `opts.match` is a glob or a list of globs tested against the event's `match` (an object's id, a tab's block, a request's kind). `opts.once` hears one.
 
@@ -395,7 +395,7 @@ on("tab.alerted", (e) => emit("bell", { message: e.data.message }));   // me.hel
 off();
 ```
 
-`event.wait(event, opts)` is the next one, or `null` after its timeout. A plugin's own events are `owner.name.<name>`; `emit` prefixes them for you. `e.session`, `e.view` and `e.tab` say which objects the event is about.
+`event.wait(event, opts)` is the next one, or `null` after its timeout. A plugin's own events are `owner.name.<name>`; `emit` prefixes them for you. `e.project`, `e.view` and `e.tab` say which objects the event is about.
 
 ## Status and agents
 
@@ -405,7 +405,7 @@ A tab's `@status` option says how what runs in it is doing: `working`, `blocked`
 await call("option.set", "@status", "working", { scope: "tab", id: tab.id });
 ```
 
-pumi has no agents of its own: they are the [Agents plugin](https://github.com/pumi-dev/plugins/tree/main/agents). An agent's tab has that plugin's trait, `@pumi_dev.agents.agent` (the agent's id, with `.session`, `.model`, `.transcript`, `.accepts` and `.conversation`), and the plugin serves its conversation as `pumi_dev.agents.conversation.read` and `.send`, with the `pumi_dev.agents.conversation.changed` event. Its README says what they take.
+pumi has no agents of its own: they are the [Agents plugin](https://github.com/pumi-dev/plugins/tree/main/agents). An agent's tab has that plugin's trait, `@pumi_dev.agents.agent` (the agent's id, with `.project`, `.model`, `.transcript`, `.accepts` and `.conversation`), and the plugin serves its conversation as `pumi_dev.agents.conversation.read` and `.send`, with the `pumi_dev.agents.conversation.changed` event. Its README says what they take.
 
 ## Worker and components
 
@@ -495,13 +495,13 @@ Both files import from `"pumi"`. The app provides it at run time; for type-check
 | --- | --- |
 | objects | `workspace` `call` `fn` `option` `registry` `request` `menu` `event` `plugin` `fs` `clipboard` `process` |
 | own | `on` `emit` `self` `paths` `layout` `stop` `ui.post` |
-| models | `Session` `View` `Pane` `Tab` `Request` `Plugin`, and their data types |
+| models | `Project` `View` `Pane` `Tab` `Request` `Plugin`, and their data types |
 
 | `ui.tsx` | |
 | --- | --- |
-| state | `useSessions` `useSession` `useViews` `useView` `useTab` `useTabs` `useRequests` `useRegistry` `useWatchable` `useOption` `useWindow` `workspace` `call` |
-| models | `Session` `View` `Pane` `Tab` `Request` `Plugin` `Model` `cache` |
-| theme | `defineTheme` `useTheme` `usePalette` `useMetrics` `useFont` |
+| state | `useProjects` `useProject` `useViews` `useView` `useTab` `useTabs` `useRequests` `useRegistry` `useWatchable` `useOption` `useWindow` `workspace` `call` |
+| models | `Project` `View` `Pane` `Tab` `Request` `Plugin` `Model` `cache` |
+| theme | `defineTheme` `useTheme` `usePalette` `useMetrics` `useAppearance` `useFont` |
 | hooks | `useChannel` `useChannelListener` `useEvent` `usePlugin` |
 | elements | `div` `text` `img` `svg` `scroll` `input` `terminal` `Icon` `IconButton`; an element's `ref` (`ElementRef`) has `focus()`, `scrollTo()`, `scrollIntoView()`, and a `virtual-list`'s `scrollToItem()` |
 | web | `WebView` `useWebview` `webview` `webviewRun` `webviewSnapshot` |

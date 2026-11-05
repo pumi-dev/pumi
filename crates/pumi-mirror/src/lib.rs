@@ -10,7 +10,7 @@ pub use pumi_model::SERVER;
 pub use pumi_model::objects;
 pub use pumi_model::state;
 pub use pumi_model::{
-    Chan, ChanId, ClientId, ClientInfo, Current, Float, Model, Pane, PaneId, Place, Session, SessionId, Tab, TabId, Ui,
+    Chan, ChanId, ClientId, ClientInfo, Current, Float, Model, Pane, PaneId, Place, Project, ProjectId, Tab, TabId, Ui,
     View, ViewId,
 };
 use serde::{Deserialize, Serialize};
@@ -55,7 +55,7 @@ pub struct Config {
 }
 pub struct Kernel {
     pub config: Config,
-    /// Sessions, views, tabs, channels and options, as the core has them.
+    /// Projects, views, tabs, channels and options, as the core has them.
     pub model: Model,
     pub events: Events,
     /// Messages for channels (and for Lua, [`LUA`]), sent after each turn.
@@ -209,7 +209,7 @@ impl Kernel {
     pub fn global_option(&self, name: &str) -> Value {
         self.model.options.get(name, &[Key::Global]).map(|(v, _)| v).unwrap_or(Value::Null)
     }
-    /// The cells a view is laid out in: the size of the client that used a session holding it
+    /// The cells a view is laid out in: the size of the client that used a project holding it
     /// last, else `default_size` (tmux's `window-size latest`).
     pub fn view_area(&self, view: ViewId) -> Rect {
         let client = self
@@ -217,8 +217,8 @@ impl Kernel {
             .chans
             .values()
             .filter_map(|c| c.ui.as_ref())
-            .filter(|ui| self.model.sessions.get(&ui.session).is_some_and(|s| s.views.iter().any(|(_, t)| *t == view)))
-            .max_by_key(|ui| self.model.sessions[&ui.session].activity);
+            .filter(|ui| self.model.projects.get(&ui.project).is_some_and(|s| s.views.iter().any(|(_, t)| *t == view)))
+            .max_by_key(|ui| self.model.projects[&ui.project].activity);
         let parse = |text: &str| {
             let (w, h) = text.split_once('x')?;
             Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
@@ -304,7 +304,7 @@ impl Kernel {
 pub fn key_opts(key: Key) -> Value {
     match key {
         Key::Global => json!({ "scope": "global" }),
-        Key::Session(id) => json!({ "scope": "session", "session": id }),
+        Key::Project(id) => json!({ "scope": "project", "project": id }),
         Key::View(id) => json!({ "scope": "view", "view": id }),
         Key::Tab(id) => json!({ "scope": "tab", "tab": id }),
         Key::Client(id) => json!({ "scope": "client", "client": id }),
@@ -312,6 +312,6 @@ pub fn key_opts(key: Key) -> Value {
 }
 impl std::fmt::Debug for Kernel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Kernel").field("sessions", &self.model.sessions).field("tabs", &self.model.tabs).finish()
+        f.debug_struct("Kernel").field("projects", &self.model.projects).field("tabs", &self.model.tabs).finish()
     }
 }
