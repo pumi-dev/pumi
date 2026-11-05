@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { normal, pathOf, projectAt, repoOf, route } from "./open-route.ts"
+import { normal, pathOf, projectAt, repoName, repoOf, route } from "./open-route.ts"
 
 const HOME = "/Users/me"
 const projects = [
@@ -54,4 +54,13 @@ test("a new project for a file is at its repository, else its folder", () => {
 test("only a file URL is a path", () => {
   expect(pathOf("file:///Users/me/My%20Notes/")).toBe("/Users/me/My Notes")
   expect(pathOf("pumi://settings/general")).toBeUndefined()
+})
+
+test("a repository's address names the folder it clones into", () => {
+  expect(repoName("https://github.com/pumi-dev/pumi.git")).toBe("pumi")
+  expect(repoName("git@github.com:pumi-dev/pumi.git")).toBe("pumi")
+  expect(repoName("https://github.com/a/b/")).toBe("b")
+  expect(repoName("ssh://git@host/x/y")).toBe("y")
+  expect(repoName("  https://github.com/a/b  ")).toBe("b")
+  expect(repoName("")).toBe("")
 })

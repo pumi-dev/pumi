@@ -16,7 +16,7 @@ import { setCapturedKeys } from "../native/addon.js"
 import { FONT_DEFAULT, FONT_SIZE_RANGE, guifont, parseFont } from "../sdk/font.ts"
 import { explainNoNewTab } from "./new-tab.ts"
 import { openView } from "./new-view.ts"
-import { openFolder } from "./open-folder.ts"
+import { cloneRepository, openFolder } from "./open-folder.ts"
 
 /** Where a command runs: the window it was asked in, and what of it is in front. */
 export interface Context {
@@ -187,6 +187,7 @@ const APP: [string, string, (c: Context, index?: number) => unknown][] = [
   ["zoom_window", "Zoom window", (c) => c.window.renderer.zoomWindow()],
   ["fullscreen", "Toggle full screen", (c) => c.window.renderer.toggleFullscreen()],
   ["open_folder", "Open folder…", (c) => openFolder(c.window.manager, c.window)],
+  ["clone_repository", "Clone repository…", (c) => cloneRepository(c.window.manager, c.window)],
   ["close_project", "Close project", (c) => (c.project ? call(via(c.project, "project.close"), c.project) : undefined)],
   ["previous_project", "Previous project", (c) => { const s = stepProject(c, -1); if (s) c.window.show(s) }],
   ["next_project", "Next project", (c) => { const s = stepProject(c, 1); if (s) c.window.show(s) }],

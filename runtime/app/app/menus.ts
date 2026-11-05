@@ -52,6 +52,7 @@ const BAR: Menu[] = [
     items: [
       { command: "new_view" },
       { command: "open_folder" },
+      { command: "clone_repository" },
       { command: "new_window" },
       { separator: true },
       { command: "close_tab" },
