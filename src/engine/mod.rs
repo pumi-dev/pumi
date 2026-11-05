@@ -173,8 +173,8 @@ impl Engine {
     }
 
     /// The menu bar: `[{name, items: [{command, title, chord}, {separator: true}, {name, items}]}]`,
-    /// the app menu (About, Settings, Hide, Quit) excepted. A click posts a `menu` event with the
-    /// command's name; the app's window in front runs it.
+    /// the app menu (About, Check for Updates, Settings, Hide, Quit) excepted. A click posts a
+    /// `menu` event with the command's name; the app's window in front runs it.
     #[napi]
     pub fn set_menus(&self, menus: String) -> Result<()> {
         crate::menus::set(&menus)

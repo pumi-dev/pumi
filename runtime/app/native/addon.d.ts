@@ -12,8 +12,8 @@ export declare class Engine {
   call(method: string, params?: any | undefined | null, caller?: any | undefined | null): Promise<any>
   /**
    * The menu bar: `[{name, items: [{command, title, chord}, {separator: true}, {name, items}]}]`,
-   * the app menu (About, Settings, Hide, Quit) excepted. A click posts a `menu` event with the
-   * command's name; the app's window in front runs it.
+   * the app menu (About, Check for Updates, Settings, Hide, Quit) excepted. A click posts a
+   * `menu` event with the command's name; the app's window in front runs it.
    */
   setMenus(menus: string): void
   /**

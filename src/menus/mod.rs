@@ -36,6 +36,8 @@ gpui::actions!(
     [
         /// Show the About panel.
         AboutPumi,
+        /// Look for a newer pumi now, the way Settings' button does (`updater::check`).
+        CheckForUpdates,
     ]
 );
 
@@ -80,6 +82,7 @@ pub fn install(cx: &mut App) {
             crate::engine::emit("menu", serde_json::json!({ "command": run.0.as_ref() }));
         });
         cx.on_action(|_: &AboutPumi, cx: &mut App| about(cx));
+        cx.on_action(|_: &CheckForUpdates, cx: &mut App| crate::updater::check(true, cx));
     }
     let Some(bar) = BAR.lock().unwrap().clone() else { return };
     let mut bindings = Vec::new();
@@ -99,13 +102,16 @@ pub fn install(cx: &mut App) {
     cx.set_menus(menus);
 }
 
-/// The application menu: About, Settings, the keybindings, the services, hiding and quitting.
-/// Its actions are the renderer's own (`pumi_gpuix::app_menu`), which already has handlers.
+/// The application menu: About, Check for Updates, Settings, the keybindings, the services,
+/// hiding and quitting. Its actions are the renderer's own (`pumi_gpuix::app_menu`), which
+/// already has handlers, but for About and the check; the check itself is `updater::check`, the one
+/// Settings' button and `update.check` reach, so all three answer with the same toast.
 fn app_menu(bindings: &mut Vec<KeyBinding>) -> Menu {
     use pumi_gpuix::app_menu::{Hide, HideOthers, Quit, ShowAll};
     let name = pumi_gpuix::app::app_name();
     let items = vec![
         MenuItem::action(format!("About {name}"), AboutPumi),
+        MenuItem::action("Check for Updates…", CheckForUpdates),
         MenuItem::separator(),
         command("settings", "Settings…", Some("cmd+,"), bindings),
         command("help", "Keybindings…", Some("cmd+/"), bindings),
@@ -250,6 +256,16 @@ mod tests {
         assert!(names(&menu.items).iter().any(|item| item == "Quit pumi"));
         assert_eq!(chord(&bindings, "settings"), Some(here("cmd-,")));
         assert_eq!(spell("cmd+/").as_deref(), Some("cmd-/"));
+    }
+
+    /// The second item, under About, with no chord: what a Mac app's menu looks like.
+    #[test]
+    fn check_for_updates_sits_under_about() {
+        let mut bindings = Vec::new();
+        let menu = app_menu(&mut bindings);
+        assert_eq!(names(&menu.items)[1], "Check for Updates…");
+        let wanted = CheckForUpdates;
+        assert!(!bindings.iter().any(|binding| binding.action().partial_eq(&wanted)), "it takes no key");
     }
 
     #[test]

@@ -75,7 +75,7 @@ impl Updater {
     }
 
     pub fn can_check(&self) -> bool {
-        !self.busy && !matches!(self.status, Status::Unavailable(_))
+        !self.busy
     }
 }
 
@@ -132,18 +132,28 @@ pub fn start(cx: &mut App) {
     .detach();
 }
 
-/// Look for a newer release now, and download it if there is one. `manual` is a person
-/// asking, who is told the outcome; a scheduled check stays quiet unless it finds one.
+/// Look for a newer release now, and download it if there is one. `manual` is a person asking, who
+/// is answered either way — an update found, an up-to-date pumi, or why it cannot look at all; a
+/// scheduled check stays quiet unless it finds one.
 pub fn check(manual: bool, cx: &mut App) {
     let Some(updater) = cx.try_global::<Updater>() else { return };
-    if !updater.can_check() || updater.staged.is_some() {
+    // A check already running, or one whose download waits for a restart: the answer is on its
+    // way, or is the title bar's already, and a second one would be noise.
+    if updater.busy || updater.staged.is_some() {
         return;
+    }
+    if matches!(updater.status, Status::Unavailable(_)) {
+        // Nothing to check with — a development build, an install it cannot write beside — but a
+        // newer pumi can still be looked for, and a person asking is told what came of it.
+        return if manual {
+            look(cx)
+        };
     }
     let app = match install::installed_app() {
         Ok(app) => app,
-        Err(why) => return set(cx, Status::Unavailable(why), false),
+        Err(why) => return set(cx, Status::Unavailable(why), false, manual),
     };
-    set(cx, Status::Checking, true);
+    set(cx, Status::Checking, true, manual);
     cx.spawn(async move |cx| {
         let found = cx
             .background_executor()
@@ -152,25 +162,25 @@ pub fn check(manual: bool, cx: &mut App) {
         let (manifest, origin) = match found {
             Ok(found) => found,
             Err(err) => {
-                cx.update(|cx| set(cx, if manual { Status::Failed(err) } else { Status::Idle }, false));
+                cx.update(|cx| set(cx, if manual { Status::Failed(err) } else { Status::Idle }, false, manual));
                 return;
             }
         };
         let current = env!("CARGO_PKG_VERSION");
         if !manifest::is_newer(&manifest.version, current) || manifest.channel != fetch::CHANNEL {
-            cx.update(|cx| set(cx, if manual { Status::UpToDate } else { Status::Idle }, false));
+            cx.update(|cx| set(cx, if manual { Status::UpToDate } else { Status::Idle }, false, manual));
             return;
         }
         let Some(asset) = manifest.assets.get(&manifest::platform()).cloned() else {
             let why = format!("pumi {} has no build for {}", manifest.version, manifest::platform());
-            cx.update(|cx| set(cx, if manual { Status::Failed(why) } else { Status::Idle }, false));
+            cx.update(|cx| set(cx, if manual { Status::Failed(why) } else { Status::Idle }, false, manual));
             return;
         };
         let version = manifest.version.clone();
         let notes = manifest.notes_page();
         cx.update(|cx| {
             cx.global_mut::<Updater>().notes = Some(notes);
-            set(cx, Status::Downloading(version.clone()), true)
+            set(cx, Status::Downloading(version.clone()), true, manual)
         });
         let staged =
             cx.background_executor().spawn(async move { install::stage(&version, &asset, &origin, &app) }).await;
@@ -182,11 +192,11 @@ pub fn check(manual: bool, cx: &mut App) {
                 crate::system::post(&crate::system::Notification::new(format!("pumi {version} is ready")).body(
                     format!("Run “Restart to update”, or quit: it is applied either way.{}", terminals_restart()),
                 ));
-                set(cx, Status::Ready(version), false);
+                set(cx, Status::Ready(version), false, manual);
             }
             Err(err) => {
                 eprintln!("pumi: update to {} failed: {err}", manifest.version);
-                set(cx, Status::Failed(err), false);
+                set(cx, Status::Failed(err), false, manual);
             }
         });
     })
@@ -215,21 +225,73 @@ pub fn restart(cx: &mut App) {
             cx.global_mut::<Updater>().staged = None;
             cx.quit();
         }
-        Err(err) => set(cx, Status::Failed(err), false),
+        Err(err) => set(cx, Status::Failed(err), false, false),
     }
 }
 
-fn set(cx: &mut App, status: Status, busy: bool) {
+/// Sets the updater's state, and says it to the app's JS: `manual` when the outcome answers a
+/// check a person asked for, which the app shows as a toast whether it found something or not.
+fn set(cx: &mut App, status: Status, busy: bool, manual: bool) {
     cx.update_global::<Updater, _>(|updater, _| {
         updater.status = status;
         updater.busy = busy;
     });
-    changed(cx);
+    emit(cx, manual);
 }
 
 /// Tells the app's JS the updater's state changed (an `update` event carrying `state`).
 pub(crate) fn changed(cx: &App) {
-    crate::engine::emit("update", state(cx));
+    emit(cx, false);
+}
+
+/// Looks for a newer release, without installing it, for a copy that cannot (a development build,
+/// or an install it cannot write beside). The answer is the toast over the state it already knows:
+/// "pumi 0.48.0 is up to date", or the version that is out, or why it could not look — and the
+/// updater's own state is left as it is, so Settings keeps saying this copy installs nothing.
+fn look(cx: &mut App) {
+    cx.spawn(async move |cx| {
+        let found = cx
+            .background_executor()
+            .spawn(async { fetch::manifest(|bytes, sig| manifest::verify(bytes, sig, manifest::PUBLIC_KEYS)) })
+            .await;
+        cx.update(|cx| match found {
+            Ok((manifest, _)) => {
+                let newer = manifest.channel == fetch::CHANNEL
+                    && manifest::is_newer(&manifest.version, env!("CARGO_PKG_VERSION"));
+                if newer {
+                    tell(cx, "found", Some(&manifest.version), None);
+                } else {
+                    tell(cx, "upToDate", None, None);
+                }
+            }
+            Err(err) => tell(cx, "failed", None, Some(err)),
+        });
+    })
+    .detach();
+}
+
+/// Says what a look found, as the answer to a person's check (`update` with `manual`): `status` as
+/// the app reads it, and what comes with it, over the state the app already has.
+fn tell(cx: &App, status: &str, version: Option<&str>, error: Option<String>) {
+    let mut told = state(cx);
+    told["manual"] = true.into();
+    told["app"]["status"] = status.into();
+    if let Some(version) = version {
+        told["app"]["version"] = version.into();
+    }
+    if let Some(error) = error {
+        told["app"]["error"] = error.into();
+    }
+    crate::engine::emit("update", told);
+}
+
+/// Emits the updater's state, `manual` when it answers a check a person asked for.
+fn emit(cx: &App, manual: bool) {
+    let mut told = state(cx);
+    if manual {
+        told["manual"] = true.into();
+    }
+    crate::engine::emit("update", told);
 }
 
 /// The updater's state, as Settings shows it: pumi's own (`app`) and the plugins' (`plugins`).
