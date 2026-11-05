@@ -1,4 +1,4 @@
-// Actions: what can be done to a thing (a tab, a view, a session), as data a theme draws however
+// Actions: what can be done to a thing (a tab, a view, a project), as data a theme draws however
 // it likes — a menu, a toolbar, a Start menu, a palette. The app's own (split, zoom, close, move,
 // rename…) and the plugins' (`contributes.slots.<slot>.actions`) are the same kind of thing and
 // come out of the same slot together: `useSlot("tab.menu", { tab })` gives every item of a tab's
@@ -95,7 +95,7 @@ function signature(list: Action[]): string {
 export function useProvided(point: string, args: Record<string, unknown> | undefined): Action[] {
   const last = useRef<{ sig: string; list: Action[] }>(undefined)
   const window = useContext(WindowContext) ?? undefined
-  const key = `${window?.id ?? ""}|${window?.session ?? ""}|${args ? JSON.stringify(args) : ""}`
+  const key = `${window?.id ?? ""}|${window?.project ?? ""}|${args ? JSON.stringify(args) : ""}`
   return useApp((state) => {
     const list = (providers.get(point) ?? NONE).flatMap((provide) => provide(args ?? {}, { state, window }))
     if (!list.length) return NONE

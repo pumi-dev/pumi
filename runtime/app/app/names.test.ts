@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test"
 import type { Snapshot } from "./engine.ts"
 import { viewName } from "./names.ts"
 
-const tab = (id: string, more: Partial<Snapshot["tabs"][number]> = {}) => ({ tab_id: id, block: "terminal", view_id: "@1", workspace_id: "$1", status: "", ...more })
+const tab = (id: string, more: Partial<Snapshot["tabs"][number]> = {}) => ({ tab_id: id, block: "terminal", view_id: "@1", project_id: "$1", status: "", ...more })
 
 function snapshot(label: string | null, focused?: string): Snapshot {
   return {
-    workspaces: [],
-    views: [{ view_id: "@1", workspace_id: "$1", number: 1, label, status: "" }],
+    projects: [],
+    views: [{ view_id: "@1", project_id: "$1", number: 1, label, status: "" }],
     tabs: [tab("%1", { terminal_title: "zsh" }), tab("%2", { terminal_title: "π - pumi" })],
     layouts: [{ view_id: "@1", zoomed: false, focused_tab_id: focused }],
   } as unknown as Snapshot

@@ -7,7 +7,7 @@ use crate::nouns::{self, Command};
 use pumi_api::{Error, ErrorKind};
 use serde_json::{Value, json};
 
-const USAGE: &str = "usage: pumi help [NAME]   a function (`tab.open`), an event (`tab.changed`), a block (`file`), a model (`session`), or a noun (`tab`)";
+const USAGE: &str = "usage: pumi help [NAME]   a function (`tab.open`), an event (`tab.changed`), a block (`file`), a model (`project`), or a noun (`tab`)";
 
 /// `pumi help [NAME]`, with `--json` for the entry as the server describes it.
 pub fn main(address: &Address, args: &[String]) -> Result<i32, Error> {
@@ -134,7 +134,7 @@ fn noun_help(commands: &[Command], noun: &str) -> Result<i32, Error> {
 }
 
 /// The model `name` names, if one does: the server's `registry.list("model", {name})`, which knows
-/// a model by its name in any case (`pumi help session` describes `Session`).
+/// a model by its name in any case (`pumi help project` describes `Project`).
 fn model_of(client: &mut Client, name: &str) -> Result<Option<Value>, Error> {
     match client.call("registry.list", json!(["model", { "name": name }])) {
         Ok(models) => Ok(models.as_array().and_then(|models| models.first()).cloned()),
@@ -144,7 +144,7 @@ fn model_of(client: &mut Client, name: &str) -> Result<Option<Value>, Error> {
 }
 
 /// A model, as `registry.list("model")` describes it: what it is, its fields, and the verbs of the
-/// noun that names it (`pumi session list` for `Session`).
+/// noun that names it (`pumi project list` for `Project`).
 fn model_help(model: &Value, commands: &[Command], json: bool) -> Result<i32, Error> {
     if json {
         println!("{}", serde_json::to_string_pretty(model).unwrap_or_default());

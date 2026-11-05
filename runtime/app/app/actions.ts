@@ -1,5 +1,5 @@
 // The app's own actions, as data in the slots that hold them: a tab's menu (Open With, Move To,
-// Split, Zoom, Close), a tab row's (the same), a view's (Rename, Close) and a session's (Rename,
+// Split, Zoom, Close), a tab row's (the same), a view's (Rename, Close) and a project's (Rename,
 // New View, New Worktree, Open in New Window, Close). Whatever theme draws a menu gets them out of
 // `useSlot(slot, args)`, after the plugins' items, and draws them as it likes.
 import { call, via } from "./engine.ts"
@@ -39,7 +39,7 @@ function tabActions(args: Record<string, unknown>, { state, window }: ActionCont
   const moveToNewView = async () => {
     await call(via(id, "tab.update"), id, { place: { kind: "view" } })
     const made = await call(via(id, "tab.get"), id)
-    if (typeof made?.view === "string" && typeof made?.session === "string") window?.show(made.session, made.view)
+    if (typeof made?.view === "string" && typeof made?.project === "string") window?.show(made.project, made.view)
   }
   // What draws the tab: the app's pin (`@tab_renderer`), and for a file the `@viewer` its own
   // methods go to.
@@ -57,7 +57,7 @@ function tabActions(args: Record<string, unknown>, { state, window }: ActionCont
   const tabs = state.options.pane_tabs !== false
   // The other panes of its view, and what a tab moved into one of them is called by.
   const others = tree ? leavesOf(tree).filter((p) => p !== pane) : []
-  const views = (state.snapshot?.views ?? []).filter((v) => v.workspace_id === tab.workspace_id && v.view_id !== tab.view_id)
+  const views = (state.snapshot?.views ?? []).filter((v) => v.project_id === tab.project_id && v.view_id !== tab.view_id)
   const out: Action[] = []
   const { list: renderers, pinned } = renderersFor(tab)
   if (renderers.length > 1) {
@@ -72,7 +72,6 @@ function tabActions(args: Record<string, unknown>, { state, window }: ActionCont
   out.push(
     sub("move_to", "Move To", [
       act("move_to.view", "New View", moveToNewView, { group: "new" }),
-      act("move_to.session", "New Session", run("tab.update", id, { place: { kind: "session" } }), { group: "new" }),
       floating
         ? act("move_to.tile", "Tile", run("tab.update", id, { place: { kind: "tiled", view: tab.view_id } }), { group: "new" })
         : act("move_to.float", "Float", run("tab.update", id, { place: { kind: "float", view: tab.view_id } }), { group: "new" }),
@@ -117,15 +116,14 @@ function viewActions(args: Record<string, unknown>, { state }: ActionContext): A
   ]
 }
 
-/** A session's own items. */
-function sessionActions(args: Record<string, unknown>, { state, window }: ActionContext): Action[] {
-  const id = typeof args.session === "string" ? args.session : undefined
-  const session = id ? state.snapshot?.workspaces.find((w) => w.workspace_id === id) : undefined
-  if (!id || !session) return []
-  const label = session.label || id
+/** A project's own items. */
+function projectActions(args: Record<string, unknown>, { state, window }: ActionContext): Action[] {
+  const id = typeof args.project === "string" ? args.project : undefined
+  const project = id ? state.snapshot?.projects.find((w) => w.project_id === id) : undefined
+  if (!id || !project) return []
+  const label = project.label || id
   const win = () => (window ? windowContext(window.id)?.window : undefined)
   const out: Action[] = [
-    act("rename", "Rename…", () => startRename({ session: id }, label), { group: "name" }),
     act(
       "new_view",
       "New View",
@@ -137,13 +135,13 @@ function sessionActions(args: Record<string, unknown>, { state, window }: Action
     ),
   ]
   const w = win()
-  // Once the side bar has read its worktrees (on hover): a session in a repository.
+  // Once the side bar has read its worktrees (on hover): a project in a repository.
   if (w && worktreeViews.cached(id).length) {
     out.push(act("new_worktree", "New Worktree…", () => worktreeViews.createAsking(w, id), { command: "new_worktree", icon: "git_worktree", group: "open" }))
   }
-  if (w) out.push(act("new_window", "Open in New Window", () => openView(id).then(({ session, view }) => w.manager.open(session ?? id, view)), { group: "open" }))
+  if (w) out.push(act("new_window", "Open in New Window", () => openView(id).then(({ project, view }) => w.manager.open(project ?? id, view)), { group: "open" }))
   out.push(
-    act("close", "Close Session", () => call(via(id, "session.close"), id), { command: "close_workspace", icon: "close", danger: true, group: "close" }),
+    act("close", "Close Project", () => call(via(id, "project.close"), id), { command: "close_project", icon: "close", danger: true, group: "close" }),
   )
   return out
 }
@@ -151,4 +149,4 @@ function sessionActions(args: Record<string, unknown>, { state, window }: Action
 addActions("tab.menu", tabActions)
 addActions("tab.row.menu", tabActions)
 addActions("view.menu", viewActions)
-addActions("session.menu", sessionActions)
+addActions("project.menu", projectActions)

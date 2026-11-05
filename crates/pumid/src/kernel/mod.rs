@@ -12,7 +12,7 @@ use options::{Change, Key, Options};
 use pumi_api::{Caller, Error, Kind, Ref, Result};
 use pumi_model::objects::{self, LayoutTree};
 pub use pumi_model::{
-    Chan, ChanId, ClientId, ClientInfo, Current, Float, Ids, Model, Pane, PaneId, Place, SERVER, Session, SessionId,
+    Chan, ChanId, ClientId, ClientInfo, Current, Float, Ids, Model, Pane, PaneId, Place, Project, ProjectId, SERVER,
     Tab, TabId, Ui, View, ViewId,
 };
 use serde::{Deserialize, Serialize};
@@ -62,7 +62,7 @@ pub struct Config {
 pub struct Kernel {
     pub config: Config,
     pub ids: Ids,
-    /// Sessions, views, tabs, channels and options: what every replica holds.
+    /// Projects, views, tabs, channels and options: what every replica holds.
     pub model: Model,
     instances: HashMap<TabId, Box<dyn Instance>>,
     /// The core's blocks (`file`), each with its own engine. One registry with
@@ -207,7 +207,7 @@ impl Kernel {
         self.dirty = true;
         self.events.push(event, matched, about, data)
     }
-    /// Fires `<noun>.changed` for one session, view or tab: `patch` holds the fields that
+    /// Fires `<noun>.changed` for one project, view or tab: `patch` holds the fields that
     /// changed, by the names `<noun>.get` gives them, with their new values.
     pub fn changed(&mut self, kind: Kind, id: u64, patch: Value) {
         let Value::Object(patch) = patch else { return };
@@ -216,7 +216,7 @@ impl Kernel {
         }
         let text = Ref::local(kind, id).to_string();
         let about = match kind {
-            Kind::Session => About::session(id),
+            Kind::Project => About::project(id),
             Kind::View => About::view(id),
             Kind::Tab => About::tab(id),
             Kind::Pane => self.model.view_of_pane(id).map(About::view).unwrap_or_default(),
@@ -275,17 +275,17 @@ impl Kernel {
             self.panes_told.insert(pane, (view, tabs, active));
         }
     }
-    /// `session.changed` of a session's active view.
-    pub fn active_view_changed(&mut self, session: SessionId) {
-        let Some(s) = self.model.sessions.get(&session) else { return };
+    /// `project.changed` of a project's active view.
+    pub fn active_view_changed(&mut self, project: ProjectId) {
+        let Some(s) = self.model.projects.get(&project) else { return };
         let active = s.current.map(|t| Ref::local(Kind::View, t).to_string());
-        self.changed(Kind::Session, session, json!({ "activeView": active }));
+        self.changed(Kind::Project, project, json!({ "activeView": active }));
     }
-    /// The internal `client.changed`: a client shows another session.
-    pub fn client_changed(&mut self, client: ChanId, session: SessionId) {
-        let session = Ref::local(Kind::Session, session).to_string();
-        let data = json!({ "client": client, "keys": ["session"], "patch": { "session": session } });
-        self.emit("client.changed", &session, About::default(), data);
+    /// The internal `client.changed`: a client shows another project.
+    pub fn client_changed(&mut self, client: ChanId, project: ProjectId) {
+        let project = Ref::local(Kind::Project, project).to_string();
+        let data = json!({ "client": client, "keys": ["project"], "patch": { "project": project } });
+        self.emit("client.changed", &project, About::default(), data);
     }
     /// Sets an option, fires `option.changed`, and tells a tab's type about its own option.
     /// The provider a call to `name` made for `client` (a channel) goes to: that client's app
@@ -338,7 +338,7 @@ impl Kernel {
     fn option_changed(&mut self, change: &Change, source: &str) {
         let scope = change.key.scope();
         let about = match change.key {
-            Key::Session(id) => About::session(id),
+            Key::Project(id) => About::project(id),
             Key::View(id) => About::view(id),
             Key::Tab(id) => About::tab(id),
             Key::Global | Key::Client(_) => About::default(),
@@ -352,9 +352,9 @@ impl Kernel {
                     json!({ "name": change.name, "scope": "global", "plugin": null, "old": change.old, "new": change.new, "source": source }),
                 );
             }
-            Key::Session(id) | Key::View(id) | Key::Tab(id) => {
+            Key::Project(id) | Key::View(id) | Key::Tab(id) => {
                 let kind = match scope {
-                    crate::kernel::options::Scope::Session => Kind::Session,
+                    crate::kernel::options::Scope::Project => Kind::Project,
                     crate::kernel::options::Scope::View => Kind::View,
                     _ => Kind::Tab,
                 };
@@ -460,9 +460,9 @@ impl Kernel {
         let _ = self.set_option("pane_height", Key::Tab(tab), json!(height), "server", true);
         self.changed(Kind::Tab, tab, json!({ "size": { "width": width, "height": height } }));
     }
-    pub fn new_session_id(&mut self) -> SessionId {
-        self.ids.session += 1;
-        self.ids.session
+    pub fn new_project_id(&mut self) -> ProjectId {
+        self.ids.project += 1;
+        self.ids.project
     }
     pub fn new_view_id(&mut self) -> ViewId {
         self.ids.view += 1;
@@ -476,54 +476,21 @@ impl Kernel {
         self.ids.tab += 1;
         self.ids.tab
     }
-    /// A free name for a new session: the one asked for, else its folder's (`:` and `.`
-    /// as `_`, as tmux does, and `-2`, `-3`, … while taken), else tmux's numbers from 0.
-    /// A session with no folder is named for the home folder its terminals start in.
-    pub fn session_name(&self, wanted: Option<String>, cwd: Option<&str>) -> Result<String> {
-        let taken = |name: &str| self.model.sessions.values().any(|s| s.name == name);
-        let home = pumi_proto::paths::home_dir();
-        if wanted.is_none()
-            && let Some(folder) = cwd
-                .map(std::path::Path::new)
-                .unwrap_or(&home)
-                .file_name()
-                .map(|name| name.to_string_lossy().replace([':', '.'], "_"))
-                .filter(|name| !name.trim().is_empty())
-        {
-            let free = std::iter::once(folder.clone())
-                .chain((2..).map(|n: u64| format!("{folder}-{n}")))
-                .find(|name| !taken(name))
-                .expect("a free name");
-            return Ok(free);
-        }
-        match wanted {
-            Some(name) if self.model.sessions.values().any(|s| s.name == name) => {
-                Err(Error::invalid_params(format!("duplicate session: {name}")))
-            }
-            Some(name) if name.is_empty() || name.contains([':', '.']) => {
-                Err(Error::invalid_params(format!("a session name cannot be empty or hold `:` or `.`: {name:?}")))
-            }
-            Some(name) => Ok(name),
-            None => Ok((0..)
-                .map(|n: u64| n.to_string())
-                .find(|n| !self.model.sessions.values().any(|s| &s.name == n))
-                .expect("a free name")),
-        }
-    }
     /// The lowest free index at or above `base_index`.
-    pub fn free_index(&self, session: SessionId) -> u32 {
+    pub fn free_index(&self, project: ProjectId) -> u32 {
         let base = self
             .model
             .options
-            .get("base_index", &[Key::Session(session), Key::Global])
+            .get("base_index", &[Key::Project(project), Key::Global])
             .and_then(|(v, _)| v.as_u64())
             .unwrap_or(0) as u32;
-        let used: Vec<u32> = self.model.sessions[&session].views.iter().map(|(i, _)| *i).collect();
+        let used: Vec<u32> = self.model.projects[&project].views.iter().map(|(i, _)| *i).collect();
         (base..).find(|i| !used.contains(i)).expect("a free index")
     }
-    /// Views whose last tiled tab went, and sessions whose last view went, close.
-    /// Returns what closed.
-    pub fn prune(&mut self) -> (Vec<ViewId>, Vec<SessionId>) {
+    /// Views whose last tiled tab went close. A project is not one of them: closing its last tab
+    /// leaves it with no views, and it stays until it is closed ([`Kernel::close_project`]) — a
+    /// new tab in it makes a view. Returns the views that closed.
+    pub fn prune(&mut self) -> Vec<ViewId> {
         let mut views = Vec::new();
         let live: Vec<ViewId> = self.model.views.keys().copied().collect();
         for view in live {
@@ -535,81 +502,85 @@ impl Kernel {
             }
         }
         for view in &views {
-            let held = self.model.session_of_view(*view);
+            let held = self.model.project_of_view(*view);
             self.model.views.remove(view);
             self.model.options.drop_object(Key::View(*view));
             let mut changed = Vec::new();
-            for session in self.model.sessions.values_mut() {
-                if session.views.iter().any(|(_, t)| t == view) {
-                    session.views.retain(|(_, t)| t != view);
-                    let was = session.current;
-                    if session.current == Some(*view) {
-                        session.current = session
+            for project in self.model.projects.values_mut() {
+                if project.views.iter().any(|(_, t)| t == view) {
+                    project.views.retain(|(_, t)| t != view);
+                    let was = project.current;
+                    if project.current == Some(*view) {
+                        project.current = project
                             .last
-                            .filter(|l| l != view && session.views.iter().any(|(_, t)| t == l))
-                            .or_else(|| session.views.first().map(|(_, t)| *t));
+                            .filter(|l| l != view && project.views.iter().any(|(_, t)| t == l))
+                            .or_else(|| project.views.first().map(|(_, t)| *t));
                     }
-                    if session.last == Some(*view) || session.last == session.current {
-                        session.last = None;
+                    if project.last == Some(*view) || project.last == project.current {
+                        project.last = None;
                     }
-                    if session.current != was && !session.views.is_empty() {
-                        changed.push(session.id);
+                    if project.current != was && !project.views.is_empty() {
+                        changed.push(project.id);
                     }
                 }
             }
             self.panes_changed(*view);
             let id = Ref::local(Kind::View, *view).to_string();
-            let session = held.map(|s| Ref::local(Kind::Session, s).to_string());
-            self.emit("view.closed", &id, About::view(*view), json!({ "view": id, "session": session }));
-            for session in changed {
-                self.active_view_changed(session);
+            let project = held.map(|s| Ref::local(Kind::Project, s).to_string());
+            self.emit("view.closed", &id, About::view(*view), json!({ "view": id, "project": project }));
+            for project in changed {
+                self.active_view_changed(project);
             }
         }
-        let empty: Vec<SessionId> = self.model.sessions.values().filter(|s| s.views.is_empty()).map(|s| s.id).collect();
-        for session in &empty {
-            self.model.sessions.remove(session);
-            self.model.options.drop_object(Key::Session(*session));
-            let id = Ref::local(Kind::Session, *session).to_string();
-            self.emit("session.closed", &id, About::session(*session), json!({ "session": id }));
-            for chan in self.model.chans.values_mut() {
-                if let Some(ui) = &mut chan.ui
-                    && ui.session == *session
-                {
-                    ui.session = 0;
-                }
-            }
-            if self.model.last_session == Some(*session) {
-                self.model.last_session = None;
+        views
+    }
+    /// Closes a project (`project.close`), once the views only it held are closed: its options
+    /// go, its channels show another project or none, and `project.closed` says so. Whether it was there.
+    pub fn close_project(&mut self, project: ProjectId) -> bool {
+        if self.model.projects.remove(&project).is_none() {
+            return false;
+        }
+        self.model.options.drop_object(Key::Project(project));
+        let id = Ref::local(Kind::Project, project).to_string();
+        self.emit("project.closed", &id, About::project(project), json!({ "project": id }));
+        for chan in self.model.chans.values_mut() {
+            if let Some(ui) = &mut chan.ui
+                && ui.project == project
+            {
+                ui.project = 0;
             }
         }
-        if let Some(next) = self.model.sessions.values().max_by_key(|s| s.activity).map(|s| s.id) {
+        if self.model.last_project == Some(project) {
+            self.model.last_project = None;
+        }
+        if let Some(next) = self.model.projects.values().max_by_key(|s| s.activity).map(|s| s.id) {
             self.adopt_clients(next);
         }
-        (views, empty)
+        true
     }
-    /// Clients showing no session (theirs closed, or there was none when they attached) show
+    /// Clients showing no project (theirs closed, or there was none when they attached) show
     /// this one. Returns whether any did.
-    pub fn adopt_clients(&mut self, session: SessionId) -> bool {
+    pub fn adopt_clients(&mut self, project: ProjectId) -> bool {
         let mut moved = Vec::new();
         for chan in self.model.chans.values_mut() {
             if let Some(ui) = &mut chan.ui
-                && ui.session == 0
+                && ui.project == 0
             {
-                ui.session = session;
+                ui.project = project;
                 moved.push(chan.id);
             }
         }
         for client in &moved {
-            self.client_changed(*client, session);
+            self.client_changed(*client, project);
         }
         !moved.is_empty()
     }
-    pub fn touch_session(&mut self, session: SessionId) {
+    pub fn touch_project(&mut self, project: ProjectId) {
         let tick = self.tick();
-        if let Some(s) = self.model.sessions.get_mut(&session) {
+        if let Some(s) = self.model.projects.get_mut(&project) {
             s.activity = tick;
         }
-        self.model.last_session = Some(session);
+        self.model.last_project = Some(project);
     }
     pub fn touch_tab(&mut self, tab: TabId) {
         let tick = self.tick();
@@ -653,7 +624,7 @@ impl Kernel {
             }
             let name = match key {
                 Key::Global => "global".to_string(),
-                Key::Session(id) => format!("session:{id}"),
+                Key::Project(id) => format!("project:{id}"),
                 Key::View(id) => format!("view:{id}"),
                 Key::Client(id) => format!("client:{id}"),
                 Key::Tab(_) => unreachable!(),
@@ -661,18 +632,18 @@ impl Kernel {
             options.insert(name, Value::Object(self.local_options(key)));
         }
         json!({
-            "sessions": self.model.sessions.keys().map(|id| self.model.session_value(*id)).collect::<Vec<_>>(),
+            "projects": self.model.projects.keys().map(|id| self.model.project_value(*id)).collect::<Vec<_>>(),
             "views": self.model.views.keys().map(|id| self.model.view_value(*id)).collect::<Vec<_>>(),
             "tabs": self.model.tabs.keys().map(|id| self.tab_value(*id)).collect::<Vec<_>>(),
             "options": options,
-            "current": self.model.current(&Caller { channel: SERVER, ..Caller::default() }).map(|c| json!({ "session": c.session, "view": c.view, "tab": c.tab })),
+            "current": self.model.current(&Caller { channel: SERVER, ..Caller::default() }).map(|c| json!({ "project": c.project, "view": c.view, "tab": c.tab })),
         })
     }
 }
 impl std::fmt::Debug for Kernel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Kernel")
-            .field("sessions", &self.model.sessions)
+            .field("projects", &self.model.projects)
             .field("views", &self.model.views)
             .field("tabs", &self.model.tabs)
             .finish()

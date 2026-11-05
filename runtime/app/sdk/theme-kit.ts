@@ -4,7 +4,7 @@
 // state the app keeps (`useApp`). A plugin's component uses `pumi` instead; a theme uses both.
 //
 // - the window's parts: `useComponents()` (the theme's own, over the app's) and `Components`
-// - the state: `useApp`, `useSessions`, `useViews`, `useTab`, `useFloats`, `useZoomed`, …
+// - the state: `useApp`, `useProjects`, `useViews`, `useTab`, `useFloats`, `useZoomed`, …
 // - the layout: `useLayout`, `leavesOf`, `panesOf`, `tabsOf`, `shownOf`, `paneOfTab`, `leafOf`,
 //   `usePaneTabs` (whether panes hold tabs)
 // - a tab's icon: `useTabIcon` (its `@icon`, its block's), `useTabStatus`,
@@ -36,15 +36,15 @@ export {
   useFocusedTab,
   useLayout,
   useOption,
-  useSession,
-  useSessions,
+  useProject,
+  useProjects,
   useTab,
   useView,
   useViews,
   useWindow,
   useZoomed,
   type PaneLeaf,
-  type Session,
+  type Project,
   type Snapshot,
   type State,
   type Tab,
@@ -78,7 +78,7 @@ export {
   REGIONS,
   reorder,
   rowDrop,
-  sortSessions,
+  sortProjects,
   stripDrop,
   tabDrop,
   whereIn,

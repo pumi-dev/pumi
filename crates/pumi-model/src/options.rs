@@ -6,17 +6,17 @@ use std::collections::BTreeMap;
 #[serde(rename_all = "lowercase")]
 pub enum Scope {
     Global,
-    Session,
+    Project,
     View,
     Tab,
     Client,
 }
-/// One object's options: the server's, a session's, a view's, a tab's or a client's.
+/// One object's options: the server's, a project's, a view's, a tab's or a client's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Key {
     Global,
-    Session(u64),
+    Project(u64),
     View(u64),
     Tab(u64),
     Client(u64),
@@ -25,7 +25,7 @@ impl Key {
     pub fn scope(self) -> Scope {
         match self {
             Key::Global => Scope::Global,
-            Key::Session(_) => Scope::Session,
+            Key::Project(_) => Scope::Project,
             Key::View(_) => Scope::View,
             Key::Tab(_) => Scope::Tab,
             Key::Client(_) => Scope::Client,
@@ -34,7 +34,7 @@ impl Key {
     pub fn id(self) -> Option<u64> {
         match self {
             Key::Global => None,
-            Key::Session(id) | Key::View(id) | Key::Tab(id) | Key::Client(id) => Some(id),
+            Key::Project(id) | Key::View(id) | Key::Tab(id) | Key::Client(id) => Some(id),
         }
     }
 }
@@ -55,7 +55,7 @@ pub struct Decl {
     #[serde(rename = "type")]
     pub ty: Type,
     pub default: Value,
-    /// The narrowest object it is set on. A tab option may also be set on a view, a session or
+    /// The narrowest object it is set on. A tab option may also be set on a view, a project or
     /// globally, and a tab without its own value takes the nearest one.
     pub scope: Scope,
     pub desc: String,
@@ -204,9 +204,9 @@ pub struct Change {
 pub fn reaches(declared: Scope, at: Scope) -> bool {
     match declared {
         Scope::Global => at == Scope::Global,
-        Scope::Session => matches!(at, Scope::Global | Scope::Session),
-        Scope::View => matches!(at, Scope::Global | Scope::Session | Scope::View),
-        Scope::Tab => matches!(at, Scope::Global | Scope::Session | Scope::View | Scope::Tab),
+        Scope::Project => matches!(at, Scope::Global | Scope::Project),
+        Scope::View => matches!(at, Scope::Global | Scope::Project | Scope::View),
+        Scope::Tab => matches!(at, Scope::Global | Scope::Project | Scope::View | Scope::Tab),
         Scope::Client => matches!(at, Scope::Global | Scope::Client),
     }
 }
@@ -436,9 +436,9 @@ mod tests {
     #[test]
     fn a_tab_takes_the_nearest_value() {
         let mut options = options();
-        let chain = [Key::Tab(3), Key::View(2), Key::Session(1), Key::Global];
+        let chain = [Key::Tab(3), Key::View(2), Key::Project(1), Key::Global];
         assert_eq!(options.get("remain_on_exit", &chain).unwrap().0, json!(false));
-        options.set("remain_on_exit", Key::Session(1), json!(true), "cli", false).unwrap();
+        options.set("remain_on_exit", Key::Project(1), json!(true), "cli", false).unwrap();
         let (value, set) = options.get("remain_on_exit", &chain).unwrap();
         assert_eq!((value, set.unwrap().source.as_str()), (json!(true), "cli"));
         options.set("remain_on_exit", Key::Tab(3), json!(false), "init.lua:3", false).unwrap();

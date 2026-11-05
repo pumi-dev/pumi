@@ -85,7 +85,7 @@ pub const RESTART_AFTER: &str = "PUMI_RESTART_AFTER";
 /// How long a restarted server waits for the one it follows to end.
 const RESTART_WAIT: Duration = Duration::from_secs(10);
 /// A restart where terminals cannot be carried (`!caps().handoff`): this binary starts again,
-/// detached, and takes over once this process has ended ([`RESTART_AFTER`]). The session was
+/// detached, and takes over once this process has ended ([`RESTART_AFTER`]). The project was
 /// saved; its terminals start again from it.
 pub fn relaunch() -> io::Result<()> {
     let exe = crate::lifecycle::exe()?;

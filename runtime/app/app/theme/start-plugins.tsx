@@ -1,5 +1,5 @@
 // The start screen's first-run choices, as cards with a picture of each, four to a row: the plugins
-// to install (a launcher's list, a shell, an agent's session, a page), how agents open, whether the
+// to install (a launcher's list, a shell, an agent's project, a page), how agents open, whether the
 // window is transparent, and the colour scheme. Plugins have a box to tick, any number of them, and
 // those unticked are dimmed; the other choices are one of each, with a round button. The pictures
 // are drawn in the theme's colours (and the terminals' palette), so they look like what they choose.

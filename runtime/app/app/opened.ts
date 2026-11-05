@@ -1,22 +1,22 @@
 // What macOS asks the app to open: files and folders dropped on its Dock icon, or opened with it
-// (Finder's "Open With", `open -a pumi PATH`). Each goes to the session it belongs to, shown in the
-// window in front: a folder to the session whose directory it is; a file to the session with the
-// deepest directory holding it (the shown one, of equals), beside that session's current tab.
-// Without one, a new session: at the folder, or at the file's repository (else its folder).
+// (Finder's "Open With", `open -a pumi PATH`). Each goes to the project it belongs to, shown in the
+// window in front: a folder to the project whose directory it is; a file to the project with the
+// deepest directory holding it (the shown one, of equals), beside that project's current tab.
+// Without one, a new project: at the folder, or at the file's repository (else its folder).
 // A plugin's install link (`pumi://plugins/install/…`, `install-link.ts`) asks, then installs it.
 import { existsSync, statSync } from "node:fs"
-import { basename } from "node:path"
 import { confirm } from "../sdk/dialogs.ts"
 import { installedOf, listingOf, parseInstallLink, questionOf, type InstallLink, type Listing } from "./install-link.ts"
 import { pathOf, repoOf, route } from "./open-route.ts"
 import { call, engine, on, serverOf, store } from "./engine.ts"
+import { openProject, reveal } from "./open-folder.ts"
 import { openSettings } from "./settings/open.ts"
 import type { WindowManager } from "./windows.tsx"
 import { explainNoNewTab } from "./new-tab.ts"
 
-/** A session's current tab, as the server has it now (one made a moment ago included). */
-async function currentTab(session: string): Promise<string | undefined> {
-  const info = await call("session.get", session)
+/** A project's current tab, as the server has it now (one made a moment ago included). */
+async function currentTab(project: string): Promise<string | undefined> {
+  const info = await call("project.get", project)
   if (info?.activeView == null) return undefined
   const view = await call("view.get", info.activeView)
   return typeof view?.activeTab === "string" ? view.activeTab : undefined
@@ -57,7 +57,7 @@ async function install(manager: WindowManager, link: InstallLink) {
   }
 }
 
-/** Opens what macOS asked to, in turn: a session made for one may be where the next goes. */
+/** Opens what macOS asked to, in turn: a project made for one may be where the next goes. */
 async function openAll(manager: WindowManager, urls: string[]) {
   for (const url of urls) {
     const link = parseInstallLink(url)
@@ -66,29 +66,30 @@ async function openAll(manager: WindowManager, urls: string[]) {
   const paths = urls.map(pathOf).filter((p): p is string => !!p && existsSync(p))
   if (!paths.length) return
   const window = front(manager)
-  /** The sessions made here, by directory: the snapshot may not list them yet. */
+  /** The projects made here, by directory: the snapshot may not list them yet. */
   const made = new Map<string, string>()
   for (const path of paths) {
     try {
       const folder = statSync(path).isDirectory()
-      const local = (store.get().snapshot?.workspaces ?? []).filter((w) => !serverOf(w.workspace_id))
-      const sessions = [...local.map((w) => ({ id: w.workspace_id, cwd: w.cwd })), ...[...made].map(([cwd, id]) => ({ id, cwd }))]
-      const where = route(path, folder, sessions, window.session, repoOf)
-      let session: string
-      if ("session" in where) session = where.session
+      const local = (store.get().snapshot?.projects ?? []).filter((w) => !serverOf(w.project_id))
+      const projects = [
+        ...local.map((w) => ({ id: w.project_id, path: w.path })),
+        ...[...made].map(([path, id]) => ({ id, path })),
+      ]
+      const where = route(path, folder, projects, window.project, repoOf)
+      let project: string
+      if ("project" in where) project = where.project
       else {
-        // A session of its own, with a terminal in it: `tab.open` answers the tab, and its
-        // `session` is the one just made.
-        const tab = await call("tab.open", null, {}, { kind: "session", cwd: where.create, name: basename(where.create) || where.create })
-        const opened = await call("tab.get", tab)
-        session = opened.session
-        made.set(where.create, session)
+        const opened = await openProject(where.create)
+        if (!opened) continue
+        project = opened
+        made.set(where.create, project)
       }
       if (!folder) {
-        const beside = await currentTab(session)
+        const beside = await currentTab(project)
         await call("tab.open", "file", { path }, { kind: "tiled", split: "right", ...(beside === undefined ? {} : { beside }) })
       }
-      window.show(session)
+      reveal(manager, window, project)
     } catch (err) {
       if (!explainNoNewTab(err)) console.error(`pumi: opening ${path}:`, (err as Error)?.message ?? err)
     }

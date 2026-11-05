@@ -1,10 +1,10 @@
 // Generated from api/pumi-api.json by `bun runtime/app/gen/index.ts` (`cargo xtask api` runs it); do not edit.
 
-// Ids are prefixed strings: `$1` a session, `@2` a view, `%3` a tab, `+7` a request, `owner/name` a
+// Ids are prefixed strings: `$1` a project, `@2` a view, `%3` a tab, `+7` a request, `owner/name` a
 // plugin, and `devbox/%3` one on the server `devbox`.
 
-/** Session's id (`$1`). */
-export type SessionId = string;
+/** Project's id (`$1`). */
+export type ProjectId = string;
 /** View's id (`@1`). */
 export type ViewId = string;
 /** Pane's id (`:1`). */
@@ -36,9 +36,9 @@ export type Layout = {
 export type TabPlace = {
   /**
    * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-   * tiled in a new view or a new session.
+   * tiled in a new view or a new project.
    */
-  kind: "tiled" | "float" | "hidden" | "view" | "session";
+  kind: "tiled" | "float" | "hidden" | "view" | "project";
   /** Tiled: into this view, beside its active tab. Float: over this view. */
   view?: ViewId | null;
   /**
@@ -46,8 +46,8 @@ export type TabPlace = {
    * beside it, in a pane of its own. Where a tiled tab is, its pane.
    */
   pane?: PaneId | "current" | null;
-  /** View: the session the new view goes in; `new` makes a session for the tab. */
-  session?: SessionId | "new" | null;
+  /** View: the project the new view goes in; `new` makes a project for the tab. */
+  project?: ProjectId | "new" | null;
   /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
   split?: "left" | "right" | "up" | "down" | null;
   /**
@@ -68,10 +68,10 @@ export type TabPlace = {
   size?: number | string | null;
   /** Tiled: split the whole view, not one pane. */
   full?: boolean | null;
-  /** View, session: its name. */
+  /** View: its name. */
   name?: string | null;
-  /** Session: its directory. */
-  cwd?: string | null;
+  /** Project: its folder, the one project there is; the home folder without one. */
+  path?: string | null;
   /** Make it the caller's tab; `true` by default. */
   focus?: boolean | null;
   /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -141,31 +141,29 @@ export interface TabTraits {
   [trait: string]: unknown;
 }
 
-/** What a Session is, as data: a session containing views. */
-export interface SessionData {
+/** What a Project is, as data: a project containing views. */
+export interface ProjectData {
   /** Its prefixed id. */
-  id: SessionId;
-  /** Its name. */
-  name: string;
-  /** Its directory. */
-  cwd: string | null;
+  id: ProjectId;
+  /** Its folder: the one project there is in it. */
+  path: string;
   /** Its views in order. */
   views: ViewId[];
   /** Its current view. */
   activeView: ViewId | null;
 }
-/** What a Session can be watched for. */
-export type SessionKey = "name" | "cwd" | "views" | "activeView";
+/** What a Project can be watched for. */
+export type ProjectKey = "views" | "activeView";
 
 /** What a View is, as data: a view: a layout of panes, each holding tabs. */
 export interface ViewData {
   /** Its prefixed id. */
   id: ViewId;
-  /** Its session. */
-  session: SessionId;
+  /** Its project. */
+  project: ProjectId;
   /** Its given name. */
   name: string | null;
-  /** Its index in the session. */
+  /** Its index in the project. */
   index: number;
   /** Its panes as they split, each with its tabs and the one in front. */
   layout: Layout;
@@ -177,7 +175,7 @@ export interface ViewData {
   zoom: PaneId | null;
 }
 /** What a View can be watched for. */
-export type ViewKey = "session" | "name" | "index" | "layout" | "activeTab" | "activePane" | "zoom";
+export type ViewKey = "project" | "name" | "index" | "layout" | "activeTab" | "activePane" | "zoom";
 
 /** What a Pane is, as data: a pane: an area of a view's layout, holding tabs with one in front. */
 export interface PaneData {
@@ -201,8 +199,8 @@ export type PaneKey = "tabs" | "activeTab";
 export interface TabData {
   /** Its prefixed id. */
   id: TabId;
-  /** Its session. */
-  session: SessionId;
+  /** Its project. */
+  project: ProjectId;
   /** Its view. */
   view: ViewId | null;
   /** The block it holds. */
@@ -233,7 +231,7 @@ export interface TabData {
   };
 }
 /** What a Tab can be watched for. */
-export type TabKey = "session" | "view" | "block" | "traits" | "place" | "title" | "cwd" | "foregroundCwd" | "process" | "scroll" | "neighbors" | "isFocused" | "isZoomed" | "options";
+export type TabKey = "project" | "view" | "block" | "traits" | "place" | "title" | "cwd" | "foregroundCwd" | "process" | "scroll" | "neighbors" | "isFocused" | "isZoomed" | "options";
 
 /** What a Request is, as data: a request shown to the user. */
 export interface RequestData {
@@ -330,7 +328,7 @@ export interface Functions {
   } | null]; returns: number };
   /**
    * Wait for an event, by name or glob: the call answers when one that matches fires, with the
-   * event (`{event, match, session, view, tab, data}`), or with `null` when `timeout` passes or
+   * event (`{event, match, project, view, tab, data}`), or with `null` when `timeout` passes or
    * the caller goes. A wait that times out is not an error.
    */
   "event.wait": { args: [event: string | string[], opts?: {
@@ -344,7 +342,7 @@ export interface Functions {
   } | null]; returns: {
     event: string;
     match: string;
-    session?: SessionId | null;
+    project?: ProjectId | null;
     view?: ViewId | null;
     tab?: TabId | null;
     data: unknown;
@@ -458,10 +456,10 @@ export interface Functions {
    */
   "option.get": { args: [name: string, opts?: {
     /**
-     * `global`, `session`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the
+     * `global`, `project`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the
      * object `id` names (the caller's own without that).
      */
-    scope?: "global" | "session" | "view" | "tab" | "plugin";
+    scope?: "global" | "project" | "view" | "tab" | "plugin";
     /** The object: `$1`, `@2` or `%3`. */
     id?: string;
     /** The plugin whose store it is, for `{scope: "plugin"}`: `owner/name`. */
@@ -475,7 +473,7 @@ export interface Functions {
    */
   "option.set": { args: [name: string, value: unknown, opts?: {
     /** Which object an option is read from or set on, by scope. */
-    scope?: "global" | "session" | "view" | "tab" | "plugin";
+    scope?: "global" | "project" | "view" | "tab" | "plugin";
     id?: string;
     plugin?: PluginId;
     /** Seconds the value holds for; then it is the one it inherits again. */
@@ -489,7 +487,7 @@ export interface Functions {
   "pane.close": { args: [pane?: PaneId | null]; returns: null };
   /**
    * Give a pane its view's focus (its front tab becomes the view's active tab), and make its view
-   * and session current; or move from it to another: the one beside it (`direction`), so many
+   * and project current; or move from it to another: the one beside it (`direction`), so many
    * on (`offset`), or the one used last (`last`). No id is the caller's tab's pane. Moving out of
    * a zoomed pane unzooms the view; nothing there is not an error.
    */
@@ -613,6 +611,221 @@ export interface Functions {
      */
     cwd: string | null;
   })[] };
+  /** Close a project and its views and tabs. No id is the caller's. */
+  "project.close": { args: [project?: ProjectId | null]; returns: null };
+  /**
+   * Show a project in the caller's client; or move from it to another by offset, or to the last
+   * one (`-n`, `-p`, `-l`). No id is the caller's project.
+   */
+  "project.focus": { args: [project?: ProjectId | null, opts?: {
+    /** To so many projects on (or back), in the order they were made, wrapping. */
+    offset?: number | null;
+    /** To the project used most recently before it. */
+    last?: boolean;
+  } | null]; returns: null };
+  /**
+   * A project: its name, directory, views and active view; with `deep`, the whole tree in one call.
+   * No id is the caller's: its tab's project, its client's, or the one used last.
+   */
+  "project.get": { args: [project?: ProjectId | null, opts?: {
+    /** The whole tree: every view, each with its tabs. */
+    deep?: boolean;
+  } | null]; returns: {
+    id: ProjectId;
+    /** Its folder, where its terminals start without a `cwd` of their own. */
+    path: string;
+    /** Its views, in index order. */
+    views: ViewId[];
+    activeView?: ViewId | null;
+    /** With `deep`: every view, each with its tabs. */
+    tree?: ({
+      id: ViewId;
+      project: ProjectId;
+      /** The name it was given; `null` while it takes its active tab's title. */
+      name?: string | null;
+      /** Its index in its project. */
+      index: number;
+      /** A view's panes: a pane, or a split of two halves along an axis. */
+      layout: {
+        pane: PaneId;
+        /** Its tabs, in its strip's order. */
+        tabs?: TabId[];
+        /** The tab in front. */
+        active?: TabId | null;
+      } | {
+        /** A `row` lays its halves out left to right, a `column` top to bottom. */
+        axis: "row" | "column";
+        /** The first half's share, between 0 and 1. */
+        ratio: number;
+        first: Layout;
+        second: Layout;
+      };
+      /** The tab with the focus, in front of its pane. */
+      activeTab?: TabId | null;
+      /** The pane with the focus. */
+      activePane?: PaneId | null;
+      /** The pane zoomed to fill it. */
+      zoom?: PaneId | null;
+      tabs: ({
+        id: TabId;
+        project: ProjectId;
+        view?: ViewId | null;
+        /** The block it holds (`file`, `owner.name.page`). */
+        block: string;
+        /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
+        traits: {
+          [key: string]: unknown;
+        };
+        /** Where a tab is, and where `tab.open` and `tab.update` put one. */
+        place: {
+          /**
+           * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
+           * tiled in a new view or a new project.
+           */
+          kind: "tiled" | "float" | "hidden" | "view" | "project";
+          /** Tiled: into this view, beside its active tab. Float: over this view. */
+          view?: ViewId | null;
+          /**
+           * Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,
+           * beside it, in a pane of its own. Where a tiled tab is, its pane.
+           */
+          pane?: PaneId | "current" | null;
+          /** View: the project the new view goes in; `new` makes a project for the tab. */
+          project?: ProjectId | "new" | null;
+          /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
+          split?: "left" | "right" | "up" | "down" | null;
+          /**
+           * View: the new view's index. Into a pane: where in its strip, after its front tab by
+           * default.
+           */
+          index?: number | null;
+          /** Moving: trade places with this tab. */
+          swap?: TabId | null;
+          /** Tiled: the new pane's share of what it splits, between 0 and 1. */
+          ratio?: number | null;
+          /**
+           * Tiled: the tab whose pane to split, the caller's by default. Float: the tab
+           * `relative: "pane"` is relative to.
+           */
+          beside?: TabId | null;
+          /** Tiled: the new pane's size, `"30%"` or cells, instead of `ratio`. */
+          size?: number | string | null;
+          /** Tiled: split the whole view, not one pane. */
+          full?: boolean | null;
+          /** View: its name. */
+          name?: string | null;
+          /** Project: its folder, the one project there is; the home folder without one. */
+          path?: string | null;
+          /** Make it the caller's tab; `true` by default. */
+          focus?: boolean | null;
+          /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
+          replace?: TabId | null;
+          /** Float: what it floats over, `view` (the default) or `client`. */
+          relative?: string | null;
+          /** Float: the corner or edge it is pinned to (`NW` … `SE`, `center`). */
+          anchor?: "NW" | "N" | "NE" | "W" | "center" | "E" | "SW" | "S" | "SE" | null;
+          /** Float: how far in from its anchor: cells, `"24px"` or `"10%"`. */
+          row?: number | string | null;
+          col?: number | string | null;
+          /** Float: cells, `"480px"` or a share of what it floats over (`"50%"`, the default). */
+          width?: number | string | null;
+          height?: number | string | null;
+          /** Float: `none` draws it bare. */
+          border?: string | null;
+          /** Float: it takes the keyboard when it opens (`true` by default). */
+          focusable?: boolean | null;
+          /** Float: it takes the pointer (`focusable` by default). */
+          mouse?: boolean | null;
+          /** Float: what closes it: `escape`, `key`, `press`, `scroll`. */
+          dismiss?: string[] | null;
+          /** Float: dims what is under it, 0 to 100. */
+          backdrop?: number | null;
+          /** Float: above floats with a lower one (50 by default). */
+          zIndex?: number | null;
+        };
+        title?: string | null;
+        /** Its directory: a terminal's program's. */
+        cwd?: string | null;
+        /** The directory of its foreground process. */
+        foregroundCwd?: string | null;
+        process?: {
+          pid: number;
+          /** Its program, as the system names it. */
+          command: string[];
+        } | null;
+        /** How far a tab is scrolled back. */
+        scroll: {
+          offsetFromBottom: number;
+        };
+        /** The tab beside a tab on each side, in its view. */
+        neighbors: {
+          left?: TabId | null;
+          right?: TabId | null;
+          up?: TabId | null;
+          down?: TabId | null;
+        };
+        /** It is the tab a client is in: its view's active tab, in its project's active view. */
+        isFocused: boolean;
+        /** It fills its view. */
+        isZoomed: boolean;
+        /** The options set on it. */
+        options: {
+          [key: string]: unknown;
+        };
+        /** With `state`: its saved state. */
+        state?: {
+          pumi_state: number;
+          /** The block that saved it. */
+          block: string;
+          /** The version of that block's `data`. */
+          block_version: number;
+          /** The tab's own options, `@user` ones included. */
+          options?: {
+            [key: string]: unknown;
+          };
+          /** What the block's `serialize` returned. */
+          data?: unknown;
+          /** Large parts (scrollback, images), by name. */
+          blobs?: {
+            [key: string]: {
+              /** How to read it: `vt` (terminal output), `png`, `bytes`. */
+              encoding: string;
+              size: number;
+              /** `blob:<sha256>`. */
+              ref: string;
+              /** The bytes, in base64, when the state is to leave this server (`opts.blobs = "inline"`). */
+              data?: string | null;
+            };
+          };
+          /** What other plugins added in `TabSavePre`, by plugin. */
+          extra?: {
+            [key: string]: unknown;
+          };
+          /** How a state comes back. */
+          strategy: "exact" | "relaunch" | "reference";
+          /** What must be true where it is restored. */
+          needs?: ({
+            kind: "path";
+            path: string;
+          } | {
+            kind: "program";
+            name: string;
+          } | {
+            kind: "url";
+            url: string;
+          })[];
+          origin?: {
+            server: string;
+            tab: number;
+            /** RFC 3339, UTC. */
+            at: string;
+          } | null;
+        } | null;
+      })[];
+    })[] | null;
+  } };
+  /** List every project, in creation order. */
+  "project.list": { args: []; returns: ProjectId[] };
   /**
    * Registered entries of one kind: functions, blocks, traits and options; the key bindings; the
    * menus; the plugins (or the store's, with `available`); the themes; the viewers of a file
@@ -739,232 +952,6 @@ export interface Functions {
     /** Who opens it; the caller's plugin, or its channel's name, without. */
     source?: string | null;
   } | null]; returns: RequestId };
-  /** Close a session and its views and tabs. No id is the caller's. */
-  "session.close": { args: [session?: SessionId | null]; returns: null };
-  /**
-   * Show a session in the caller's client; or move from it to another by offset, or to the last
-   * one (`-n`, `-p`, `-l`). No id is the caller's session.
-   */
-  "session.focus": { args: [session?: SessionId | null, opts?: {
-    /** To so many sessions on (or back), in the order they were made, wrapping. */
-    offset?: number | null;
-    /** To the session used most recently before it. */
-    last?: boolean;
-  } | null]; returns: null };
-  /**
-   * A session: its name, directory, views and active view; with `deep`, the whole tree in one call.
-   * No id is the caller's: its tab's session, its client's, or the one used last.
-   */
-  "session.get": { args: [session?: SessionId | null, opts?: {
-    /** The whole tree: every view, each with its tabs. */
-    deep?: boolean;
-  } | null]; returns: {
-    id: SessionId;
-    name: string;
-    /** Its directory, where its terminals start without a `cwd` of their own. */
-    cwd?: string | null;
-    /** Its views, in index order. */
-    views: ViewId[];
-    activeView?: ViewId | null;
-    /** With `deep`: every view, each with its tabs. */
-    tree?: ({
-      id: ViewId;
-      session: SessionId;
-      /** The name it was given; `null` while it takes its active tab's title. */
-      name?: string | null;
-      /** Its index in its session. */
-      index: number;
-      /** A view's panes: a pane, or a split of two halves along an axis. */
-      layout: {
-        pane: PaneId;
-        /** Its tabs, in its strip's order. */
-        tabs?: TabId[];
-        /** The tab in front. */
-        active?: TabId | null;
-      } | {
-        /** A `row` lays its halves out left to right, a `column` top to bottom. */
-        axis: "row" | "column";
-        /** The first half's share, between 0 and 1. */
-        ratio: number;
-        first: Layout;
-        second: Layout;
-      };
-      /** The tab with the focus, in front of its pane. */
-      activeTab?: TabId | null;
-      /** The pane with the focus. */
-      activePane?: PaneId | null;
-      /** The pane zoomed to fill it. */
-      zoom?: PaneId | null;
-      tabs: ({
-        id: TabId;
-        session: SessionId;
-        view?: ViewId | null;
-        /** The block it holds (`file`, `owner.name.page`). */
-        block: string;
-        /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
-        traits: {
-          [key: string]: unknown;
-        };
-        /** Where a tab is, and where `tab.open` and `tab.update` put one. */
-        place: {
-          /**
-           * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-           * tiled in a new view or a new session.
-           */
-          kind: "tiled" | "float" | "hidden" | "view" | "session";
-          /** Tiled: into this view, beside its active tab. Float: over this view. */
-          view?: ViewId | null;
-          /**
-           * Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,
-           * beside it, in a pane of its own. Where a tiled tab is, its pane.
-           */
-          pane?: PaneId | "current" | null;
-          /** View: the session the new view goes in; `new` makes a session for the tab. */
-          session?: SessionId | "new" | null;
-          /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
-          split?: "left" | "right" | "up" | "down" | null;
-          /**
-           * View: the new view's index. Into a pane: where in its strip, after its front tab by
-           * default.
-           */
-          index?: number | null;
-          /** Moving: trade places with this tab. */
-          swap?: TabId | null;
-          /** Tiled: the new pane's share of what it splits, between 0 and 1. */
-          ratio?: number | null;
-          /**
-           * Tiled: the tab whose pane to split, the caller's by default. Float: the tab
-           * `relative: "pane"` is relative to.
-           */
-          beside?: TabId | null;
-          /** Tiled: the new pane's size, `"30%"` or cells, instead of `ratio`. */
-          size?: number | string | null;
-          /** Tiled: split the whole view, not one pane. */
-          full?: boolean | null;
-          /** View, session: its name. */
-          name?: string | null;
-          /** Session: its directory. */
-          cwd?: string | null;
-          /** Make it the caller's tab; `true` by default. */
-          focus?: boolean | null;
-          /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
-          replace?: TabId | null;
-          /** Float: what it floats over, `view` (the default) or `client`. */
-          relative?: string | null;
-          /** Float: the corner or edge it is pinned to (`NW` … `SE`, `center`). */
-          anchor?: "NW" | "N" | "NE" | "W" | "center" | "E" | "SW" | "S" | "SE" | null;
-          /** Float: how far in from its anchor: cells, `"24px"` or `"10%"`. */
-          row?: number | string | null;
-          col?: number | string | null;
-          /** Float: cells, `"480px"` or a share of what it floats over (`"50%"`, the default). */
-          width?: number | string | null;
-          height?: number | string | null;
-          /** Float: `none` draws it bare. */
-          border?: string | null;
-          /** Float: it takes the keyboard when it opens (`true` by default). */
-          focusable?: boolean | null;
-          /** Float: it takes the pointer (`focusable` by default). */
-          mouse?: boolean | null;
-          /** Float: what closes it: `escape`, `key`, `press`, `scroll`. */
-          dismiss?: string[] | null;
-          /** Float: dims what is under it, 0 to 100. */
-          backdrop?: number | null;
-          /** Float: above floats with a lower one (50 by default). */
-          zIndex?: number | null;
-        };
-        title?: string | null;
-        /** Its directory: a terminal's program's. */
-        cwd?: string | null;
-        /** The directory of its foreground process. */
-        foregroundCwd?: string | null;
-        process?: {
-          pid: number;
-          /** Its program, as the system names it. */
-          command: string[];
-        } | null;
-        /** How far a tab is scrolled back. */
-        scroll: {
-          offsetFromBottom: number;
-        };
-        /** The tab beside a tab on each side, in its view. */
-        neighbors: {
-          left?: TabId | null;
-          right?: TabId | null;
-          up?: TabId | null;
-          down?: TabId | null;
-        };
-        /** It is the tab a client is in: its view's active tab, in its session's active view. */
-        isFocused: boolean;
-        /** It fills its view. */
-        isZoomed: boolean;
-        /** The options set on it. */
-        options: {
-          [key: string]: unknown;
-        };
-        /** With `state`: its saved state. */
-        state?: {
-          pumi_state: number;
-          /** The block that saved it. */
-          block: string;
-          /** The version of that block's `data`. */
-          block_version: number;
-          /** The tab's own options, `@user` ones included. */
-          options?: {
-            [key: string]: unknown;
-          };
-          /** What the block's `serialize` returned. */
-          data?: unknown;
-          /** Large parts (scrollback, images), by name. */
-          blobs?: {
-            [key: string]: {
-              /** How to read it: `vt` (terminal output), `png`, `bytes`. */
-              encoding: string;
-              size: number;
-              /** `blob:<sha256>`. */
-              ref: string;
-              /** The bytes, in base64, when the state is to leave this server (`opts.blobs = "inline"`). */
-              data?: string | null;
-            };
-          };
-          /** What other plugins added in `TabSavePre`, by plugin. */
-          extra?: {
-            [key: string]: unknown;
-          };
-          /** How a state comes back. */
-          strategy: "exact" | "relaunch" | "reference";
-          /** What must be true where it is restored. */
-          needs?: ({
-            kind: "path";
-            path: string;
-          } | {
-            kind: "program";
-            name: string;
-          } | {
-            kind: "url";
-            url: string;
-          })[];
-          origin?: {
-            server: string;
-            tab: number;
-            /** RFC 3339, UTC. */
-            at: string;
-          } | null;
-        } | null;
-      })[];
-    })[] | null;
-  } };
-  /** List every session, in creation order. */
-  "session.list": { args: []; returns: SessionId[] };
-  /**
-   * Change a session's name or directory. Fires `session.changed` with what changed. No id is the
-   * caller's session.
-   */
-  "session.update": { args: [session: SessionId | null | undefined, patch: {
-    /** Its name; `null` gives it a free one of its own (its folder's, else a number). */
-    name?: string | null;
-    /** Its directory, where its terminals start without a `cwd` of their own; `null` has none. */
-    cwd?: string | null;
-  }]; returns: null };
   /**
    * Call a method of the block in a tab: the protocol every block answers (`read`, its text;
    * `input`, `{text}`, `{paste}` or `{keys}`; `selection`; `report`, an OSC 7501 body), a
@@ -980,7 +967,7 @@ export interface Functions {
    */
   "tab.close": { args: [tab?: TabId | null]; returns: null };
   /**
-   * Make a tab its pane's front tab and its view's active tab, and its view and session current;
+   * Make a tab its pane's front tab and its view's active tab, and its view and project current;
    * or move from it: to the next tab of its pane (`offset`), to the pane beside it (`direction`),
    * or to its view's tab used last (`last`). No id is the caller's tab. Moving out of a zoomed
    * pane unzooms the view; nothing there is not an error.
@@ -1013,7 +1000,7 @@ export interface Functions {
     } | null;
   } | null]; returns: {
     id: TabId;
-    session: SessionId;
+    project: ProjectId;
     view?: ViewId | null;
     /** The block it holds (`file`, `owner.name.page`). */
     block: string;
@@ -1025,9 +1012,9 @@ export interface Functions {
     place: {
       /**
        * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-       * tiled in a new view or a new session.
+       * tiled in a new view or a new project.
        */
-      kind: "tiled" | "float" | "hidden" | "view" | "session";
+      kind: "tiled" | "float" | "hidden" | "view" | "project";
       /** Tiled: into this view, beside its active tab. Float: over this view. */
       view?: ViewId | null;
       /**
@@ -1035,8 +1022,8 @@ export interface Functions {
        * beside it, in a pane of its own. Where a tiled tab is, its pane.
        */
       pane?: PaneId | "current" | null;
-      /** View: the session the new view goes in; `new` makes a session for the tab. */
-      session?: SessionId | "new" | null;
+      /** View: the project the new view goes in; `new` makes a project for the tab. */
+      project?: ProjectId | "new" | null;
       /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
       split?: "left" | "right" | "up" | "down" | null;
       /**
@@ -1057,10 +1044,10 @@ export interface Functions {
       size?: number | string | null;
       /** Tiled: split the whole view, not one pane. */
       full?: boolean | null;
-      /** View, session: its name. */
+      /** View: its name. */
       name?: string | null;
-      /** Session: its directory. */
-      cwd?: string | null;
+      /** Project: its folder, the one project there is; the home folder without one. */
+      path?: string | null;
       /** Make it the caller's tab; `true` by default. */
       focus?: boolean | null;
       /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -1109,7 +1096,7 @@ export interface Functions {
       up?: TabId | null;
       down?: TabId | null;
     };
-    /** It is the tab a client is in: its view's active tab, in its session's active view. */
+    /** It is the tab a client is in: its view's active tab, in its project's active view. */
     isFocused: boolean;
     /** It fills its view. */
     isZoomed: boolean;
@@ -1172,8 +1159,8 @@ export interface Functions {
    * then floats and hidden tabs. `closed` lists the tabs closed lately instead.
    */
   "tab.list": { args: [opts?: {
-    /** Only this session's. */
-    session?: SessionId | null;
+    /** Only this project's. */
+    project?: ProjectId | null;
     /** Only this view's. */
     view?: ViewId | null;
     /** Only tabs that hold this block. */
@@ -1250,7 +1237,7 @@ export interface Functions {
    * shell or the first thing installed that starts one; refused while nothing is, as pumi has no
    * block of its own for one), placed as `place` says:
    * in a pane split from a tab's, into a pane
-   * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
+   * as one of its tabs (`{"pane": ":2"}`), in a new view or project, floating; or in an open tab
    * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
    * keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
    * appears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;
@@ -1259,9 +1246,9 @@ export interface Functions {
   "tab.open": { args: [block?: string | null, args?: unknown, place?: {
     /**
      * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-     * tiled in a new view or a new session.
+     * tiled in a new view or a new project.
      */
-    kind: "tiled" | "float" | "hidden" | "view" | "session";
+    kind: "tiled" | "float" | "hidden" | "view" | "project";
     /** Tiled: into this view, beside its active tab. Float: over this view. */
     view?: ViewId | null;
     /**
@@ -1269,8 +1256,8 @@ export interface Functions {
      * beside it, in a pane of its own. Where a tiled tab is, its pane.
      */
     pane?: PaneId | "current" | null;
-    /** View: the session the new view goes in; `new` makes a session for the tab. */
-    session?: SessionId | "new" | null;
+    /** View: the project the new view goes in; `new` makes a project for the tab. */
+    project?: ProjectId | "new" | null;
     /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
     split?: "left" | "right" | "up" | "down" | null;
     /**
@@ -1291,10 +1278,10 @@ export interface Functions {
     size?: number | string | null;
     /** Tiled: split the whole view, not one pane. */
     full?: boolean | null;
-    /** View, session: its name. */
+    /** View: its name. */
     name?: string | null;
-    /** Session: its directory. */
-    cwd?: string | null;
+    /** Project: its folder, the one project there is; the home folder without one. */
+    path?: string | null;
     /** Make it the caller's tab; `true` by default. */
     focus?: boolean | null;
     /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -1331,15 +1318,15 @@ export interface Functions {
     title?: string | null;
     /**
      * Where it goes: into a pane (`{"kind": "tiled", "pane": ":2"}`, or along its own pane's
-     * strip), in a pane split from another tab's, into a new view or session, floating, or into
+     * strip), in a pane split from another tab's, into a new view or project, floating, or into
      * another tab's place (`{"kind": "tiled", "swap": "%2"}`).
      */
     place?: {
       /**
        * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-       * tiled in a new view or a new session.
+       * tiled in a new view or a new project.
        */
-      kind: "tiled" | "float" | "hidden" | "view" | "session";
+      kind: "tiled" | "float" | "hidden" | "view" | "project";
       /** Tiled: into this view, beside its active tab. Float: over this view. */
       view?: ViewId | null;
       /**
@@ -1347,8 +1334,8 @@ export interface Functions {
        * beside it, in a pane of its own. Where a tiled tab is, its pane.
        */
       pane?: PaneId | "current" | null;
-      /** View: the session the new view goes in; `new` makes a session for the tab. */
-      session?: SessionId | "new" | null;
+      /** View: the project the new view goes in; `new` makes a project for the tab. */
+      project?: ProjectId | "new" | null;
       /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
       split?: "left" | "right" | "up" | "down" | null;
       /**
@@ -1369,10 +1356,10 @@ export interface Functions {
       size?: number | string | null;
       /** Tiled: split the whole view, not one pane. */
       full?: boolean | null;
-      /** View, session: its name. */
+      /** View: its name. */
       name?: string | null;
-      /** Session: its directory. */
-      cwd?: string | null;
+      /** Project: its folder, the one project there is; the home folder without one. */
+      path?: string | null;
       /** Make it the caller's tab; `true` by default. */
       focus?: boolean | null;
       /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -1422,27 +1409,27 @@ export interface Functions {
   /** Close a view and every tab in it. No id is the caller's. */
   "view.close": { args: [view?: ViewId | null]; returns: null };
   /**
-   * Make a view its session's active view; or move from it to another of its session by offset
+   * Make a view its project's active view; or move from it to another of its project by offset
    * (`next-window` is `{"offset": 1}`), by index, or the last one. No id is the caller's view.
    */
   "view.focus": { args: [view?: ViewId | null, opts?: {
     /** To so many views on (or back, negative), wrapping. */
     offset?: number | null;
-    /** To the session's view at this index. */
+    /** To the project's view at this index. */
     index?: number | null;
-    /** To the view used before the session's active one. */
+    /** To the view used before the project's active one. */
     last?: boolean;
   } | null]; returns: null };
   /**
-   * A view: its session, name, index, layout of panes (each with its tabs), active tab and pane,
-   * and zoom. No id is the caller's: its session's active view.
+   * A view: its project, name, index, layout of panes (each with its tabs), active tab and pane,
+   * and zoom. No id is the caller's: its project's active view.
    */
   "view.get": { args: [view?: ViewId | null]; returns: {
     id: ViewId;
-    session: SessionId;
+    project: ProjectId;
     /** The name it was given; `null` while it takes its active tab's title. */
     name?: string | null;
-    /** Its index in its session. */
+    /** Its index in its project. */
     index: number;
     /** A view's panes: a pane, or a split of two halves along an axis. */
     layout: {
@@ -1467,16 +1454,16 @@ export interface Functions {
     zoom?: PaneId | null;
   } };
   /**
-   * Change a view: its name, index or session, layout, and zoom. Each change fires `view.changed`
+   * Change a view: its name, index or project, layout, and zoom. Each change fires `view.changed`
    * with what changed. No id is the caller's view.
    */
   "view.update": { args: [view: ViewId | null | undefined, patch: {
     /** Its name; `null` gives it back its automatic name (its active tab's title). */
     name?: string | null;
-    /** Its index in its session, which must be free. */
+    /** Its index in its project, which must be free. */
     index?: number | null;
-    /** The session it moves to, at `index` or its first free one. */
-    session?: SessionId | null;
+    /** The project it moves to, at `index` or its first free one. */
+    project?: ProjectId | null;
     layout?: "even-horizontal" | "even-vertical" | "main-horizontal" | "main-horizontal-mirrored" | "main-vertical" | "main-vertical-mirrored" | "tiled" | {
       offset: number;
     } | {
@@ -1638,13 +1625,13 @@ export interface Events {
     reason: "answered" | "timeout" | "closed" | "cancelled";
   };
   /**
-   * A view opened in a session.
+   * A view opened in a project.
    *
    * Its `match` is the object id.
    */
   "view.opened": {
     view: ViewId;
-    session: SessionId;
+    project: ProjectId;
   };
   /**
    * A view closed.
@@ -1653,16 +1640,16 @@ export interface Events {
    */
   "view.closed": {
     view: ViewId;
-    session: SessionId;
+    project: ProjectId;
   };
   /**
-   * A view changed in the fields `keys` names (`name`, `index`, `session`, `layout`, `activeTab`, `activePane`, `zoom`); `patch` holds their new values.
+   * A view changed in the fields `keys` names (`name`, `index`, `project`, `layout`, `activeTab`, `activePane`, `zoom`); `patch` holds their new values.
    *
    * Its `match` is the object id.
    */
   "view.changed": {
     view: ViewId;
-    keys: ("name" | "index" | "session" | "layout" | "activeTab" | "activePane" | "zoom")[];
+    keys: ("name" | "index" | "project" | "layout" | "activeTab" | "activePane" | "zoom")[];
     patch: {
       [key: string]: unknown;
     };
@@ -1698,31 +1685,31 @@ export interface Events {
     };
   };
   /**
-   * A session opened.
+   * A project opened.
    *
    * Its `match` is the object id.
    */
-  "session.opened": {
-    session: SessionId;
-    name: string;
+  "project.opened": {
+    project: ProjectId;
     activeView: ViewId | null;
+    path: string;
   };
   /**
-   * A session closed.
+   * A project closed.
    *
    * Its `match` is the object id.
    */
-  "session.closed": {
-    session: SessionId;
+  "project.closed": {
+    project: ProjectId;
   };
   /**
-   * A session changed in the fields `keys` names (`name`, `cwd`, `activeView`); `patch` holds their new values.
+   * A project changed in the fields `keys` names (`activeView`); `patch` holds their new values.
    *
    * Its `match` is the object id.
    */
-  "session.changed": {
-    session: SessionId;
-    keys: ("name" | "activeView" | "cwd")[];
+  "project.changed": {
+    project: ProjectId;
+    keys: ("activeView")[];
     patch: {
       [key: string]: unknown;
     };
@@ -1826,7 +1813,7 @@ export interface Nouns {
   } | null): Promise<number>;
     /**
      * Wait for an event, by name or glob: the call answers when one that matches fires, with the
-     * event (`{event, match, session, view, tab, data}`), or with `null` when `timeout` passes or
+     * event (`{event, match, project, view, tab, data}`), or with `null` when `timeout` passes or
      * the caller goes. A wait that times out is not an error.
      *
      * @example
@@ -1843,7 +1830,7 @@ export interface Nouns {
   } | null): Promise<{
     event: string;
     match: string;
-    session?: SessionId | null;
+    project?: ProjectId | null;
     view?: ViewId | null;
     tab?: TabId | null;
     data: unknown;
@@ -1988,10 +1975,10 @@ export interface Nouns {
      */
     get(name: string, opts?: {
     /**
-     * `global`, `session`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the
+     * `global`, `project`, `view`, `tab` or `plugin`. Without it: the option's own scope, at the
      * object `id` names (the caller's own without that).
      */
-    scope?: "global" | "session" | "view" | "tab" | "plugin";
+    scope?: "global" | "project" | "view" | "tab" | "plugin";
     /** The object: `$1`, `@2` or `%3`. */
     id?: string;
     /** The plugin whose store it is, for `{scope: "plugin"}`: `owner/name`. */
@@ -2008,7 +1995,7 @@ export interface Nouns {
      */
     set(name: string, value: unknown, opts?: {
     /** Which object an option is read from or set on, by scope. */
-    scope?: "global" | "session" | "view" | "tab" | "plugin";
+    scope?: "global" | "project" | "view" | "tab" | "plugin";
     id?: string;
     plugin?: PluginId;
     /** Seconds the value holds for; then it is the one it inherits again. */
@@ -2029,7 +2016,7 @@ export interface Nouns {
     close(pane?: PaneId | null): Promise<null>;
     /**
      * Give a pane its view's focus (its front tab becomes the view's active tab), and make its view
-     * and session current; or move from it to another: the one beside it (`direction`), so many
+     * and project current; or move from it to another: the one beside it (`direction`), so many
      * on (`offset`), or the one used last (`last`). No id is the caller's tab's pane. Moving out of
      * a zoomed pane unzooms the view; nothing there is not an error.
      *
@@ -2189,6 +2176,239 @@ export interface Nouns {
     cwd: string | null;
   })[]>;
   };
+  project: {
+    /**
+     * Close a project and its views and tabs. No id is the caller's.
+     *
+     * @example
+     * await project.close("$1")
+     */
+    close(project?: ProjectId | null): Promise<null>;
+    /**
+     * Show a project in the caller's client; or move from it to another by offset, or to the last
+     * one (`-n`, `-p`, `-l`). No id is the caller's project.
+     *
+     * @example
+     * await project.focus("$1")
+     */
+    focus(project?: ProjectId | null, opts?: {
+    /** To so many projects on (or back), in the order they were made, wrapping. */
+    offset?: number | null;
+    /** To the project used most recently before it. */
+    last?: boolean;
+  } | null): Promise<null>;
+    /**
+     * A project: its name, directory, views and active view; with `deep`, the whole tree in one call.
+     * No id is the caller's: its tab's project, its client's, or the one used last.
+     *
+     * @example
+     * await project.get()
+     */
+    get(project?: ProjectId | null, opts?: {
+    /** The whole tree: every view, each with its tabs. */
+    deep?: boolean;
+  } | null): Promise<{
+    id: ProjectId;
+    /** Its folder, where its terminals start without a `cwd` of their own. */
+    path: string;
+    /** Its views, in index order. */
+    views: ViewId[];
+    activeView?: ViewId | null;
+    /** With `deep`: every view, each with its tabs. */
+    tree?: ({
+      id: ViewId;
+      project: ProjectId;
+      /** The name it was given; `null` while it takes its active tab's title. */
+      name?: string | null;
+      /** Its index in its project. */
+      index: number;
+      /** A view's panes: a pane, or a split of two halves along an axis. */
+      layout: {
+        pane: PaneId;
+        /** Its tabs, in its strip's order. */
+        tabs?: TabId[];
+        /** The tab in front. */
+        active?: TabId | null;
+      } | {
+        /** A `row` lays its halves out left to right, a `column` top to bottom. */
+        axis: "row" | "column";
+        /** The first half's share, between 0 and 1. */
+        ratio: number;
+        first: Layout;
+        second: Layout;
+      };
+      /** The tab with the focus, in front of its pane. */
+      activeTab?: TabId | null;
+      /** The pane with the focus. */
+      activePane?: PaneId | null;
+      /** The pane zoomed to fill it. */
+      zoom?: PaneId | null;
+      tabs: ({
+        id: TabId;
+        project: ProjectId;
+        view?: ViewId | null;
+        /** The block it holds (`file`, `owner.name.page`). */
+        block: string;
+        /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
+        traits: {
+          [key: string]: unknown;
+        };
+        /** Where a tab is, and where `tab.open` and `tab.update` put one. */
+        place: {
+          /**
+           * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
+           * tiled in a new view or a new project.
+           */
+          kind: "tiled" | "float" | "hidden" | "view" | "project";
+          /** Tiled: into this view, beside its active tab. Float: over this view. */
+          view?: ViewId | null;
+          /**
+           * Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,
+           * beside it, in a pane of its own. Where a tiled tab is, its pane.
+           */
+          pane?: PaneId | "current" | null;
+          /** View: the project the new view goes in; `new` makes a project for the tab. */
+          project?: ProjectId | "new" | null;
+          /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
+          split?: "left" | "right" | "up" | "down" | null;
+          /**
+           * View: the new view's index. Into a pane: where in its strip, after its front tab by
+           * default.
+           */
+          index?: number | null;
+          /** Moving: trade places with this tab. */
+          swap?: TabId | null;
+          /** Tiled: the new pane's share of what it splits, between 0 and 1. */
+          ratio?: number | null;
+          /**
+           * Tiled: the tab whose pane to split, the caller's by default. Float: the tab
+           * `relative: "pane"` is relative to.
+           */
+          beside?: TabId | null;
+          /** Tiled: the new pane's size, `"30%"` or cells, instead of `ratio`. */
+          size?: number | string | null;
+          /** Tiled: split the whole view, not one pane. */
+          full?: boolean | null;
+          /** View: its name. */
+          name?: string | null;
+          /** Project: its folder, the one project there is; the home folder without one. */
+          path?: string | null;
+          /** Make it the caller's tab; `true` by default. */
+          focus?: boolean | null;
+          /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
+          replace?: TabId | null;
+          /** Float: what it floats over, `view` (the default) or `client`. */
+          relative?: string | null;
+          /** Float: the corner or edge it is pinned to (`NW` … `SE`, `center`). */
+          anchor?: "NW" | "N" | "NE" | "W" | "center" | "E" | "SW" | "S" | "SE" | null;
+          /** Float: how far in from its anchor: cells, `"24px"` or `"10%"`. */
+          row?: number | string | null;
+          col?: number | string | null;
+          /** Float: cells, `"480px"` or a share of what it floats over (`"50%"`, the default). */
+          width?: number | string | null;
+          height?: number | string | null;
+          /** Float: `none` draws it bare. */
+          border?: string | null;
+          /** Float: it takes the keyboard when it opens (`true` by default). */
+          focusable?: boolean | null;
+          /** Float: it takes the pointer (`focusable` by default). */
+          mouse?: boolean | null;
+          /** Float: what closes it: `escape`, `key`, `press`, `scroll`. */
+          dismiss?: string[] | null;
+          /** Float: dims what is under it, 0 to 100. */
+          backdrop?: number | null;
+          /** Float: above floats with a lower one (50 by default). */
+          zIndex?: number | null;
+        };
+        title?: string | null;
+        /** Its directory: a terminal's program's. */
+        cwd?: string | null;
+        /** The directory of its foreground process. */
+        foregroundCwd?: string | null;
+        process?: {
+          pid: number;
+          /** Its program, as the system names it. */
+          command: string[];
+        } | null;
+        /** How far a tab is scrolled back. */
+        scroll: {
+          offsetFromBottom: number;
+        };
+        /** The tab beside a tab on each side, in its view. */
+        neighbors: {
+          left?: TabId | null;
+          right?: TabId | null;
+          up?: TabId | null;
+          down?: TabId | null;
+        };
+        /** It is the tab a client is in: its view's active tab, in its project's active view. */
+        isFocused: boolean;
+        /** It fills its view. */
+        isZoomed: boolean;
+        /** The options set on it. */
+        options: {
+          [key: string]: unknown;
+        };
+        /** With `state`: its saved state. */
+        state?: {
+          pumi_state: number;
+          /** The block that saved it. */
+          block: string;
+          /** The version of that block's `data`. */
+          block_version: number;
+          /** The tab's own options, `@user` ones included. */
+          options?: {
+            [key: string]: unknown;
+          };
+          /** What the block's `serialize` returned. */
+          data?: unknown;
+          /** Large parts (scrollback, images), by name. */
+          blobs?: {
+            [key: string]: {
+              /** How to read it: `vt` (terminal output), `png`, `bytes`. */
+              encoding: string;
+              size: number;
+              /** `blob:<sha256>`. */
+              ref: string;
+              /** The bytes, in base64, when the state is to leave this server (`opts.blobs = "inline"`). */
+              data?: string | null;
+            };
+          };
+          /** What other plugins added in `TabSavePre`, by plugin. */
+          extra?: {
+            [key: string]: unknown;
+          };
+          /** How a state comes back. */
+          strategy: "exact" | "relaunch" | "reference";
+          /** What must be true where it is restored. */
+          needs?: ({
+            kind: "path";
+            path: string;
+          } | {
+            kind: "program";
+            name: string;
+          } | {
+            kind: "url";
+            url: string;
+          })[];
+          origin?: {
+            server: string;
+            tab: number;
+            /** RFC 3339, UTC. */
+            at: string;
+          } | null;
+        } | null;
+      })[];
+    })[] | null;
+  }>;
+    /**
+     * List every project, in creation order.
+     *
+     * @example
+     * await project.list() // ["$1"]
+     */
+    list(): Promise<ProjectId[]>;
+  };
   registry: {
     /**
      * Registered entries of one kind: functions, blocks, traits and options; the key bindings; the
@@ -2338,253 +2558,6 @@ export interface Nouns {
     source?: string | null;
   } | null): Promise<RequestId>;
   };
-  session: {
-    /**
-     * Close a session and its views and tabs. No id is the caller's.
-     *
-     * @example
-     * await session.close("$1")
-     */
-    close(session?: SessionId | null): Promise<null>;
-    /**
-     * Show a session in the caller's client; or move from it to another by offset, or to the last
-     * one (`-n`, `-p`, `-l`). No id is the caller's session.
-     *
-     * @example
-     * await session.focus("$1")
-     */
-    focus(session?: SessionId | null, opts?: {
-    /** To so many sessions on (or back), in the order they were made, wrapping. */
-    offset?: number | null;
-    /** To the session used most recently before it. */
-    last?: boolean;
-  } | null): Promise<null>;
-    /**
-     * A session: its name, directory, views and active view; with `deep`, the whole tree in one call.
-     * No id is the caller's: its tab's session, its client's, or the one used last.
-     *
-     * @example
-     * await session.get()
-     */
-    get(session?: SessionId | null, opts?: {
-    /** The whole tree: every view, each with its tabs. */
-    deep?: boolean;
-  } | null): Promise<{
-    id: SessionId;
-    name: string;
-    /** Its directory, where its terminals start without a `cwd` of their own. */
-    cwd?: string | null;
-    /** Its views, in index order. */
-    views: ViewId[];
-    activeView?: ViewId | null;
-    /** With `deep`: every view, each with its tabs. */
-    tree?: ({
-      id: ViewId;
-      session: SessionId;
-      /** The name it was given; `null` while it takes its active tab's title. */
-      name?: string | null;
-      /** Its index in its session. */
-      index: number;
-      /** A view's panes: a pane, or a split of two halves along an axis. */
-      layout: {
-        pane: PaneId;
-        /** Its tabs, in its strip's order. */
-        tabs?: TabId[];
-        /** The tab in front. */
-        active?: TabId | null;
-      } | {
-        /** A `row` lays its halves out left to right, a `column` top to bottom. */
-        axis: "row" | "column";
-        /** The first half's share, between 0 and 1. */
-        ratio: number;
-        first: Layout;
-        second: Layout;
-      };
-      /** The tab with the focus, in front of its pane. */
-      activeTab?: TabId | null;
-      /** The pane with the focus. */
-      activePane?: PaneId | null;
-      /** The pane zoomed to fill it. */
-      zoom?: PaneId | null;
-      tabs: ({
-        id: TabId;
-        session: SessionId;
-        view?: ViewId | null;
-        /** The block it holds (`file`, `owner.name.page`). */
-        block: string;
-        /** Each trait it has, with its fields: `{"pumi_dev.files.file": {path}}`. */
-        traits: {
-          [key: string]: unknown;
-        };
-        /** Where a tab is, and where `tab.open` and `tab.update` put one. */
-        place: {
-          /**
-           * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-           * tiled in a new view or a new session.
-           */
-          kind: "tiled" | "float" | "hidden" | "view" | "session";
-          /** Tiled: into this view, beside its active tab. Float: over this view. */
-          view?: ViewId | null;
-          /**
-           * Tiled: into this pane (`current`: the caller's tab's), as one of its tabs; with `split`,
-           * beside it, in a pane of its own. Where a tiled tab is, its pane.
-           */
-          pane?: PaneId | "current" | null;
-          /** View: the session the new view goes in; `new` makes a session for the tab. */
-          session?: SessionId | "new" | null;
-          /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
-          split?: "left" | "right" | "up" | "down" | null;
-          /**
-           * View: the new view's index. Into a pane: where in its strip, after its front tab by
-           * default.
-           */
-          index?: number | null;
-          /** Moving: trade places with this tab. */
-          swap?: TabId | null;
-          /** Tiled: the new pane's share of what it splits, between 0 and 1. */
-          ratio?: number | null;
-          /**
-           * Tiled: the tab whose pane to split, the caller's by default. Float: the tab
-           * `relative: "pane"` is relative to.
-           */
-          beside?: TabId | null;
-          /** Tiled: the new pane's size, `"30%"` or cells, instead of `ratio`. */
-          size?: number | string | null;
-          /** Tiled: split the whole view, not one pane. */
-          full?: boolean | null;
-          /** View, session: its name. */
-          name?: string | null;
-          /** Session: its directory. */
-          cwd?: string | null;
-          /** Make it the caller's tab; `true` by default. */
-          focus?: boolean | null;
-          /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
-          replace?: TabId | null;
-          /** Float: what it floats over, `view` (the default) or `client`. */
-          relative?: string | null;
-          /** Float: the corner or edge it is pinned to (`NW` … `SE`, `center`). */
-          anchor?: "NW" | "N" | "NE" | "W" | "center" | "E" | "SW" | "S" | "SE" | null;
-          /** Float: how far in from its anchor: cells, `"24px"` or `"10%"`. */
-          row?: number | string | null;
-          col?: number | string | null;
-          /** Float: cells, `"480px"` or a share of what it floats over (`"50%"`, the default). */
-          width?: number | string | null;
-          height?: number | string | null;
-          /** Float: `none` draws it bare. */
-          border?: string | null;
-          /** Float: it takes the keyboard when it opens (`true` by default). */
-          focusable?: boolean | null;
-          /** Float: it takes the pointer (`focusable` by default). */
-          mouse?: boolean | null;
-          /** Float: what closes it: `escape`, `key`, `press`, `scroll`. */
-          dismiss?: string[] | null;
-          /** Float: dims what is under it, 0 to 100. */
-          backdrop?: number | null;
-          /** Float: above floats with a lower one (50 by default). */
-          zIndex?: number | null;
-        };
-        title?: string | null;
-        /** Its directory: a terminal's program's. */
-        cwd?: string | null;
-        /** The directory of its foreground process. */
-        foregroundCwd?: string | null;
-        process?: {
-          pid: number;
-          /** Its program, as the system names it. */
-          command: string[];
-        } | null;
-        /** How far a tab is scrolled back. */
-        scroll: {
-          offsetFromBottom: number;
-        };
-        /** The tab beside a tab on each side, in its view. */
-        neighbors: {
-          left?: TabId | null;
-          right?: TabId | null;
-          up?: TabId | null;
-          down?: TabId | null;
-        };
-        /** It is the tab a client is in: its view's active tab, in its session's active view. */
-        isFocused: boolean;
-        /** It fills its view. */
-        isZoomed: boolean;
-        /** The options set on it. */
-        options: {
-          [key: string]: unknown;
-        };
-        /** With `state`: its saved state. */
-        state?: {
-          pumi_state: number;
-          /** The block that saved it. */
-          block: string;
-          /** The version of that block's `data`. */
-          block_version: number;
-          /** The tab's own options, `@user` ones included. */
-          options?: {
-            [key: string]: unknown;
-          };
-          /** What the block's `serialize` returned. */
-          data?: unknown;
-          /** Large parts (scrollback, images), by name. */
-          blobs?: {
-            [key: string]: {
-              /** How to read it: `vt` (terminal output), `png`, `bytes`. */
-              encoding: string;
-              size: number;
-              /** `blob:<sha256>`. */
-              ref: string;
-              /** The bytes, in base64, when the state is to leave this server (`opts.blobs = "inline"`). */
-              data?: string | null;
-            };
-          };
-          /** What other plugins added in `TabSavePre`, by plugin. */
-          extra?: {
-            [key: string]: unknown;
-          };
-          /** How a state comes back. */
-          strategy: "exact" | "relaunch" | "reference";
-          /** What must be true where it is restored. */
-          needs?: ({
-            kind: "path";
-            path: string;
-          } | {
-            kind: "program";
-            name: string;
-          } | {
-            kind: "url";
-            url: string;
-          })[];
-          origin?: {
-            server: string;
-            tab: number;
-            /** RFC 3339, UTC. */
-            at: string;
-          } | null;
-        } | null;
-      })[];
-    })[] | null;
-  }>;
-    /**
-     * List every session, in creation order.
-     *
-     * @example
-     * await session.list() // ["$1"]
-     */
-    list(): Promise<SessionId[]>;
-    /**
-     * Change a session's name or directory. Fires `session.changed` with what changed. No id is the
-     * caller's session.
-     *
-     * @example
-     * await session.update("$1", { name: "work" })
-     */
-    update(session: SessionId | null | undefined, patch: {
-    /** Its name; `null` gives it a free one of its own (its folder's, else a number). */
-    name?: string | null;
-    /** Its directory, where its terminals start without a `cwd` of their own; `null` has none. */
-    cwd?: string | null;
-  }): Promise<null>;
-  };
   tab: {
     /**
      * Call a method of the block in a tab: the protocol every block answers (`read`, its text;
@@ -2607,7 +2580,7 @@ export interface Nouns {
      */
     close(tab?: TabId | null): Promise<null>;
     /**
-     * Make a tab its pane's front tab and its view's active tab, and its view and session current;
+     * Make a tab its pane's front tab and its view's active tab, and its view and project current;
      * or move from it: to the next tab of its pane (`offset`), to the pane beside it (`direction`),
      * or to its view's tab used last (`last`). No id is the caller's tab. Moving out of a zoomed
      * pane unzooms the view; nothing there is not an error.
@@ -2646,7 +2619,7 @@ export interface Nouns {
     } | null;
   } | null): Promise<{
     id: TabId;
-    session: SessionId;
+    project: ProjectId;
     view?: ViewId | null;
     /** The block it holds (`file`, `owner.name.page`). */
     block: string;
@@ -2658,9 +2631,9 @@ export interface Nouns {
     place: {
       /**
        * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-       * tiled in a new view or a new session.
+       * tiled in a new view or a new project.
        */
-      kind: "tiled" | "float" | "hidden" | "view" | "session";
+      kind: "tiled" | "float" | "hidden" | "view" | "project";
       /** Tiled: into this view, beside its active tab. Float: over this view. */
       view?: ViewId | null;
       /**
@@ -2668,8 +2641,8 @@ export interface Nouns {
        * beside it, in a pane of its own. Where a tiled tab is, its pane.
        */
       pane?: PaneId | "current" | null;
-      /** View: the session the new view goes in; `new` makes a session for the tab. */
-      session?: SessionId | "new" | null;
+      /** View: the project the new view goes in; `new` makes a project for the tab. */
+      project?: ProjectId | "new" | null;
       /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
       split?: "left" | "right" | "up" | "down" | null;
       /**
@@ -2690,10 +2663,10 @@ export interface Nouns {
       size?: number | string | null;
       /** Tiled: split the whole view, not one pane. */
       full?: boolean | null;
-      /** View, session: its name. */
+      /** View: its name. */
       name?: string | null;
-      /** Session: its directory. */
-      cwd?: string | null;
+      /** Project: its folder, the one project there is; the home folder without one. */
+      path?: string | null;
       /** Make it the caller's tab; `true` by default. */
       focus?: boolean | null;
       /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -2742,7 +2715,7 @@ export interface Nouns {
       up?: TabId | null;
       down?: TabId | null;
     };
-    /** It is the tab a client is in: its view's active tab, in its session's active view. */
+    /** It is the tab a client is in: its view's active tab, in its project's active view. */
     isFocused: boolean;
     /** It fills its view. */
     isZoomed: boolean;
@@ -2808,8 +2781,8 @@ export interface Nouns {
      * await tab.list({}) // ["%1"]
      */
     list(opts?: {
-    /** Only this session's. */
-    session?: SessionId | null;
+    /** Only this project's. */
+    project?: ProjectId | null;
     /** Only this view's. */
     view?: ViewId | null;
     /** Only tabs that hold this block. */
@@ -2886,7 +2859,7 @@ export interface Nouns {
      * shell or the first thing installed that starts one; refused while nothing is, as pumi has no
      * block of its own for one), placed as `place` says:
      * in a pane split from a tab's, into a pane
-     * as one of its tabs (`{"pane": ":2"}`), in a new view or session, floating; or in an open tab
+     * as one of its tabs (`{"pane": ":2"}`), in a new view or project, floating; or in an open tab
      * instead of its block (`{"kind": "tiled", "replace": "%1"}`), which
      * keeps its id, place, focus and options (`tab.changed {block}`). It is the one way anything
      * appears. `args` are the block's (a terminal block's `command`, `cwd` and `env`; a file's `path`;
@@ -2898,9 +2871,9 @@ export interface Nouns {
     open(block?: string | null, args?: unknown, place?: {
     /**
      * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-     * tiled in a new view or a new session.
+     * tiled in a new view or a new project.
      */
-    kind: "tiled" | "float" | "hidden" | "view" | "session";
+    kind: "tiled" | "float" | "hidden" | "view" | "project";
     /** Tiled: into this view, beside its active tab. Float: over this view. */
     view?: ViewId | null;
     /**
@@ -2908,8 +2881,8 @@ export interface Nouns {
      * beside it, in a pane of its own. Where a tiled tab is, its pane.
      */
     pane?: PaneId | "current" | null;
-    /** View: the session the new view goes in; `new` makes a session for the tab. */
-    session?: SessionId | "new" | null;
+    /** View: the project the new view goes in; `new` makes a project for the tab. */
+    project?: ProjectId | "new" | null;
     /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
     split?: "left" | "right" | "up" | "down" | null;
     /**
@@ -2930,10 +2903,10 @@ export interface Nouns {
     size?: number | string | null;
     /** Tiled: split the whole view, not one pane. */
     full?: boolean | null;
-    /** View, session: its name. */
+    /** View: its name. */
     name?: string | null;
-    /** Session: its directory. */
-    cwd?: string | null;
+    /** Project: its folder, the one project there is; the home folder without one. */
+    path?: string | null;
     /** Make it the caller's tab; `true` by default. */
     focus?: boolean | null;
     /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -2973,15 +2946,15 @@ export interface Nouns {
     title?: string | null;
     /**
      * Where it goes: into a pane (`{"kind": "tiled", "pane": ":2"}`, or along its own pane's
-     * strip), in a pane split from another tab's, into a new view or session, floating, or into
+     * strip), in a pane split from another tab's, into a new view or project, floating, or into
      * another tab's place (`{"kind": "tiled", "swap": "%2"}`).
      */
     place?: {
       /**
        * What a place is: tiled in a view's layout, floating over a view, hidden while it moves, or
-       * tiled in a new view or a new session.
+       * tiled in a new view or a new project.
        */
-      kind: "tiled" | "float" | "hidden" | "view" | "session";
+      kind: "tiled" | "float" | "hidden" | "view" | "project";
       /** Tiled: into this view, beside its active tab. Float: over this view. */
       view?: ViewId | null;
       /**
@@ -2989,8 +2962,8 @@ export interface Nouns {
        * beside it, in a pane of its own. Where a tiled tab is, its pane.
        */
       pane?: PaneId | "current" | null;
-      /** View: the session the new view goes in; `new` makes a session for the tab. */
-      session?: SessionId | "new" | null;
+      /** View: the project the new view goes in; `new` makes a project for the tab. */
+      project?: ProjectId | "new" | null;
       /** Tiled: which side of the pane it splits, making a pane for the tab; `down` by default. */
       split?: "left" | "right" | "up" | "down" | null;
       /**
@@ -3011,10 +2984,10 @@ export interface Nouns {
       size?: number | string | null;
       /** Tiled: split the whole view, not one pane. */
       full?: boolean | null;
-      /** View, session: its name. */
+      /** View: its name. */
       name?: string | null;
-      /** Session: its directory. */
-      cwd?: string | null;
+      /** Project: its folder, the one project there is; the home folder without one. */
+      path?: string | null;
       /** Make it the caller's tab; `true` by default. */
       focus?: boolean | null;
       /** Opening: in this tab instead of the block it holds, keeping its id, place and options. */
@@ -3071,7 +3044,7 @@ export interface Nouns {
      */
     close(view?: ViewId | null): Promise<null>;
     /**
-     * Make a view its session's active view; or move from it to another of its session by offset
+     * Make a view its project's active view; or move from it to another of its project by offset
      * (`next-window` is `{"offset": 1}`), by index, or the last one. No id is the caller's view.
      *
      * @example
@@ -3080,24 +3053,24 @@ export interface Nouns {
     focus(view?: ViewId | null, opts?: {
     /** To so many views on (or back, negative), wrapping. */
     offset?: number | null;
-    /** To the session's view at this index. */
+    /** To the project's view at this index. */
     index?: number | null;
-    /** To the view used before the session's active one. */
+    /** To the view used before the project's active one. */
     last?: boolean;
   } | null): Promise<null>;
     /**
-     * A view: its session, name, index, layout of panes (each with its tabs), active tab and pane,
-     * and zoom. No id is the caller's: its session's active view.
+     * A view: its project, name, index, layout of panes (each with its tabs), active tab and pane,
+     * and zoom. No id is the caller's: its project's active view.
      *
      * @example
-     * await view.get("@1") // { id: "@1", session: "$1", name: null, index: 0, layout: { pane: ":1", tabs: ["%1"], active: "%1" }, activeTab: "%1", activePane: ":1", zoom: null }
+     * await view.get("@1") // { id: "@1", project: "$1", name: null, index: 0, layout: { pane: ":1", tabs: ["%1"], active: "%1" }, activeTab: "%1", activePane: ":1", zoom: null }
      */
     get(view?: ViewId | null): Promise<{
     id: ViewId;
-    session: SessionId;
+    project: ProjectId;
     /** The name it was given; `null` while it takes its active tab's title. */
     name?: string | null;
-    /** Its index in its session. */
+    /** Its index in its project. */
     index: number;
     /** A view's panes: a pane, or a split of two halves along an axis. */
     layout: {
@@ -3122,7 +3095,7 @@ export interface Nouns {
     zoom?: PaneId | null;
   }>;
     /**
-     * Change a view: its name, index or session, layout, and zoom. Each change fires `view.changed`
+     * Change a view: its name, index or project, layout, and zoom. Each change fires `view.changed`
      * with what changed. No id is the caller's view.
      *
      * @example
@@ -3131,10 +3104,10 @@ export interface Nouns {
     update(view: ViewId | null | undefined, patch: {
     /** Its name; `null` gives it back its automatic name (its active tab's title). */
     name?: string | null;
-    /** Its index in its session, which must be free. */
+    /** Its index in its project, which must be free. */
     index?: number | null;
-    /** The session it moves to, at `index` or its first free one. */
-    session?: SessionId | null;
+    /** The project it moves to, at `index` or its first free one. */
+    project?: ProjectId | null;
     layout?: "even-horizontal" | "even-vertical" | "main-horizontal" | "main-horizontal-mirrored" | "main-vertical" | "main-vertical-mirrored" | "tiled" | {
       offset: number;
     } | {

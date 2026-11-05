@@ -36,5 +36,5 @@ export type {
 export { ApiError } from "./runtime.ts";
 export type { Caller, Disposer, Manifest, OptionSpec, Paths } from "./runtime.ts";
 export { Model } from "./model.ts";
-export { Pane, Plugin, Request, Session, Tab, View } from "./models.gen.ts";
+export { Pane, Plugin, Request, Project, Tab, View } from "./models.gen.ts";
 export type * from "./api.types.gen.ts";

@@ -1,7 +1,7 @@
 //! A tab's screen, small.
 //!
 //! What a theme draws for a tab the window is not showing — the office's desks, one per view of
-//! every session. It is the app's own screen of the tab, the grid it parsed from the tab's
+//! every project. It is the app's own screen of the tab, the grid it parsed from the tab's
 //! bytes (`tab.cells` reads the same one), so nothing is attached and nothing is resized to take
 //! it: it costs a paint, not a terminal. The grid is drawn whole, scaled to fit the box it is
 //! given, so a small desk shows all of a tab and a larger one shows it larger.

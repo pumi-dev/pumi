@@ -543,7 +543,7 @@ impl Runtime for Pumid {
             "version": env!("CARGO_PKG_VERSION"),
             "pid": std::process::id(),
             "tabs": count(self.request("tab.list", json!([{}]))),
-            "sessions": count(self.request("session.list", json!([]))),
+            "projects": count(self.request("project.list", json!([]))),
             "plugins": count(self.request("registry.list", json!(["plugin", {}]))),
         }))
     }
@@ -685,7 +685,7 @@ mod tests {
     fn keys_reach_the_program_in_its_keyboard_mode() {
         let Some(server) = Server::spawn("keys", false) else { return };
         let runtime = Arc::new(server.runtime());
-        let made = runtime.apply(Op::NewWorkspace { cwd: Some("/tmp".into()), env: None, server: None }).unwrap();
+        let made = runtime.apply(Op::NewProject { path: Some("/tmp".into()), env: None, server: None }).unwrap();
         let tab = made.tabs.first().cloned().expect("a root tab");
         let (session, _changes) = TerminalSession::new(&tab, runtime);
         session.resize(Size { cols: 60, rows: 10, cell_width: 8, cell_height: 16 });
@@ -703,7 +703,7 @@ mod tests {
     fn probes_are_answered_through_the_app() {
         let Some(server) = Server::spawn("probe", false) else { return };
         let runtime = Arc::new(server.runtime());
-        let made = runtime.apply(Op::NewWorkspace { cwd: Some("/tmp".into()), env: None, server: None }).unwrap();
+        let made = runtime.apply(Op::NewProject { path: Some("/tmp".into()), env: None, server: None }).unwrap();
         let tab = made.tabs.first().cloned().expect("a root tab");
         let (session, _changes) = TerminalSession::new(&tab, runtime);
         session.resize(Size { cols: 80, rows: 10, cell_width: 8, cell_height: 16 });
@@ -723,7 +723,7 @@ mod tests {
     fn a_sixel_reaches_the_apps_screen() {
         let Some(server) = Server::spawn("image", false) else { return };
         let runtime = Arc::new(server.runtime());
-        let made = runtime.apply(Op::NewWorkspace { cwd: Some("/tmp".into()), env: None, server: None }).unwrap();
+        let made = runtime.apply(Op::NewProject { path: Some("/tmp".into()), env: None, server: None }).unwrap();
         let tab = made.tabs.first().cloned().expect("a root tab");
         let (session, _changes) = TerminalSession::new(&tab, runtime);
         session.resize(Size { cols: 80, rows: 20, cell_width: 8, cell_height: 16 });
@@ -742,10 +742,10 @@ mod tests {
         let (notices, mut heard) = futures::channel::mpsc::unbounded();
         let _watch = runtime.watch(wake, notices);
         until("the first state", || woken.try_recv().is_ok());
-        let made = runtime.apply(Op::NewWorkspace { cwd: Some("/tmp".into()), env: None, server: None }).unwrap();
+        let made = runtime.apply(Op::NewProject { path: Some("/tmp".into()), env: None, server: None }).unwrap();
         let view = made.view.clone().expect("a view");
         let read = runtime.read(&BTreeMap::new()).unwrap();
-        assert_eq!(read.snapshot.workspaces.len(), 1, "an operation is seen by the next read");
+        assert_eq!(read.snapshot.projects.len(), 1, "an operation is seen by the next read");
         assert!(read.trees.contains_key(&view));
         until("the pushed change", || woken.try_recv().is_ok());
         let read = runtime.read(&BTreeMap::new()).unwrap();
@@ -753,7 +753,7 @@ mod tests {
         let again = runtime.read(&BTreeMap::from([(view.clone(), signature)])).unwrap();
         assert!(again.trees.is_empty(), "unchanged trees are not sent again");
         let args = json!({ "command": ["/usr/bin/printf", "\u{1b}]777;notify;done;it built\u{7}"] });
-        let place = json!({ "kind": "view", "session": made.workspace, "focus": false });
+        let place = json!({ "kind": "view", "project": made.project, "focus": false });
         let tab = runtime.request("tab.open", json!([TERM, args, place])).unwrap();
         let tab = tab.as_str().unwrap().to_string();
         let mut notice = None;
@@ -770,7 +770,7 @@ mod tests {
     fn a_terminal_goes_on_through_a_restart_and_a_stop() {
         let Some(mut server) = Server::spawn("through", true) else { return };
         let runtime = Arc::new(server.runtime());
-        let made = runtime.apply(Op::NewWorkspace { cwd: Some("/tmp".into()), env: None, server: None }).unwrap();
+        let made = runtime.apply(Op::NewProject { path: Some("/tmp".into()), env: None, server: None }).unwrap();
         let tab = made.tabs.first().cloned().expect("a root tab");
         let (session, _changes) = TerminalSession::new(&tab, runtime.clone());
         session.resize(Size { cols: 60, rows: 10, cell_width: 8, cell_height: 16 });
@@ -798,12 +798,12 @@ mod tests {
         let read = runtime.read(&BTreeMap::new()).unwrap();
         let snap = &read.snapshot;
         let server = json!(
-            snap.workspaces
+            snap.projects
                 .iter()
                 .map(|w| json!({
                     "space": w.label,
                     "current": w.active_view_id.as_ref().and_then(|t| snap.view(t)).map(|t| t.label.clone()),
-                    "views": snap.views.iter().filter(|v| v.workspace_id == w.workspace_id).map(|v| json!({
+                    "views": snap.views.iter().filter(|v| v.project_id == w.project_id).map(|v| json!({
                         "name": v.label,
                         "tree": format!("{:?}", read.trees.get(&v.view_id).map(|(_, tree)| tree)),
                         "focus": snap.layout(&v.view_id).and_then(|l| l.focused_tab_id.clone()),
@@ -817,16 +817,14 @@ mod tests {
     fn closing_and_opening_the_app_keeps_everything_in_place() {
         let Some(mut server) = Server::spawn("reopen", true) else { return };
         let first = server.runtime();
-        let mut spaces = Vec::new();
-        for (name, views) in [("alpha", 3), ("beta", 2)] {
-            let made = first.apply(Op::NewWorkspace { cwd: Some("/tmp".into()), env: None, server: None }).unwrap();
-            let space = made.workspace.clone().unwrap();
-            first.apply(Op::RenameWorkspace { workspace: space.clone(), label: name.into() }).unwrap();
+        for (name, path, views) in [("alpha", "/tmp", 3), ("beta", "/usr", 2)] {
+            let made = first.apply(Op::NewProject { path: Some(path.into()), env: None, server: None }).unwrap();
+            let space = made.project.clone().unwrap();
             let mut root = made.tabs[0].clone();
             let mut view = made.view.clone().unwrap();
             for n in 0..views {
                 if n > 0 {
-                    let made = first.apply(Op::NewView { workspace: space.clone(), cwd: None, env: None }).unwrap();
+                    let made = first.apply(Op::NewView { project: space.clone(), cwd: None, env: None }).unwrap();
                     (root, view) = (made.tabs[0].clone(), made.view.clone().unwrap());
                 }
                 first.apply(Op::RenameView { view: view.clone(), label: format!("{name}-{n}") }).unwrap();
@@ -849,7 +847,6 @@ mod tests {
                 }
                 first.request("tab.focus", json!([right])).unwrap();
             }
-            spaces.push(space);
         }
         let before = picture(&first);
         assert_eq!(before.as_array().unwrap().len(), 2, "{before}");
@@ -862,7 +859,7 @@ mod tests {
         drop(again);
         let restarted = server.runtime();
         until("the restarted core", || {
-            restarted.reachable() && restarted.read(&BTreeMap::new()).is_ok_and(|r| r.snapshot.workspaces.len() == 2)
+            restarted.reachable() && restarted.read(&BTreeMap::new()).is_ok_and(|r| r.snapshot.projects.len() == 2)
         });
         declare_term(&restarted);
         assert_eq!(picture(&restarted), before, "the same after the core restarted in place");
@@ -872,7 +869,7 @@ mod tests {
         server.start();
         let restored = server.runtime();
         until("the restored core", || {
-            restored.reachable() && restored.read(&BTreeMap::new()).is_ok_and(|r| r.snapshot.workspaces.len() == 2)
+            restored.reachable() && restored.read(&BTreeMap::new()).is_ok_and(|r| r.snapshot.projects.len() == 2)
         });
         assert_eq!(picture(&restored), before, "the same after the core stopped and started from its state");
     }

@@ -67,7 +67,7 @@ export declare class Engine {
   checkForUpdates(plugins?: boolean | undefined | null): void
   /** The plugin updates of `names` were applied (`plugin.update`): they are no longer waiting. */
   pluginUpdatesApplied(names: Array<string>): void
-  /** What the server says of itself: `{version, pid, tabs, sessions, plugins}`, off the JS thread. */
+  /** What the server says of itself: `{version, pid, tabs, projects, plugins}`, off the JS thread. */
   serverStatus(): Promise<any>
   /** Starts the server again from the binaries on disk; every program keeps running. */
   serverRestart(): Promise<any>

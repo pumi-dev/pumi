@@ -21,17 +21,17 @@ const runtime = globalThis.process;
 
 /**
  * The caller's own objects: while the plugin serves a call, its caller's tab and where it is;
- * else its session and tab (`pumi do --session --tab`, else its environment's).
+ * else its project and tab (`pumi do --project --tab`, else its environment's).
  */
 function caller() {
   const asked = currentCaller()?.tab;
   if (asked) {
-    const tab = cache.get("tab", asked) as { session?: string; view?: string | null } | undefined;
-    return { session: tab?.session ?? null, view: tab?.view ?? null, tab: asked };
+    const tab = cache.get("tab", asked) as { project?: string; view?: string | null } | undefined;
+    return { project: tab?.project ?? null, view: tab?.view ?? null, tab: asked };
   }
   const init = connection.init;
   return {
-    session: init?.session ?? runtime.env.PUMI_SESSION ?? null,
+    project: init?.project ?? runtime.env.PUMI_PROJECT ?? null,
     view: runtime.env.PUMI_VIEW ?? null,
     tab: init?.tab ?? runtime.env.PUMI_TAB ?? null,
   };
@@ -69,8 +69,8 @@ export interface PumiEvent<D = any> {
   event: string;
   /** What a `match` is tested against: per event, as the export says (an object's id, …). */
   match: string;
-  /** The session it is about, when it is about one. */
-  session?: string | null;
+  /** The project it is about, when it is about one. */
+  project?: string | null;
   view?: string | null;
   tab?: string | null;
   data: D;
@@ -237,8 +237,8 @@ export interface Self {
     /** `name` with the prefix: `bar` is `owner.name.bar`; a name that has it already is kept. */
     prefixed(name: string): string;
   };
-  /** Its own session: the caller's while it serves a call, or `pumi do --session`, or the one it was opened in. */
-  readonly session: string | null;
+  /** Its own project: the caller's while it serves a call, or `pumi do --project`, or the one it was opened in. */
+  readonly project: string | null;
   /** Its own tab: the caller's while it serves a call, or `PUMI_TAB`, or the one it was opened in. */
   readonly tab: string | null;
   /**
@@ -268,8 +268,8 @@ export const self: Self = {
       return name.startsWith(prefix) ? name : `${prefix}${name}`;
     },
   },
-  get session(): string | null {
-    return caller().session;
+  get project(): string | null {
+    return caller().project;
   },
   get tab(): string | null {
     return caller().tab;

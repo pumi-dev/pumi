@@ -237,31 +237,31 @@ export interface LayoutEdit {
   move(move: moves.Move): void
 }
 
-/** The order the side bar keeps its sessions in (theirs on the server is the order they were made in). */
-export const SESSION_ORDER = "default.tree.order"
+/** The order the side bar keeps its projects in (theirs on the server is the order they were made in). */
+export const PROJECT_ORDER = "default.tree.order"
 const NONE: string[] = []
 
-/** A window a move can bring what it made to: dropping a tab on a session makes a view in it. */
+/** A window a move can bring what it made to: dropping a tab on a project makes a view in it. */
 export interface ViewShower {
-  show(session: string, view?: string): void
+  show(project: string, view?: string): void
 }
 
 /** Does what a drag dropped: its calls to the server one after another, or a sort of the side bar's own. */
 export function runMove(move: moves.Move, window?: ViewShower) {
   const snapshot = store.get().snapshot
-  if (move.kind === "session.order") {
-    const shown = moves.sortSessions(snapshot?.workspaces ?? [], getLocal<string[]>(SESSION_ORDER, NONE)).map((s) => s.workspace_id)
-    return setLocal(SESSION_ORDER, moves.reorder(shown, move.session, move.anchor, move.after))
+  if (move.kind === "project.order") {
+    const shown = moves.sortProjects(snapshot?.projects ?? [], getLocal<string[]>(PROJECT_ORDER, NONE)).map((s) => s.project_id)
+    return setLocal(PROJECT_ORDER, moves.reorder(shown, move.project, move.anchor, move.after))
   }
   const done = moves
     .plan(move, snapshot)
     .reduce<Promise<unknown>>((done, step) => done.then(() => call(via(step.on, step.method), ...step.params)), Promise.resolve())
-  // A tab dropped on a session is a view of its own there: the window that dropped it shows it,
+  // A tab dropped on a project is a view of its own there: the window that dropped it shows it,
   // as it showed the tab before.
   if (move.kind === "tab.newView" && window) {
     done
       .then(() => call(via(move.tab, "tab.get"), move.tab))
-      .then((made) => typeof made?.session === "string" && typeof made?.view === "string" && window.show(made.session, made.view))
+      .then((made) => typeof made?.project === "string" && typeof made?.view === "string" && window.show(made.project, made.view))
       .catch(swallow)
     return
   }

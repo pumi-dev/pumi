@@ -12,17 +12,17 @@ pub const MAX_SERVER_NAME: usize = 64;
 /// What an id's sigil says it names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
-    Session,
+    Project,
     View,
     Pane,
     Tab,
     Request,
 }
 impl Kind {
-    pub const ALL: [Kind; 5] = [Kind::Session, Kind::View, Kind::Pane, Kind::Tab, Kind::Request];
+    pub const ALL: [Kind; 5] = [Kind::Project, Kind::View, Kind::Pane, Kind::Tab, Kind::Request];
     pub fn sigil(self) -> char {
         match self {
-            Kind::Session => '$',
+            Kind::Project => '$',
             Kind::View => '@',
             Kind::Pane => ':',
             Kind::Tab => '%',
@@ -31,7 +31,7 @@ impl Kind {
     }
     pub fn name(self) -> &'static str {
         match self {
-            Kind::Session => "session",
+            Kind::Project => "project",
             Kind::View => "view",
             Kind::Pane => "pane",
             Kind::Tab => "tab",
@@ -72,7 +72,7 @@ impl Ref {
         match (kind, id) {
             (Some(kind), Some(id)) => Ok(Ref { server: server.map(str::to_string), kind, id }),
             _ => Err(Error::invalid_params(format!(
-                "`{text}` is not an id: `%3` (tab), `:4` (pane), `@2` (view), `$1` (session), `+7` (request)"
+                "`{text}` is not an id: `%3` (tab), `:4` (pane), `@2` (view), `$1` (project), `+7` (request)"
             ))),
         }
     }
@@ -161,7 +161,7 @@ fn regex_escape(sigil: &str) -> String {
         _ => sigil.into(),
     }
 }
-typed!(SessionRef, Kind::Session, "$");
+typed!(ProjectRef, Kind::Project, "$");
 typed!(ViewRef, Kind::View, "@");
 typed!(PaneRef, Kind::Pane, ":");
 typed!(TabRef, Kind::Tab, "%");
@@ -210,6 +210,6 @@ mod tests {
         assert_eq!(serde_json::from_str::<TabRef>("\"%3\"").unwrap(), TabRef(3));
         assert!(serde_json::from_str::<TabRef>("\"@3\"").is_err());
         assert!(serde_json::from_str::<TabRef>("\"devbox/%3\"").is_err());
-        assert_eq!(serde_json::to_string(&SessionRef(1)).unwrap(), "\"$1\"");
+        assert_eq!(serde_json::to_string(&ProjectRef(1)).unwrap(), "\"$1\"");
     }
 }

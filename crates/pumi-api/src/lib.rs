@@ -18,7 +18,7 @@ pub use args::{Args, from_value, to_value};
 pub use builtins::{ApiInfo, ApiVersion, BatchCall, CallName, ErrorType};
 pub use error::{Error, ErrorKind, Result};
 pub use events::EventInfo;
-pub use ids::{Kind, PaneRef, Ref, RequestRef, SessionRef, TabRef, ViewRef};
+pub use ids::{Kind, PaneRef, ProjectRef, Ref, RequestRef, TabRef, ViewRef};
 #[doc(hidden)]
 pub use linkme;
 pub use meta::{Effect, Example, ExampleInfo, Function, FunctionInfo, Param, RunsOn};

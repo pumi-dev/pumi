@@ -224,8 +224,8 @@ pub struct TraitSpec {
 /// or anything else picked from disk is a plugin's action with a `pick`.
 pub const SLOTS: &[&str] = &[
     "window.overlay",
-    "session.header",
-    "session.menu",
+    "project.header",
+    "project.menu",
     "view.actions",
     "view.badge",
     "view.menu",
@@ -377,7 +377,7 @@ pub enum OptionType {
 #[serde(rename_all = "lowercase")]
 pub enum Scope {
     Global,
-    Session,
+    Project,
     View,
     Tab,
     Client,

@@ -1,15 +1,15 @@
 // `import … from "pumi"`, for a plugin's `tsc`: both halves of the SDK, as one module. The app
 // gives a plugin's `main.ts` the worker's half and its `ui.tsx` the window's half at run time;
 // this file is only what the type checker reads. Both halves share the models (`View`, `Tab`,
-// `Session`, …) over one cache, so a name they both have (`call`, `workspace`) is the worker's.
+// `Project`, …) over one cache, so a name they both have (`call`, `workspace`) is the worker's.
 /// <reference path="./assets.d.ts" />
 export * from "../worker/sdk/index.ts"
 export {
   useOption,
   useRequests,
   useRegistry,
-  useSession,
-  useSessions,
+  useProject,
+  useProjects,
   useTab,
   useTabs,
   useView,

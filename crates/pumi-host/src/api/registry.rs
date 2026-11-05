@@ -264,8 +264,8 @@ fn tab_methods(caller: &pumi_api::Caller, k: &mut Kernel, wanted: Option<&str>) 
     Ok(out)
 }
 
-/// The models `session.get`, `view.get`, `tab.get`, `request.get` and `registry.list("plugin")`
-/// answer (`surface.json`'s `models`), by name in any case: `pumi help session` describes `Session`.
+/// The models `project.get`, `view.get`, `tab.get`, `request.get` and `registry.list("plugin")`
+/// answer (`surface.json`'s `models`), by name in any case: `pumi help project` describes `Project`.
 fn models(wanted: Option<&str>) -> Vec<Value> {
     pumi_api::surface::surface()
         .models

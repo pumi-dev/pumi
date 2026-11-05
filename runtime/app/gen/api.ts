@@ -1,5 +1,5 @@
 // The `pumi` module's bindings, from the server's export (api/pumi-api.json): every function's
-// types and one object per noun, every event's data, and the model classes (`Session`, `View`,
+// types and one object per noun, every event's data, and the model classes (`Project`, `View`,
 // `Tab`, `Request`, `Plugin`) whose fields are getters over the live cache and whose methods are
 // one wire call each, the tab methods (`read`, `input`, …) among `Tab`'s.
 import { Types, doc, type Schema } from "./schema.ts";
@@ -243,7 +243,7 @@ function nouns(api: Export): Map<string, Fn[]> {
 export function typesFile(api: Export, header: string): string {
   const b = new Built(api);
   let out = header;
-  out += "// Ids are prefixed strings: `$1` a session, `@2` a view, `%3` a tab, `+7` a request, `owner/name` a\n";
+  out += "// Ids are prefixed strings: `$1` a project, `@2` a view, `%3` a tab, `+7` a request, `owner/name` a\n";
   out += "// plugin, and `devbox/%3` one on the server `devbox`.\n\n";
   for (const m of api.models) out += `${doc(`${m.name}'s id (\`${m.idPrefix ? `${m.idPrefix}1` : "owner/name"}\`).`)}export type ${m.name}Id = string;\n`;
   out += `${doc("Any object's id, for an option's scope.")}export type ObjectId = string;\n\n`;

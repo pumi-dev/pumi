@@ -1,8 +1,8 @@
-// A session's git worktrees: the checkouts of its folder's repository (`git worktree list`), and
+// A project's git worktrees: the checkouts of its folder's repository (`git worktree list`), and
 // new ones, made under `worktree_dir` on a branch of their own. A view is in a worktree when its
 // `worktree` option names one (the server starts its terminals there). Apart from the engine, so
 // the parsing and naming are tested without the addon; git runs here, so only for this machine's
-// sessions.
+// projects.
 import { homedir } from "node:os"
 import { basename, join } from "node:path"
 

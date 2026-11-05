@@ -9,7 +9,7 @@ import { call as engineCall, store } from "../app/engine.ts"
 import { useApp, WindowContext } from "../app/state.ts"
 import { listen, subscribeEvent, unlisten, type WindowEvent } from "./events.ts"
 import { cache, type Model } from "../worker/sdk/model.ts"
-import { Request, Session, Tab, View } from "../worker/sdk/models.gen.ts"
+import { Request, Project, Tab, View } from "../worker/sdk/models.gen.ts"
 import type { Wire } from "../worker/sdk/transport.ts"
 import { connect, wireFill, workspace, type RequestFilter, type TabFilter } from "../worker/sdk/workspace.ts"
 
@@ -27,7 +27,7 @@ export const wire: Wire = engine
 function caller() {
   const snapshot = store.get().snapshot
   return {
-    session: snapshot?.focused_workspace_id ?? null,
+    project: snapshot?.focused_project_id ?? null,
     view: snapshot?.focused_view_id ?? null,
     tab: snapshot?.focused_tab_id ?? null,
   }
@@ -38,7 +38,7 @@ connect(wire, wireFill(wire), caller)
 /** The window's focus, as one string: a hook re-renders when it moves. */
 function focus(): string {
   const own = caller()
-  return `${own.session}|${own.view}|${own.tab}`
+  return `${own.project}|${own.view}|${own.tab}`
 }
 
 function subscribeCache(fn: () => void): () => void {
@@ -67,15 +67,15 @@ export interface RendererProps {
   focused: boolean
 }
 
-/** The window a tree draws: its id, the session and view it shows, and its own controls. */
+/** The window a tree draws: its id, the project and view it shows, and its own controls. */
 export interface WindowInfo {
   id: number
-  /** The session it shows. */
-  session: Session | null
+  /** The project it shows. */
+  project: Project | null
   /** The view it shows of it: its own, whichever view the server's focus is in. */
   view: View | null
-  show(session: string | null, view?: string | null): void
-  /** Shows `view`, in whichever session holds it. */
+  show(project: string | null, view?: string | null): void
+  /** Shows `view`, in whichever project holds it. */
   showView(view: string): void
   close(): void
   minimize(): void
@@ -100,9 +100,9 @@ export function useWindow(): WindowInfo {
   if (!window) throw new Error("pumi: useWindow outside a window")
   return {
     id: window.id,
-    session: cache.model<Session>("session", window.session),
+    project: cache.model<Project>("project", window.project),
     view: cache.model<View>("view", window.view),
-    show: (session, view) => window.show(session ?? "", view ?? undefined),
+    show: (project, view) => window.show(project ?? "", view ?? undefined),
     showView: (view) => window.showView(view),
     close: window.close,
     minimize: window.minimize,
@@ -116,27 +116,27 @@ export function useWindow(): WindowInfo {
   }
 }
 
-/** Every session, in creation order. */
-export function useSessions(): Session[] {
-  return useCached(() => workspace.sessions)
+/** Every project, in creation order. */
+export function useProjects(): Project[] {
+  return useCached(() => workspace.projects)
 }
 
-/** A session: `id`, or the caller's own. */
-export function useSession(id?: string): Session | undefined {
+/** A project: `id`, or the caller's own. */
+export function useProject(id?: string): Project | undefined {
   const window = useContext(WindowContext)
-  return useCached(() => workspace.getSession(id ?? window?.session ?? caller().session ?? "") ?? undefined)
+  return useCached(() => workspace.getProject(id ?? window?.project ?? caller().project ?? "") ?? undefined)
 }
 
-/** A session's views, in order (the caller's session without one). */
-export function useViews(session?: string): View[] {
-  const shown = useSession(session)
+/** A project's views, in order (the caller's project without one). */
+export function useViews(project?: string): View[] {
+  const shown = useProject(project)
   return useCached(() => shown?.views ?? EMPTY)
 }
 
-/** A view: `id`, or the one the window shows, else the one in front of the caller's session. */
+/** A view: `id`, or the one the window shows, else the one in front of the caller's project. */
 export function useView(id?: string): View | undefined {
   const window = useContext(WindowContext)
-  const shown = useSession()
+  const shown = useProject()
   return useCached(() => workspace.getView(id ?? window?.view ?? caller().view ?? shown?.activeView?.id ?? "") ?? undefined)
 }
 
@@ -148,7 +148,7 @@ export function useTab(id?: string | null): Tab | undefined {
 /** The keys of a `tab.changed` that may move a tab in or out of a filter. */
 const FILTERED = (key: string) => key === "place" || key === "block" || key.startsWith("traits")
 
-/** The tabs matching `filter`: of a session or view, holding a block, with a trait. */
+/** The tabs matching `filter`: of a project or view, holding a block, with a trait. */
 export function useTabs(filter: TabFilter = {}): Tab[] {
   const at = JSON.stringify(filter)
   const [ids, setIds] = useState<string[]>(EMPTY)
@@ -197,7 +197,7 @@ export { engineCall as callRaw }
 
 /** Which object an option is on: the global one by default, or a scope and its id. */
 export interface OptionScope {
-  scope?: "global" | "session" | "view" | "tab" | "plugin"
+  scope?: "global" | "project" | "view" | "tab" | "plugin"
   /** The object (or plugin, `owner/name`) the scope is about. */
   id?: string
 }

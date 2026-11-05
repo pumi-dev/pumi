@@ -1,7 +1,7 @@
 //! The engine: pumid's connection and what the native half does for the app's JS.
 //!
 //! JS starts it once (`Engine.start`) and hears everything through one callback: `state` (the
-//! server's sessions, views, tabs, layouts and options), `notice`, `request` (a call to a
+//! server's projects, views, tabs, layouts and options), `notice`, `request` (a call to a
 //! function the app's JS provides, to `answer`), `notification`
 //! (a click on one), `callback` (the server calling a function a call passed it, by `ref`) and
 //! `terminal` (a link or path a terminal opened). Calls go out with `call`.
@@ -285,7 +285,7 @@ impl Engine {
         pumi_gpuix::app::update(|cx| crate::updater::plugins::applied(&names, cx)).map_err(Into::into)
     }
 
-    /// What the server says of itself: `{version, pid, tabs, sessions, plugins}`, off the JS thread.
+    /// What the server says of itself: `{version, pid, tabs, projects, plugins}`, off the JS thread.
     #[napi(ts_return_type = "Promise<any>")]
     pub fn server_status<'env>(&self, env: &'env Env) -> Result<Object<'env>> {
         let runtime = runtime().ok_or_else(|| Error::from_reason("The engine is not running"))?;

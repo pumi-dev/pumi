@@ -3,7 +3,7 @@
 // is dragged within its group to sort it, onto another group's button to join it, or onto the
 // bar's end to be a group of its own; a button is dragged along the bar to sort the groups. What
 // is kept is the order of every section ever seen, so one whose plugin is off comes back where it
-// was. The tree of sessions is a section (`TREE`) with no header: it is never dragged, and heads
+// was. The tree of projects is a section (`TREE`) with no header: it is never dragged, and heads
 // whichever group holds it, so nothing is dropped above it. What a page's open parts are is shares
 // of its height, the edge between two dragged to trade them. Nothing here draws: `default.tsx` does.
 

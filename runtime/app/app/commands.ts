@@ -3,7 +3,7 @@
 // and anything that lists them; `run` does one.
 import { useEffect } from "react"
 import { Engine } from "../native/addon.js"
-import { call, engine, idOn, serverOf, store, via } from "./engine.ts"
+import { call, engine, store, via } from "./engine.ts"
 import { chordOf, humanize, Keymap, type Command } from "./keymap.ts"
 import * as plugins from "./plugins.ts"
 import * as serverKeys from "./serverkeys.ts"
@@ -16,11 +16,12 @@ import { setCapturedKeys } from "../native/addon.js"
 import { FONT_DEFAULT, FONT_SIZE_RANGE, guifont, parseFont } from "../sdk/font.ts"
 import { explainNoNewTab } from "./new-tab.ts"
 import { openView } from "./new-view.ts"
+import { openFolder } from "./open-folder.ts"
 
 /** Where a command runs: the window it was asked in, and what of it is in front. */
 export interface Context {
   window: AppWindow
-  session?: string
+  project?: string
   view?: string
   tab?: string
   /** What a contribution's action passes (a tab row's tab, a file). */
@@ -38,7 +39,8 @@ let keymap = new Keymap({ commands: [], defaults: [] })
 /** macOS: what the Mac's own menus write, and the keys macOS has always given an app. */
 const DEFAULTS: [string, string][] = [
   ["new_view", "cmd+t"],
-  ["new_workspace", "cmd+n"],
+  ["new_tab", "cmd+n"],
+  ["open_folder", "cmd+o"],
   ["new_window", "cmd+shift+n"],
   ["close_window", "cmd+alt+w"],
   ["minimize_window", "cmd+m"],
@@ -59,8 +61,8 @@ const DEFAULTS: [string, string][] = [
   ["resize_pane_down", "cmd+alt+shift+down"],
   ["previous_view", "cmd+["],
   ["next_view", "cmd+]"],
-  ["previous_workspace", "cmd+shift+["],
-  ["next_workspace", "cmd+shift+]"],
+  ["previous_project", "cmd+shift+["],
+  ["next_project", "cmd+shift+]"],
   ["switch_view", "cmd+1..9"],
   ["clear_tab", "cmd+k"],
   ["settings", "cmd+,"],
@@ -84,7 +86,8 @@ const DEFAULTS: [string, string][] = [
  */
 const DEFAULTS_OTHER: [string, string][] = [
   ["new_view", "ctrl+shift+t"],
-  ["new_workspace", "ctrl+shift+n"],
+  ["new_tab", "ctrl+shift+n"],
+  ["open_folder", "ctrl+shift+o"],
   ["new_window", "ctrl+shift+alt+n"],
   ["close_window", "alt+f4"],
   ["close_tab", "ctrl+shift+w"],
@@ -104,8 +107,8 @@ const DEFAULTS_OTHER: [string, string][] = [
   ["resize_pane_down", "alt+shift+down"],
   ["previous_view", "ctrl+shift+tab"],
   ["next_view", "ctrl+tab"],
-  ["previous_workspace", "ctrl+shift+pageup"],
-  ["next_workspace", "ctrl+shift+pagedown"],
+  ["previous_project", "ctrl+shift+pageup"],
+  ["next_project", "ctrl+shift+pagedown"],
   ["switch_view", "ctrl+alt+1..9"],
   ["clear_tab", "ctrl+shift+k"],
   ["settings", "ctrl+,"],
@@ -128,11 +131,11 @@ const swallow = (err: unknown) => {
   if (!explainNoNewTab(err)) console.error(String(err))
 }
 
-/** The views of the session `c` shows, by their number, as the view bar has them. */
+/** The views of the project `c` shows, by their number, as the view bar has them. */
 function viewsOf(c: Context): { view_id: string; number: number }[] {
   const snapshot = store.get().snapshot
-  if (!snapshot || !c.session) return []
-  return snapshot.views.filter((v) => v.workspace_id === c.session).sort((a, b) => a.number - b.number)
+  if (!snapshot || !c.project) return []
+  return snapshot.views.filter((v) => v.project_id === c.project).sort((a, b) => a.number - b.number)
 }
 
 /** Shows the view `by` views on from the window's own, wrapping (a negative goes back). */
@@ -149,10 +152,10 @@ function tab(c: Context): string | undefined {
 }
 
 const split = (direction: "right" | "down") => (c: Context) =>
-  call(via(c.tab ?? c.session, "tab.open"), null, {}, { kind: "tiled", split: direction, ...(c.tab ? { beside: c.tab } : {}) })
+  call(via(c.tab ?? c.project, "tab.open"), null, {}, { kind: "tiled", split: direction, ...(c.tab ? { beside: c.tab } : {}) })
 
 const focus = (direction: "left" | "right" | "up" | "down") => (c: Context) =>
-  call(via(c.tab ?? c.session, "pane.focus"), null, { direction })
+  call(via(c.tab ?? c.project, "pane.focus"), null, { direction })
 
 /** The pane holding the tab in front of `context`, as the store's tree has it. */
 function paneOf(c: Context): string | undefined {
@@ -162,29 +165,12 @@ function paneOf(c: Context): string | undefined {
 const resize = (direction: "left" | "right" | "up" | "down") => (c: Context) =>
   c.tab ? call(via(c.tab, "tab.update"), c.tab, { size: { direction, amount: 3 } }) : undefined
 
-/** Another session of the window's, by `offset`, wrapping. */
-function sessionAt(c: Context, offset: number): string | undefined {
-  const sessions = store.get().snapshot?.workspaces ?? []
-  const at = sessions.findIndex((w) => w.workspace_id === c.session)
-  if (!sessions.length) return undefined
-  return sessions[(at + offset + sessions.length) % sessions.length]!.workspace_id
-}
-
-/**
- * A session made with a terminal in it, shown in `window`: `tab.open` answers the tab, and its
- * `session` is the one just made. `server` is where it is made, when that is not this one.
- */
-export async function openSession(window: { show(session: string): void }, place: { name?: string; cwd?: string } = {}, server?: string): Promise<string | undefined> {
-  const tab = idOn(server, await call(methodOn(server, "tab.open"), null, {}, { kind: "session", ...place }))
-  const made = await call(methodOn(server, "tab.get"), tab)
-  const session: string | undefined = typeof made?.session === "string" ? made.session : undefined
-  if (session) window.show(session)
-  return session
-}
-
-/** `method` on `server`, or on the one this app talks to (`via`, for an id that says which). */
-function methodOn(server: string | undefined, method: string): string {
-  return server ? `${server}/${method}` : method
+/** Another project of the window's, by `offset`, wrapping. */
+function stepProject(c: Context, offset: number): string | undefined {
+  const projects = store.get().snapshot?.projects ?? []
+  const at = projects.findIndex((w) => w.project_id === c.project)
+  if (!projects.length) return undefined
+  return projects[(at + offset + projects.length) % projects.length]!.project_id
 }
 
 function fontSize(change: (size: number) => number) {
@@ -195,18 +181,18 @@ function fontSize(change: (size: number) => number) {
 }
 
 const APP: [string, string, (c: Context, index?: number) => unknown][] = [
-  ["new_window", "New window", (c) => openView(c.session).then(({ session, view }) => (session ? c.window.manager.open(session, view) : c.window.manager.open()))],
+  ["new_window", "New window", (c) => openView(c.project).then(({ project, view }) => (project ? c.window.manager.open(project, view) : c.window.manager.open()))],
   ["close_window", "Close window", (c) => c.window.close()],
   ["minimize_window", "Minimize window", (c) => c.window.renderer.minimizeWindow()],
   ["zoom_window", "Zoom window", (c) => c.window.renderer.zoomWindow()],
   ["fullscreen", "Toggle full screen", (c) => c.window.renderer.toggleFullscreen()],
-  ["new_workspace", "New session", (c) => openSession(c.window, {}, serverOf(c.session))],
-  ["close_workspace", "Close session", (c) => (c.session ? call(via(c.session, "session.close"), c.session) : undefined)],
-  ["previous_workspace", "Previous session", (c) => { const s = sessionAt(c, -1); if (s) c.window.show(s) }],
-  ["next_workspace", "Next session", (c) => { const s = sessionAt(c, 1); if (s) c.window.show(s) }],
-  ["switch_workspace", "Switch to session 1–9", (c, i) => { const s = store.get().snapshot?.workspaces[(i ?? 1) - 1]; if (s) c.window.show(s.workspace_id) }],
-  ["new_view", "New view", (c) => openView(c.session).then(({ session, view }) => session && view && c.window.show(session, view))],
-  ["new_worktree", "New worktree", (c) => (c.session && worktreeViews.canHave(c.session) ? worktreeViews.createAsking(c.window, c.session) : undefined)],
+  ["open_folder", "Open folder…", (c) => openFolder(c.window.manager, c.window)],
+  ["close_project", "Close project", (c) => (c.project ? call(via(c.project, "project.close"), c.project) : undefined)],
+  ["previous_project", "Previous project", (c) => { const s = stepProject(c, -1); if (s) c.window.show(s) }],
+  ["next_project", "Next project", (c) => { const s = stepProject(c, 1); if (s) c.window.show(s) }],
+  ["switch_project", "Switch to project 1–9", (c, i) => { const s = store.get().snapshot?.projects[(i ?? 1) - 1]; if (s) c.window.show(s.project_id) }],
+  ["new_view", "New view", (c) => openView(c.project).then(({ project, view }) => project && view && c.window.show(project, view))],
+  ["new_worktree", "New worktree", (c) => (c.project && worktreeViews.canHave(c.project) ? worktreeViews.createAsking(c.window, c.project) : undefined)],
   ["close_view", "Close view", (c) => (c.view ? call(via(c.view, "view.close"), c.view) : undefined)],
   ["reopen_closed", "Reopen closed tab", async () => {
     const [last] = (await call("tab.list", { closed: true })) ?? []
@@ -223,15 +209,20 @@ const APP: [string, string, (c: Context, index?: number) => unknown][] = [
   }],
   ["split_vertical", "Split right", split("right")],
   ["split_horizontal", "Split down", split("down")],
-  ["new_tab", "New tab in pane", (c) => call(via(c.tab ?? c.session, "tab.open"), null, {}, { kind: "tiled", pane: paneOf(c) ?? "current" })],
-  ["next_tab", "Next tab in pane", (c) => call(via(c.tab ?? c.session, "tab.focus"), c.tab ?? null, { offset: 1 })],
-  ["previous_tab", "Previous tab in pane", (c) => call(via(c.tab ?? c.session, "tab.focus"), c.tab ?? null, { offset: -1 })],
+  ["new_tab", "New tab", (c) =>
+    // A project whose views all closed shows the start screen: the tab makes it a view, and the
+    // window shows it, as ⌘T does.
+    c.view
+      ? call(via(c.tab ?? c.project, "tab.open"), null, {}, { kind: "tiled", pane: paneOf(c) ?? "current" })
+      : openView(c.project).then(({ project, view }) => project && view && c.window.show(project, view))],
+  ["next_tab", "Next tab in pane", (c) => call(via(c.tab ?? c.project, "tab.focus"), c.tab ?? null, { offset: 1 })],
+  ["previous_tab", "Previous tab in pane", (c) => call(via(c.tab ?? c.project, "tab.focus"), c.tab ?? null, { offset: -1 })],
   ["close_tab", "Close tab", (c) => (tab(c) !== undefined ? call(via(c.tab, "tab.close"), tab(c)) : undefined)],
-  ["close_pane", "Close pane and its tabs", (c) => call(via(c.tab ?? c.session, "pane.close"), paneOf(c) ?? null)],
-  ["zoom", "Zoom pane", (c) => call(via(c.tab ?? c.session, "pane.update"), paneOf(c) ?? null, { zoom: "toggle" })],
+  ["close_pane", "Close pane and its tabs", (c) => call(via(c.tab ?? c.project, "pane.close"), paneOf(c) ?? null)],
+  ["zoom", "Zoom pane", (c) => call(via(c.tab ?? c.project, "pane.update"), paneOf(c) ?? null, { zoom: "toggle" })],
   ["clear_tab", "Clear terminal", (c) => (tab(c) !== undefined ? call(via(c.tab, "tab.call"), tab(c), "clear_history", {}) : undefined)],
-  ["cycle_pane_next", "Next pane", (c) => call(via(c.tab ?? c.session, "pane.focus"), paneOf(c) ?? null, { offset: 1 })],
-  ["cycle_pane_previous", "Previous pane", (c) => call(via(c.tab ?? c.session, "pane.focus"), paneOf(c) ?? null, { offset: -1 })],
+  ["cycle_pane_next", "Next pane", (c) => call(via(c.tab ?? c.project, "pane.focus"), paneOf(c) ?? null, { offset: 1 })],
+  ["cycle_pane_previous", "Previous pane", (c) => call(via(c.tab ?? c.project, "pane.focus"), paneOf(c) ?? null, { offset: -1 })],
   ["focus_pane_left", "Focus pane left", focus("left")],
   ["focus_pane_right", "Focus pane right", focus("right")],
   ["focus_pane_up", "Focus pane up", focus("up")],
@@ -264,8 +255,8 @@ const numbered = new Map<number, (n: number) => void>()
 
 /**
  * Gives a window's `switch_view` (⌘1…⌘9) to `go`, which is passed the number, until what it
- * returns is called: the side bar numbers its rows across every session. Without it, the keys go
- * to the shown session's views by their number.
+ * returns is called: the side bar numbers its rows across every project. Without it, the keys go
+ * to the shown project's views by their number.
  */
 export function numberViews(window: number, go: (n: number) => void): () => void {
   numbered.set(window, go)

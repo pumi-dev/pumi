@@ -119,7 +119,7 @@
         "slots": {
           "description": "What it adds to the window's slots, by slot: actions (each runs one of its commands) and a component (an export of src/ui.tsx, loaded when the slot is on screen). `palette.actions` holds actions only.",
           "type": "object",
-          "propertyNames": { "enum": ["window.overlay", "session.header", "session.menu", "view.actions", "view.badge", "view.menu", "tab.toolbar", "tab.strip", "tab.overlay", "tab.menu", "tab.new", "tab.row.controls", "tab.row.footer", "tab.row.menu", "panel", "palette.actions"] },
+          "propertyNames": { "enum": ["window.overlay", "project.header", "project.menu", "view.actions", "view.badge", "view.menu", "tab.toolbar", "tab.strip", "tab.overlay", "tab.menu", "tab.new", "tab.row.controls", "tab.row.footer", "tab.row.menu", "panel", "palette.actions"] },
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,
@@ -284,7 +284,7 @@
         "default": { "description": "Its value until one is set; not kept for a `secret`." },
         "scope": {
           "description": "The narrowest object it is set on; `global` by default.",
-          "enum": ["global", "session", "view", "tab", "client"]
+          "enum": ["global", "project", "view", "tab", "client"]
         },
         "desc": { "type": "string" },
         "label": { "description": "Its title in Settings; made of its key by default.", "type": "string" },

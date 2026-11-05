@@ -9,7 +9,7 @@ import { call, engine, on } from "../app/engine.ts"
 export interface WindowEvent<D = any> {
   event: string
   match: string
-  session?: string | null
+  project?: string | null
   view?: string | null
   /** The tab it is about (`%3`, `devbox/%3`). */
   tab?: string | null

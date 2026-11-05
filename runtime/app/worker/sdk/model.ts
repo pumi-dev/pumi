@@ -305,7 +305,7 @@ export function installClasses(classes: Record<string, ModelClass>) {
 }
 
 /**
- * A model of the export: `Session`, `View`, `Tab`, `Request` or `Plugin`. Its id is a prefixed
+ * A model of the export: `Project`, `View`, `Tab`, `Request` or `Plugin`. Its id is a prefixed
  * string (`%3`); every field is a getter over the live cache, and `watch` hears the keys it names.
  */
 export abstract class Model<D extends { id: string } = any, K extends string = string> {
@@ -324,7 +324,7 @@ export abstract class Model<D extends { id: string } = any, K extends string = s
   /**
    * It, once the cache holds its fields: until then each reads `undefined`, whatever its type
    * says. A model from `workspace.openTab`, `tabs()` or the caller's own after `workspace.ready`
-   * is filled already; one reached through another's field (`session.views`, `pane.tabs`) or by
+   * is filled already; one reached through another's field (`project.views`, `pane.tabs`) or by
    * id (`workspace.getTab`) may not be. Rejects when there is no such object (it closed).
    */
   get ready(): Promise<this> {

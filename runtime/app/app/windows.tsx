@@ -1,7 +1,7 @@
-// The windows: each is a renderer and one React root, showing a session and a view of it. Which
+// The windows: each is a renderer and one React root, showing a project and a view of it. Which
 // windows there are and what each shows is the app's own (kept in `windows.json`, beside the
-// server's state), so two windows can show two sessions or two views of one; the window in front
-// moves the server's current session and view.
+// server's state), so two windows can show two projects or two views of one; the window in front
+// moves the server's current project and view.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { Profiler, useSyncExternalStore, type ReactNode } from "react"
@@ -18,8 +18,8 @@ import { settle } from "./window-views.ts"
 const FILE = join(Engine.stdpath("state") ?? ".", "windows.json")
 
 interface Saved {
-  session?: string
-  /** The view it showed of that session. */
+  project?: string
+  /** The view it showed of that project. */
   view?: string
   width?: number
   height?: number
@@ -34,14 +34,14 @@ const MACOS = process.platform === "darwin"
 export class AppWindow {
   readonly renderer: GpuixRenderer
   root!: Root
-  session?: string
-  /** The view it shows of its session: its own, whichever view the server's focus is in. */
+  project?: string
+  /** The view it shows of its project: its own, whichever view the server's focus is in. */
   view?: string
   active = false
   fullscreened = false
-  /** The view each session last showed here, so coming back to one comes back to its view. */
+  /** The view each project last showed here, so coming back to one comes back to its view. */
   private views = new Map<string, string>()
-  /** Whether the server listed the session it shows: one it stops listing was closed. */
+  /** Whether the server listed the project it shows: one it stops listing was closed. */
   private listed = false
   /** A view it was just told to show, which the server's snapshot has yet to list. */
   private pending?: string
@@ -54,16 +54,16 @@ export class AppWindow {
     readonly id: number,
     saved: Saved,
     content: (window: AppWindow) => ReactNode,
-    /** Its session and view were just made, not read from the file: the snapshot may not have them. */
+    /** Its project and view were just made, not read from the file: the snapshot may not have them. */
     fresh = false,
   ) {
     const snapshot = store.get().snapshot
-    this.session = saved.session
+    this.project = saved.project
     this.view = saved.view
-    // A restored window tells the server where it was: a session it no longer has is gone, not new.
-    this.listed = fresh ? !!saved.session && (snapshot?.workspaces.some((w) => w.workspace_id === saved.session) ?? false) : !!saved.session
+    // A restored window tells the server where it was: a project it no longer has is gone, not new.
+    this.listed = fresh ? !!saved.project && (snapshot?.projects.some((w) => w.project_id === saved.project) ?? false) : !!saved.project
     this.pending = fresh && saved.view && !snapshot?.views.some((v) => v.view_id === saved.view) ? saved.view : undefined
-    if (this.session && this.view) this.views.set(this.session, this.view)
+    if (this.project && this.view) this.views.set(this.project, this.view)
     this.renderer = createNativeRenderer({
       onError: (err) => console.error("pumi: window", err),
       onWindow: (event) => {
@@ -112,33 +112,33 @@ export class AppWindow {
   /** What a command run in this window acts on. */
   context(): commands.Context {
     const snapshot = store.get().snapshot
-    const session = snapshot?.workspaces.find((w) => w.workspace_id === this.session)
-    const view = this.view ?? session?.active_view_id ?? undefined
+    const project = snapshot?.projects.find((w) => w.project_id === this.project)
+    const view = this.view ?? project?.active_view_id ?? undefined
     const tab = snapshot?.layouts.find((l) => l.view_id === view)?.focused_tab_id ?? undefined
-    return { window: this, session: this.session, view, tab }
+    return { window: this, project: this.project, view, tab }
   }
 
   /**
-   * Shows `session`, and `view` of it: the one given, the one this window showed there last, or
-   * the session's in front. From then on the window shows its own view, wherever the server's
+   * Shows `project`, and `view` of it: the one given, the one this window showed there last, or
+   * the project's in front. From then on the window shows its own view, wherever the server's
    * focus moves.
    */
-  show(session: string, view?: string) {
+  show(project: string, view?: string) {
     const snapshot = store.get().snapshot
-    const known = view ?? this.views.get(session)
-    const active = snapshot?.workspaces.find((w) => w.workspace_id === session)?.active_view_id ?? undefined
+    const known = view ?? this.views.get(project)
+    const active = snapshot?.projects.find((w) => w.project_id === project)?.active_view_id ?? undefined
     const next = known ?? active ?? undefined
     const listed = next !== undefined && !!snapshot?.views.some((v) => v.view_id === next)
     // A view the server made a moment ago (⌘T) is not in the snapshot yet: the window goes on
     // showing what it had until it is, rather than flashing a window with nothing to draw. It
-    // stays `pending` meanwhile, so a session's move to it is not taken for a closed view.
-    const waits = session === this.session && next !== undefined && !listed
-    const moved = session !== this.session || (next !== this.view && !waits)
-    this.session = session
+    // stays `pending` meanwhile, so a project's move to it is not taken for a closed view.
+    const waits = project === this.project && next !== undefined && !listed
+    const moved = project !== this.project || (next !== this.view && !waits)
+    this.project = project
     if (!waits) this.view = next
     this.pending = next !== undefined && !listed ? next : undefined
-    this.listed = snapshot?.workspaces.some((w) => w.workspace_id === session) ?? false
-    if (next) this.views.set(session, next)
+    this.listed = snapshot?.projects.some((w) => w.project_id === project) ?? false
+    if (next) this.views.set(project, next)
     if (moved) {
       this.changed()
       this.manager.save()
@@ -146,17 +146,17 @@ export class AppWindow {
     this.tellServer()
   }
 
-  /** Shows `view`, in whichever session holds it, in this window. */
+  /** Shows `view`, in whichever project holds it, in this window. */
   showView(view: string) {
     const at = store.get().snapshot?.views.find((v) => v.view_id === view)
-    const session = at?.workspace_id ?? this.session
-    if (!session) return
-    const moved = session !== this.session || (view !== this.view && at !== undefined)
-    this.session = session
+    const project = at?.project_id ?? this.project
+    if (!project) return
+    const moved = project !== this.project || (view !== this.view && at !== undefined)
+    this.project = project
     if (at) this.view = view
     this.pending = at ? undefined : view
     this.listed = true
-    this.views.set(session, view)
+    this.views.set(project, view)
     if (moved) {
       this.changed()
       this.manager.save()
@@ -166,29 +166,29 @@ export class AppWindow {
 
   /** The window in front moves the server's focus: what a call made without a view goes by. */
   tellServer() {
-    if (!this.active || !this.session) return
-    call(via(this.session, "session.focus"), this.session).catch(() => {})
+    if (!this.active || !this.project) return
+    call(via(this.project, "project.focus"), this.project).catch(() => {})
     const view = this.pending ?? this.view
     if (view) call(via(view, "view.focus"), view).catch(() => {})
   }
 
   /**
-   * Points the window at a session and a view that are still there (`window-views.ts:settle`):
+   * Points the window at a project and a view that are still there (`window-views.ts:settle`):
    * the server's in front when the one it showed closed, and a view of it — the one this window
-   * showed there last, else the session's. Returns whether it moved.
+   * showed there last, else the project's. Returns whether it moved.
    */
   settle(snapshot: NonNullable<State["snapshot"]>): boolean {
     const next = settle(
-      { session: this.session, view: this.view, listed: this.listed, pending: this.pending },
+      { project: this.project, view: this.view, listed: this.listed, pending: this.pending },
       this.views,
       snapshot,
     )
-    const moved = next.session !== this.session || next.view !== this.view
-    this.session = next.session
+    const moved = next.project !== this.project || next.view !== this.view
+    this.project = next.project
     this.view = next.view
     this.listed = next.listed
     this.pending = next.pending
-    if (next.session && next.view) this.views.set(next.session, next.view)
+    if (next.project && next.view) this.views.set(next.project, next.view)
     return moved
   }
 
@@ -210,11 +210,11 @@ export class AppWindow {
 
   /** What the window's tree reads of it (`useWindow`), the same object until it changes. */
   info(): WindowInfo {
-    const key = `${this.session}|${this.view}|${this.active}|${this.fullscreened}`
+    const key = `${this.project}|${this.view}|${this.active}|${this.fullscreened}`
     if (this.shown?.key === key) return this.shown.info
     const info: WindowInfo = {
       id: this.id,
-      session: this.session,
+      project: this.project,
       view: this.view,
       active: this.active,
       show: (s, v) => this.show(s, v),
@@ -324,10 +324,10 @@ export class WindowManager {
     this.follow()
   }
 
-  open(session?: string, view?: string) {
-    // The session and view go in at once, so the window's first frame shows them; a view the
+  open(project?: string, view?: string) {
+    // The project and view go in at once, so the window's first frame shows them; a view the
     // server made a moment ago stays pending until the snapshot lists it.
-    this.add({ session, view }, true)
+    this.add({ project, view }, true)
     this.save()
   }
 
@@ -338,13 +338,13 @@ export class WindowManager {
     mark("w:new")
     if (!this.loop) this.loop = startFrameLoop(window.renderer, { onTerminated: () => process.exit(0) })
     mark("w:loop")
-    // A window that shows nothing yet shows the session the server has in front, and its view.
+    // A window that shows nothing yet shows the project the server has in front, and its view.
     const snapshot = store.get().snapshot
     if (snapshot && window.settle(snapshot)) window.changed()
     return window
   }
 
-  /** The window in front moved: the server's current session and view follow it. */
+  /** The window in front moved: the server's current project and view follow it. */
   front(window: AppWindow) {
     window.tellServer()
   }
@@ -373,7 +373,7 @@ export class WindowManager {
     else this.windows[0]!.renderer.activateWindow()
   }
 
-  /** A session or a view the server closed leaves the windows that showed it. */
+  /** A project or a view the server closed leaves the windows that showed it. */
   follow() {
     const snapshot = store.get().snapshot
     if (!snapshot) return
@@ -381,7 +381,7 @@ export class WindowManager {
   }
 
   save() {
-    const saved: Saved[] = this.windows.map((w) => ({ session: w.session, view: w.view }))
+    const saved: Saved[] = this.windows.map((w) => ({ project: w.project, view: w.view }))
     try {
       mkdirSync(dirname(FILE), { recursive: true })
       writeFileSync(FILE, JSON.stringify(saved))

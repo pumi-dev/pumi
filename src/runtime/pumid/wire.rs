@@ -4,7 +4,7 @@ use serde_json::Value;
 #[cfg(test)]
 use serde_json::json;
 use std::collections::BTreeMap;
-pub fn session_id(id: u64) -> String {
+pub fn project_id(id: u64) -> String {
     format!("${id}")
 }
 pub fn view_id(id: u64) -> String {
@@ -63,8 +63,8 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
     let empty = Vec::new();
     let list = |key: &str| state.get(key).and_then(Value::as_array).unwrap_or(&empty);
     let mut snapshot = model::Snapshot { version: Some(pumi_proto::PUMI_VERSION.into()), ..Default::default() };
-    let mut view_session = BTreeMap::new();
-    for s in list("sessions") {
+    let mut view_project = BTreeMap::new();
+    for s in list("projects") {
         let Some(id) = s.get("id").and_then(u) else { continue };
         let views: Vec<(u64, u64)> = s
             .get("views")
@@ -72,23 +72,26 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
             .map(|t| t.iter().filter_map(|p| Some((p.get(0)?.as_u64()?, p.get(1)?.as_u64()?))).collect())
             .unwrap_or_default();
         for (index, view) in &views {
-            view_session.entry(*view).or_insert((id, *index));
+            view_project.entry(*view).or_insert((id, *index));
         }
-        snapshot.workspaces.push(model::Workspace {
-            workspace_id: session_id(id),
-            label: s.get("name").and_then(Value::as_str).unwrap_or_default().to_string(),
+        snapshot.projects.push(model::Project {
+            project_id: project_id(id),
+            path: s.get("path").and_then(Value::as_str).unwrap_or_default().to_string(),
             active_view_id: s.get("current").and_then(u).map(view_id),
-            cwd: s.get("cwd").and_then(Value::as_str).filter(|c| !c.is_empty()).map(str::to_string),
             ..Default::default()
         });
+    }
+    let paths: Vec<String> = snapshot.projects.iter().map(|p| p.path.clone()).collect();
+    for (project, detail) in snapshot.projects.iter_mut().zip(model::details(&paths)) {
+        project.label = model::path_suffix(&project.path, detail);
     }
     let mut trees = BTreeMap::new();
     for v in list("views") {
         let Some(id) = v.get("id").and_then(u) else { continue };
-        let Some((session, index)) = view_session.get(&id).copied() else { continue };
+        let Some((project, index)) = view_project.get(&id).copied() else { continue };
         snapshot.views.push(model::View {
             view_id: view_id(id),
-            workspace_id: session_id(session),
+            project_id: project_id(project),
             number: index as usize + 1,
             label: v.get("name").and_then(Value::as_str).filter(|name| !name.is_empty()).map(str::to_string),
             worktree: state["options"][format!("view:{id}")]["worktree"]
@@ -132,7 +135,7 @@ pub fn read(state: &Value, signatures: &BTreeMap<String, String>) -> Read {
                 .map(|t| t.iter().filter_map(Value::as_str).map(str::to_string).collect())
                 .unwrap_or_default(),
             view_id: view.map(view_id).unwrap_or_default(),
-            workspace_id: view.and_then(|t| view_session.get(&t)).map(|(s, _)| session_id(*s)).unwrap_or_default(),
+            project_id: view.and_then(|t| view_project.get(&t)).map(|(s, _)| project_id(*s)).unwrap_or_default(),
             cwd: text("tab_current_path"),
             terminal_title: title.clone(),
             terminal_title_stripped: title.as_deref().map(strip_title).filter(|t| !t.is_empty()),
@@ -210,7 +213,7 @@ mod tests {
     #[test]
     fn a_state_reads_into_the_model() {
         let state = json!({
-            "sessions": [{ "id": 1, "name": "main", "cwd": "/src/pumi", "views": [[0, 1]], "current": 1 }],
+            "projects": [{ "id": 1, "path": "/src/pumi", "views": [[0, 1]], "current": 1 }],
             "views": [{
                 "id": 1,
                 "layout": ["row", [["leaf", 1, 0.5], ["leaf", 2, 0.5]]],
@@ -226,9 +229,10 @@ mod tests {
             ],
         });
         let read = read(&state, &BTreeMap::new());
-        assert_eq!(read.snapshot.workspaces[0].workspace_id, "$1");
-        assert_eq!(read.snapshot.workspaces[0].cwd.as_deref(), Some("/src/pumi"), "the folder it was opened at");
-        assert_eq!(read.snapshot.views[0].workspace_id, "$1");
+        assert_eq!(read.snapshot.projects[0].project_id, "$1");
+        assert_eq!(read.snapshot.projects[0].path, "/src/pumi", "the folder it was opened at");
+        assert_eq!(read.snapshot.projects[0].label, "pumi");
+        assert_eq!(read.snapshot.views[0].project_id, "$1");
         assert_eq!(read.snapshot.tabs.len(), 3, "a float is one of its view's tabs");
         assert_eq!(read.snapshot.tabs[0].terminal_title.as_deref(), Some("⠋ π - pumi"));
         assert_eq!(read.snapshot.tabs[0].terminal_title_stripped.as_deref(), Some("π - pumi"));
@@ -238,7 +242,7 @@ mod tests {
         assert_eq!((counter.status.as_str(), counter.label.as_deref()), ("working", Some("Counter")));
         assert_eq!(read.snapshot.tabs[0].status, "", "none set");
         let float = &read.snapshot.tabs[2];
-        assert_eq!((float.tab_id.as_str(), float.view_id.as_str(), float.workspace_id.as_str()), ("%3", "@1", "$1"));
+        assert_eq!((float.tab_id.as_str(), float.view_id.as_str(), float.project_id.as_str()), ("%3", "@1", "$1"));
         assert_eq!(float.place["kind"], "float");
         assert!(read.snapshot.others.is_empty());
         let rects: Vec<&str> = read.snapshot.layouts[0].tabs.iter().map(|t| t.tab_id.as_str()).collect();

@@ -8,13 +8,17 @@ pub fn pane_tabs(k: &Kernel) -> bool {
     k.global_option("pane_tabs").as_bool().unwrap_or(true)
 }
 /// The share of `rect` along `side`'s axis a tiled `size` is.
-fn share(size: &Option<serde_json::Value>, side: Side, rect: Option<crate::kernel::layout::Rect>) -> Result<Option<serde_json::Value>> {
+fn share(
+    size: &Option<serde_json::Value>,
+    side: Side,
+    rect: Option<crate::kernel::layout::Rect>,
+) -> Result<Option<serde_json::Value>> {
     let Some(size) = size else { return Ok(None) };
     let span = rect.map_or(1, |r| if side.axis() == Axis::Row { r.width } else { r.height });
     Ok(Some(json!(Size::parse(size)?.share_of(span))))
 }
 /// Where a tab goes, with everything the core needs chosen: the pane it joins or splits, the
-/// view, the session. A pane that is gone falls back to `beside` and `view`, as a closed tab
+/// view, the project. A pane that is gone falls back to `beside` and `view`, as a closed tab
 /// reopening does.
 pub fn resolve(k: &Kernel, caller: &Caller, spec: &PlaceSpec, moving: Option<TabId>) -> Result<PlaceSpec> {
     let current = k.model.current(caller);
@@ -47,14 +51,26 @@ pub fn resolve(k: &Kernel, caller: &Caller, spec: &PlaceSpec, moving: Option<Tab
                     ..PlaceSpec::default()
                 });
             }
+            // `current` where the caller's project has no view left: a view of it takes the
+            // tab. A pane named by its number that is gone is still an error.
+            Err(err) if pane == 0 && spec.beside.is_none() && spec.view.is_none() => {
+                let project = k.model.current_project(caller).ok_or(err)?;
+                return Ok(PlaceSpec {
+                    kind: Some(PlaceKind::View),
+                    project: Some(project),
+                    name: spec.name.clone(),
+                    index: spec.index,
+                    focus: spec.focus,
+                    ..PlaceSpec::default()
+                });
+            }
             Err(err) if spec.beside.is_none() && spec.view.is_none() => return Err(err),
             Err(_) => {}
         }
     }
-    let session = |name: Option<String>| PlaceSpec {
-        kind: Some(PlaceKind::Session),
-        name,
-        cwd: spec.cwd.clone(),
+    let project = |path: Option<String>| PlaceSpec {
+        kind: Some(PlaceKind::Project),
+        path,
         focus: spec.focus,
         ..PlaceSpec::default()
     };
@@ -65,10 +81,10 @@ pub fn resolve(k: &Kernel, caller: &Caller, spec: &PlaceSpec, moving: Option<Tab
                     match k.model.view_id(caller, view) {
                         Ok(view) => Some(k.model.views[&view].active).filter(|t| Some(*t) != moving),
                         Err(_) => {
-                            let Some(current) = current else { return Ok(session(None)) };
+                            let Some(current) = current else { return Ok(project(None)) };
                             let into = PlaceSpec {
                                 kind: Some(PlaceKind::View),
-                                session: Some(current.session),
+                                project: Some(current.project),
                                 ..Default::default()
                             };
                             return Ok(PlaceSpec { focus: spec.focus, ..into });
@@ -97,7 +113,21 @@ pub fn resolve(k: &Kernel, caller: &Caller, spec: &PlaceSpec, moving: Option<Tab
                         .or_else(|| view.tabs().into_iter().find(|t| Some(*t) != moving))
                 }),
             };
-            let Some(beside) = beside else { return Ok(session(spec.name.clone())) };
+            // No tab to go beside: the project the call is about, if it has one, takes a view of
+            // its own; with no project at all, a tab opens one.
+            let Some(beside) = beside else {
+                return Ok(match k.model.current_project(caller) {
+                    Some(project) => PlaceSpec {
+                        kind: Some(PlaceKind::View),
+                        project: Some(project),
+                        name: spec.name.clone(),
+                        index: spec.index,
+                        focus: spec.focus,
+                        ..PlaceSpec::default()
+                    },
+                    None => project(spec.path.clone()),
+                });
+            };
             let size = match k.model.tabs.get(&beside).map(|t| &t.place) {
                 Some(Place::Tiled { view }) => {
                     let area = k.view_area(*view);
@@ -120,14 +150,17 @@ pub fn resolve(k: &Kernel, caller: &Caller, spec: &PlaceSpec, moving: Option<Tab
             })
         }
         PlaceKind::View => {
-            let Some(target) =
-                spec.session.map(|s| k.model.session_id(caller, s)).transpose()?.or(current.map(|c| c.session))
+            let Some(target) = spec
+                .project
+                .map(|s| k.model.project_id(caller, s))
+                .transpose()?
+                .or_else(|| k.model.current_project(caller))
             else {
-                return Ok(session(None));
+                return Ok(project(None));
             };
-            Ok(PlaceSpec { kind: Some(PlaceKind::View), session: Some(target), ..spec.clone() })
+            Ok(PlaceSpec { kind: Some(PlaceKind::View), project: Some(target), ..spec.clone() })
         }
-        PlaceKind::Session => Ok(session(spec.name.clone())),
+        PlaceKind::Project => Ok(project(spec.path.clone())),
         PlaceKind::Float => {
             let view = match spec.view {
                 Some(view) => k.model.view_id(caller, view)?,
