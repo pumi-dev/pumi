@@ -229,7 +229,9 @@ impl CustomElement for PreviewElement {
 }
 
 /// `<webview handle="b1" src="https://…" zoom={1} autoFocus>`: a web page, the platform's own
-/// (WKWebView). `handle` names it, unique in the app: the page says what it does as `webview`
+/// (WKWebView). `scripts` is JS it runs before its own, at document start, in every document it
+/// loads; `blocklists` are files of WebKit's content-blocker rules it answers requests with (a
+/// relative path is the plugin's own). `handle` names it, unique in the app: the page says what it does as `webview`
 /// events (`{handle, url, title, loading, progress, back, forward, devtools}`, `{handle, open}`
 /// for a new window, `{handle, notice}`, `{handle, focused}`, `{handle, bridge}`, `{handle, reply}`,
 /// `{handle, snapshot, error}`) and
@@ -263,6 +265,11 @@ struct WebElement {
     theme_css: String,
     background: Option<wry::RGBA>,
     keep_keys: Vec<String>,
+    /// JS the page runs before its own, and the files of rules it is blocked by: what it was made
+    /// with, so both are handed to `Webview::new`. Changing either makes the page again.
+    scripts: Vec<String>,
+    blocklists: Vec<String>,
+    made_with: (Vec<String>, Vec<String>),
     zoom: Option<f64>,
     auto_focus: bool,
     focused_once: bool,
@@ -291,7 +298,10 @@ impl CustomElement for WebElement {
         let (Some(handle), Some(src)) = (self.handle.clone(), self.src.clone()) else {
             return gpui::Empty.into_any_element();
         };
-        if self.view.as_ref().is_none_or(|(shown, ..)| *shown != handle) {
+        // A page is made with its scripts and its blocklists, so a change to either makes it again
+        // (`WKUserScript` and the rules are the builder's): the same document, loaded afresh.
+        let made = (self.scripts.clone(), self.blocklists.clone());
+        if self.view.as_ref().is_none_or(|(shown, ..)| *shown != handle) || made != self.made_with {
             let plugin = self.plugin.clone().zip(self.dir.clone()).map(|(name, dir)| Plugin {
                 name,
                 dir: dir.into(),
@@ -301,7 +311,9 @@ impl CustomElement for WebElement {
                 theme: self.theme.clone(),
                 theme_css: self.theme_css.clone(),
             });
-            let view = cx.new(|cx| Webview::new(&src, plugin, cx));
+            let (scripts, blocklists) = (self.scripts.clone(), self.blocklists.clone());
+            let view = cx.new(|cx| Webview::new(&src, plugin, scripts, blocklists, cx));
+            self.made_with = made;
             let from = handle.clone();
             let events = cx.subscribe(&view, move |_, view, event: &WebviewEvent, cx| {
                 let data = match event {
@@ -380,6 +392,8 @@ impl CustomElement for WebElement {
             "theme" => self.theme = value,
             "themeCss" => self.theme_css = text().unwrap_or_default(),
             "background" => self.background = value.as_str().and_then(rgba),
+            "scripts" => self.scripts = strings(&value),
+            "blocklists" => self.blocklists = strings(&value),
             "keepKeys" => {
                 self.keep_keys = value
                     .as_array()
@@ -399,7 +413,21 @@ impl CustomElement for WebElement {
         }
     }
     fn supported_props(&self) -> &'static [&'static str] {
-        &["handle", "src", "plugin", "dir", "args", "theme", "themeCss", "background", "keepKeys", "zoom", "autoFocus"]
+        &[
+            "handle",
+            "src",
+            "plugin",
+            "dir",
+            "args",
+            "theme",
+            "themeCss",
+            "background",
+            "keepKeys",
+            "scripts",
+            "blocklists",
+            "zoom",
+            "autoFocus",
+        ]
     }
     fn supported_events(&self) -> &'static [&'static str] {
         &[]
@@ -409,6 +437,14 @@ impl CustomElement for WebElement {
             PAGES.with(|pages| pages.borrow_mut().remove(&handle));
         }
     }
+}
+
+/// A prop's array of strings: `scripts`, `blocklists`, `keepKeys`.
+fn strings(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .map(|list| list.iter().filter_map(|one| one.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
 }
 
 /// `#rgb`, `#rrggbb` or `#rrggbbaa` as bytes.

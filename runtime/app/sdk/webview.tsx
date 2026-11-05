@@ -216,6 +216,18 @@ export interface WebViewProps {
   src: string
   /** What the plugin's page reads as `pumi.args`. */
   args?: unknown
+  /**
+   * JS the page runs before its own, at document start, in the main frame, on every document it
+   * loads (`WKUserScript`). For something that must be there from the first paint: a filter, a
+   * skip, a keyboard shortcut. Changing the list loads the page again.
+   */
+  scripts?: string[]
+  /**
+   * Content-blocker lists: JSON files of WebKit's rules (`{"trigger", "action"}`), answered before
+   * a request leaves. A relative path is the plugin's own (as `src` is); an absolute one is read as
+   * this user. Read when the page is made: a changed file is picked up by the page's next load.
+   */
+  blocklists?: string[]
   zoom?: number
   autoFocus?: boolean
   /** A link the page opens in a new window; by default, the system's browser. */
@@ -233,7 +245,7 @@ export interface WebViewProps {
   style?: Record<string, unknown>
 }
 
-export function WebView({ handle, src, args, zoom, autoFocus, onOpen, background, keepKeys, style }: WebViewProps) {
+export function WebView({ handle, src, args, scripts, blocklists, zoom, autoFocus, onOpen, background, keepKeys, style }: WebViewProps) {
   const plugin = usePlugin()
   const tokens = useTheme()
   const palette = usePalette()
@@ -289,6 +301,8 @@ export function WebView({ handle, src, args, zoom, autoFocus, onOpen, background
         plugin={entry ? plugin : undefined}
         dir={entry?.dir}
         args={args}
+        scripts={scripts ?? []}
+        blocklists={blocklists ?? []}
         theme={theme}
         themeCss={entry ? css : undefined}
         background={background ?? theme.editor}

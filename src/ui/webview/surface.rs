@@ -85,6 +85,12 @@ impl Surface {
     pub fn dock_inspector(&self, _: &WebView) -> bool {
         true
     }
+    /// The page's blocklists: only macOS's WKWebView has WebKit's content rule lists so far.
+    pub fn blocklists(&self, _: &WebView, lists: &[crate::ui::blocklist::List], say: Box<dyn Fn(String)>) {
+        if !lists.is_empty() {
+            say("web page: blocklists need macOS for now".into());
+        }
+    }
     /// A picture of the page: only macOS's WKWebView takes one for now.
     pub fn snapshot(&self, _: &WebView, _: &str, done: Box<dyn FnOnce(Result<(), String>)>) {
         done(Err("a picture of a web page needs macOS for now".into()));
