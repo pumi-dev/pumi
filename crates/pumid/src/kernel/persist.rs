@@ -7,14 +7,17 @@ use super::{Closed, Ids, Kernel, Place, Project, Tab, TabId, View};
 use crate::tab::generic::GenericType;
 use pumi_api::{Cx, Error, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
-/// The version of `state.json`'s shape: 3 has projects that are a path. Another one is set aside.
+/// The version of `state.json`'s shape: 3 has projects that are a path. One from before that (2,
+/// whose sessions were projects) is read as it was; any other is set aside.
 pub const FORMAT: u32 = 3;
+/// The shape before projects: sessions, named, with a `cwd`.
+const SESSIONS: u32 = 2;
 pub const BLOBS_EVERY: Duration = Duration::from_secs(30);
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -141,21 +144,34 @@ pub fn save(cx: &mut Cx, full: bool) -> Result<()> {
     Ok(())
 }
 pub fn restore(cx: &mut Cx) -> Result<usize> {
-    let saved = {
+    let (saved, upgraded) = {
         let kernel = cx.host::<Kernel>()?;
         let Some(dir) = kernel.config.data_dir.clone() else { return Ok(0) };
         let path = dir.join("state.json");
         let Ok(bytes) = std::fs::read(&path) else { return Ok(0) };
-        match serde_json::from_slice::<Saved>(&bytes) {
-            Ok(saved) if saved.pumi_server == FORMAT => saved,
-            Ok(saved) => {
-                crate::server::log(&format!(
-                    "state.json is version {}; set aside as state.json.old",
-                    saved.pumi_server
-                ));
-                let _ = std::fs::rename(&path, path.with_extension("json.old"));
+        let value: Value = match serde_json::from_slice(&bytes) {
+            Ok(value) => value,
+            Err(err) => {
+                crate::server::log(&format!("state.json is unreadable ({err}); set aside as state.json.bad"));
+                let _ = std::fs::rename(&path, path.with_extension("json.bad"));
                 return Ok(0);
             }
+        };
+        let version = value.get("pumi_server").and_then(Value::as_u64).unwrap_or(0);
+        let (value, upgraded) = if version == FORMAT as u64 {
+            (value, false)
+        } else if version == SESSIONS as u64 {
+            // Its sessions are projects now: read as they were, and saved as they are.
+            crate::server::log("state.json is version 2; its sessions are projects now");
+            let _ = std::fs::rename(&path, path.with_extension("json.old"));
+            (upgraded(value), true)
+        } else {
+            crate::server::log(&format!("state.json is version {version}; set aside as state.json.old"));
+            let _ = std::fs::rename(&path, path.with_extension("json.old"));
+            return Ok(0);
+        };
+        match serde_json::from_value::<Saved>(value) {
+            Ok(saved) => (saved, upgraded),
             Err(err) => {
                 crate::server::log(&format!("state.json is unreadable ({err}); set aside as state.json.bad"));
                 let _ = std::fs::rename(&path, path.with_extension("json.bad"));
@@ -217,8 +233,52 @@ pub fn restore(cx: &mut Cx) -> Result<usize> {
         }
     }
     kernel.prune();
-    kernel.dirty = false;
+    // Read from a file of the shape before projects: the next save writes this one's.
+    kernel.dirty = upgraded;
     Ok(restored)
+}
+/// A `state.json` of shape 2, whose sessions were projects: its sessions become projects, named by
+/// their folder, and an option's `session` scope is its project's. Read before `Saved`, so an
+/// update keeps the tabs it had open instead of setting them aside.
+fn upgraded(mut saved: Value) -> Value {
+    let Some(object) = saved.as_object_mut() else { return saved };
+    object.insert("pumi_server".into(), json!(FORMAT));
+    if let Some(ids) = object.get_mut("ids").and_then(Value::as_object_mut)
+        && let Some(count) = ids.remove("session")
+    {
+        ids.insert("project".into(), count);
+    }
+    if let Some(sessions) = object.remove("sessions").and_then(|sessions| match sessions {
+        Value::Array(sessions) => Some(sessions),
+        _ => None,
+    }) {
+        let projects: Vec<Value> = sessions
+            .into_iter()
+            .map(|mut session| {
+                if let Some(project) = session.as_object_mut() {
+                    // A project is its folder: a session's name was the folder's, its `cwd` its path.
+                    project.remove("name");
+                    if let Some(cwd) = project.remove("cwd") {
+                        project.insert("path".into(), cwd);
+                    }
+                }
+                session
+            })
+            .collect();
+        object.insert("projects".into(), Value::Array(projects));
+    }
+    if let Some(options) = object.get_mut("options").and_then(Value::as_array_mut) {
+        for option in options {
+            let Some(key) = option.as_array_mut().and_then(|pair| pair.first_mut()).and_then(Value::as_object_mut)
+            else {
+                continue;
+            };
+            if let Some(count) = key.remove("session") {
+                key.insert("project".into(), count);
+            }
+        }
+    }
+    saved
 }
 fn restore_tab(cx: &mut Cx, tab: TabId, state: TabState) -> Result<()> {
     let kernel = cx.host::<Kernel>()?;
@@ -246,4 +306,42 @@ fn restore_tab(cx: &mut Cx, tab: TabId, state: TabState) -> Result<()> {
     let data = json!({ "tab": pumi_api::TabRef(tab), "block": name, "restored": true });
     kernel.emit("tab.opened", &name, About::tab(tab), data);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `state.json` of shape 2, as pumi 0.49 wrote it: one session, its folder in `cwd`.
+    fn before_projects() -> Value {
+        json!({
+            "pumi_server": 2,
+            "ids": { "session": 4, "view": 3, "pane": 2, "tab": 1 },
+            "sessions": [{
+                "id": 4,
+                "name": "pumi",
+                "cwd": "/Users/me/work/pumi",
+                "views": [[0, 3]],
+                "current": 3,
+                "last": null,
+                "activity": 9,
+                "created": 1
+            }],
+            "views": [],
+            "tabs": [],
+            "options": [["global", {}], [{ "session": 4 }, {}]],
+            "closed": []
+        })
+    }
+
+    #[test]
+    fn a_state_of_before_projects_is_read_as_projects() {
+        let saved: Saved = serde_json::from_value(upgraded(before_projects())).expect("its sessions are projects");
+        assert_eq!(saved.pumi_server, FORMAT);
+        assert_eq!(saved.ids.project, 4, "the next project's id follows the sessions it had");
+        assert_eq!(saved.projects.len(), 1);
+        assert_eq!(saved.projects[0].path, "/Users/me/work/pumi", "a session's `cwd` is a project's `path`");
+        assert_eq!(saved.projects[0].views, vec![(0, 3)]);
+        assert_eq!(saved.options[1].0, Key::Project(4), "an option's `session` is its project's");
+    }
 }
