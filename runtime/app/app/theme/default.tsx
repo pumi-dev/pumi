@@ -55,6 +55,9 @@ import { AgentsChoice, PluginCards, SchemeChoice, SETUP_WIDTH, WindowChoice } fr
 import { explainNoNewTab } from "../new-tab.ts"
 import { byLetter, useNewTabs, type NewTab } from "../../sdk/new-tabs.ts"
 import { openSettings } from "../settings/open.ts"
+import { openProject } from "../open-folder.ts"
+import { gitProjects, FOUND_FOR, type GitProject } from "./git-projects.ts"
+import { beyond, projectRows, type FoundRow, type ProjectRow } from "./project-list.ts"
 
 // A new tab nothing can open (`new_tab` names no block) says so in the window; the rest go to the log.
 const swallow = (err: unknown) => {
@@ -262,13 +265,82 @@ function ProjectTracker() {
   return null
 }
 
-type PickerRow =
-  | { kind: "here" | "recent"; id: string; label: string; current: boolean }
-  | { kind: "action"; id: string; label: string; icon: string; run(): void }
+type PickerRow = ProjectRow | FoundRow | { kind: "action"; id: string; label: string; icon: string; run(): void }
+
+/** The git projects found on this Mac, kept in `window.json` with when they were: `FOUND`. */
+const FOUND = "default.projects.found"
+type FoundProjects = { at: number; projects: GitProject[] }
+const NO_GIT: GitProject[] = []
+
+/**
+ * The git projects found on this Mac (`git-projects.ts`), to list under the projects pumi
+ * remembers: the last run's at once, a new look only once they are `FOUND_FOR` old. `looking` while
+ * there is no list at all — the first run, before the scan.
+ */
+function useFoundProjects(): { projects: GitProject[]; looking: boolean } {
+  const [saved, save] = useLocal<FoundProjects | undefined>(FOUND, undefined)
+  const [found, setFound] = useState<GitProject[]>()
+  useEffect(() => {
+    if (saved && Date.now() - saved.at < FOUND_FOR) return
+    let live = true
+    gitProjects().then((list) => {
+      if (!live) return
+      setFound(list)
+      save({ at: Date.now(), projects: list })
+    })
+    return () => {
+      live = false
+    }
+  }, [saved, save])
+  return { projects: found ?? saved?.projects ?? NO_GIT, looking: !found && !saved }
+}
+
+/**
+ * A row of the project picker: its mark, its name, and a found project's folder after it; at the
+ * far end the check of the project the window shows, or the x that takes one out of it. The keys
+ * move the highlight through rows the list may not show: the lit one is scrolled to.
+ */
+const PickerItem = memo(function PickerItem({ row, highlighted, onPick, onLit, onRemove }: { row: PickerRow; highlighted: boolean; onPick(): void; onLit(): void; onRemove(): void }) {
+  const ts = useTextSize()
+  const t = useTheme()
+  const m = useMetrics()
+  const el = useRef<{ scrollIntoView?(): void } | null>(null)
+  useEffect(() => {
+    if (highlighted) el.current?.scrollIntoView?.()
+  }, [highlighted])
+  return (
+    <div
+      ref={el as any}
+      onMouseMove={onLit}
+      onClick={onPick}
+      style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, height: 30, flexShrink: 0, paddingLeft: 10, paddingRight: 6, borderRadius: m.radiusSmall, cursor: "pointer", backgroundColor: highlighted ? t.active : undefined }}
+    >
+      {row.kind === "action" ? <Icon name={row.icon} size={14} color={t.muted} /> : null}
+      {row.kind === "found" ? <Icon name="git_branch" size={14} color={t.muted} /> : null}
+      <text style={{ fontSize: ts(13), whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{row.label}</text>
+      {row.kind === "found" ? <text style={{ fontSize: ts(12), color: t.faint, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 2, minWidth: 0 }}>{row.detail}</text> : null}
+      {(row.kind === "here" || row.kind === "recent") && row.current ? <Icon name="check" size={13} color={t.accent} /> : null}
+      <div style={{ flexGrow: 1 }} />
+      {row.kind === "here" && !row.current && highlighted ? (
+        <div
+          aria-label="Remove from This Window"
+          onClick={(e: any) => {
+            e?.stopPropagation?.()
+            onRemove()
+          }}
+          style={{ display: "flex", width: 20, height: 20, alignItems: "center", justifyContent: "center", borderRadius: m.radiusSmall, color: t.muted, hover: { backgroundColor: t.hover, color: t.text } }}
+        >
+          <Icon name="close" size={11} />
+        </div>
+      ) : null}
+    </div>
+  )
+})
 
 /** The project picker, under the project button: a search field, this window's projects, the
- * recent ones, and what opens another. The arrow keys move the highlight, Enter picks, Escape
- * closes, and the x on a row takes that project out of the window without closing it. */
+ * recent ones, and under them the git projects found on this Mac (`git-projects.ts`). The search
+ * takes them all at once. The arrow keys move the highlight, Enter picks, Escape closes, and the x
+ * on a row takes that project out of the window without closing it. */
 function ProjectPicker({ close }: { close(): void }) {
   const ts = useTextSize()
   const t = useTheme()
@@ -279,64 +351,36 @@ function ProjectPicker({ close }: { close(): void }) {
   const [recent] = useLocal(RECENT, NONE)
   const [query, setQuery] = useState("")
   const [lit, setLit] = useState(0)
+  // What pumi remembers first, what this Mac has worked in under it.
+  const { projects: git, looking } = useFoundProjects()
 
   const rows = useMemo(() => {
-    const byId = new Map(projects.map((s) => [s.project_id, s]))
-    const q = query.trim().toLowerCase()
-    const entry = (kind: "here" | "recent") => (id: string) => {
-      const s = byId.get(id)!
-      return { kind, id, label: s.label || id, current: id === window.project }
-    }
-    const open = [...here, ...(window.project && !here.includes(window.project) ? [window.project] : [])].filter((id) => byId.has(id))
-    const rest = [...recent, ...projects.map((s) => s.project_id)].filter((id, i, all) => byId.has(id) && !open.includes(id) && all.indexOf(id) === i)
-    const matches = (r: { label: string }) => !q || r.label.toLowerCase().includes(q)
     const actions: PickerRow[] = [
       { kind: "action", id: "open-folder", label: "Open Local Folder…", icon: "folder_open", run: () => runCommand("open_folder", window.id) },
+      { kind: "action", id: "clone-repository", label: "Clone Repository…", icon: "git_branch", run: () => runCommand("clone_repository", window.id) },
     ]
     return {
-      here: open.map(entry("here")).filter(matches) as PickerRow[],
-      recent: rest.map(entry("recent")).filter(matches) as PickerRow[],
+      ...projectRows({ here, recent, projects: projects.map((p) => ({ id: p.project_id, label: p.label, path: p.path })), current: window.project, found: git, query, short: tildePath }),
       actions,
     }
-  }, [projects, here, recent, query, window])
-  const all = [...rows.here, ...rows.recent, ...rows.actions]
+  }, [projects, here, recent, git, query, window])
+  // A Mac can have hundreds: the search has taken them all, and as many as fit are drawn.
+  const found = rows.found.slice(0, MOST_FOUND)
+  const all = [...rows.here, ...rows.recent, ...found, ...rows.actions]
   const at = Math.min(lit, all.length - 1)
+  const listed = rows.here.length + rows.recent.length + found.length
 
   const pick = (r: PickerRow | undefined) => {
     if (!r) return
     close()
     if (r.kind === "action") r.run()
+    else if (r.kind === "found") openFound(window, r.path).catch(swallow)
     else window.show(r.id)
   }
 
-  const row = (r: PickerRow, i: number) => {
-    const highlighted = i === at
-    return (
-      <div
-        key={r.id}
-        onMouseMove={() => i !== at && setLit(i)}
-        onClick={() => pick(r)}
-        style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, height: 30, flexShrink: 0, paddingLeft: 10, paddingRight: 6, borderRadius: m.radiusSmall, cursor: "pointer", backgroundColor: highlighted ? t.active : undefined }}
-      >
-        {r.kind === "action" ? <Icon name={r.icon} size={14} color={t.muted} /> : null}
-        <text style={{ fontSize: ts(13), whiteSpace: "nowrap", textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{r.label}</text>
-        {r.kind !== "action" && r.current ? <Icon name="check" size={13} color={t.accent} /> : null}
-        <div style={{ flexGrow: 1 }} />
-        {r.kind === "here" && !r.current && highlighted ? (
-          <div
-            aria-label="Remove from This Window"
-            onClick={(e: any) => {
-              e?.stopPropagation?.()
-              setHere((list) => list.filter((id) => id !== r.id))
-            }}
-            style={{ display: "flex", width: 20, height: 20, alignItems: "center", justifyContent: "center", borderRadius: m.radiusSmall, color: t.muted, hover: { backgroundColor: t.hover, color: t.text } }}
-          >
-            <Icon name="close" size={11} />
-          </div>
-        ) : null}
-      </div>
-    )
-  }
+  const item = (r: PickerRow, i: number) => (
+    <PickerItem key={r.id} row={r} highlighted={i === at} onPick={() => pick(r)} onLit={() => i !== at && setLit(i)} onRemove={() => setHere((list) => list.filter((id) => id !== r.id))} />
+  )
   const heading = (title: string) => (
     <div style={{ display: "flex", flexDirection: "row", alignItems: "center", height: 26, flexShrink: 0, paddingLeft: 10 }}>
       <text style={{ fontSize: ts(12), color: t.faint }}>{title}</text>
@@ -374,22 +418,36 @@ function ProjectPicker({ close }: { close(): void }) {
         </div>
         {sep}
         <div style={{ display: "flex", flexDirection: "column", flexShrink: 1, minHeight: 0, overflowY: "scroll" }}>
-          {!rows.here.length && !rows.recent.length ? (
+          {!listed && !looking ? (
             <div style={{ display: "flex", flexDirection: "row", alignItems: "center", height: 30, paddingLeft: 10 }}>
               <text style={{ fontSize: ts(13), color: t.faint }}>No matching projects</text>
             </div>
           ) : null}
           {rows.here.length ? heading("This Window") : null}
-          {rows.here.map((r, i) => row(r, i))}
-          {rows.here.length && rows.recent.length ? sep : null}
+          {rows.here.map((r, i) => item(r, i))}
+          {rows.here.length && (rows.recent.length || found.length) ? sep : null}
           {rows.recent.length ? heading("Recent") : null}
-          {rows.recent.map((r, i) => row(r, rows.here.length + i))}
+          {rows.recent.map((r, i) => item(r, rows.here.length + i))}
+          {rows.recent.length && (found.length || looking) ? sep : null}
+          {found.length ? heading("Projects on This Mac") : null}
+          {found.map((r, i) => item(r, rows.here.length + rows.recent.length + i))}
+          {looking ? (
+            <div style={{ display: "flex", flexDirection: "row", alignItems: "center", height: 30, paddingLeft: 10 }}>
+              <text style={{ fontSize: ts(13), color: t.faint }}>Looking for projects…</text>
+            </div>
+          ) : null}
         </div>
         {sep}
-        {rows.actions.map((r, i) => row(r, rows.here.length + rows.recent.length + i))}
+        {rows.actions.map((r, i) => item(r, rows.here.length + rows.recent.length + found.length + i))}
       </div>
     </anchored>
   )
+}
+
+/** Opens the git project at `path` as a project of this machine's, and shows it in `window`. */
+async function openFound(window: { show(project: string): void }, path: string) {
+  const project = await openProject(path)
+  if (project) window.show(project)
 }
 
 function ViewBar({ project }: { project?: string }) {
@@ -807,7 +865,6 @@ function Dialog({ title, detail, confirm: yes, cancel, danger, input, onConfirm,
           style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 360, padding: 16, borderRadius: m.radius + 4, backgroundColor: t.surface, borderWidth: 1, borderColor: t.border, keyboardFocusDim: false, boxShadow: { offsetX: 0, offsetY: 12, blurRadius: 32, spreadRadius: 0, color: "#00000080" } }}
         >
           <text style={{ fontSize: ts(13), fontWeight: 600, color: t.text }}>{title}</text>
-          {detail ? <text style={{ fontSize: ts(12), color: t.muted }}>{detail}</text> : null}
           {input ? (
             <input
               autoFocus
@@ -824,6 +881,7 @@ function Dialog({ title, detail, confirm: yes, cancel, danger, input, onConfirm,
               style={{ height: 26, fontSize: ts(13), color: t.text, paddingLeft: 6, paddingRight: 6, borderRadius: m.radiusSmall, borderWidth: 1, borderColor: t.accent, backgroundColor: t.editor }}
             />
           ) : null}
+          {detail ? <text style={{ fontSize: ts(12), color: t.muted }}>{detail}</text> : null}
           <div style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
             <DialogButton title={cancel} onClick={onCancel} />
             <DialogButton title={yes} danger={danger} primary onClick={onConfirm} />
@@ -917,6 +975,10 @@ const tildePath = (path: string) => (HOME && (path === HOME || path.startsWith(`
 
 /** How many projects the start screen lists under Recent. */
 const START_RECENT = 5
+/** How many projects the start screen lists under Projects on This Mac. */
+const START_FOUND = 8
+/** How many found projects the picker draws at once: a Mac can have hundreds, and the search finds any. */
+const MOST_FOUND = 200
 /** The start screen's width, but while it shows the first run's choices (`SETUP_WIDTH`). */
 const START_WIDTH = 420
 
@@ -925,8 +987,9 @@ const SetupContext = createContext<(on: boolean) => void>(() => {})
 
 /**
  * What the panes' room shows while there are none: pumi's mark, what starts something (a view of
- * the project shown, a project, a folder), the projects shown last, and the settings. On the first
- * run, until its plugins are installed, a welcome and the choices instead (`StartPlugins`).
+ * the project shown, a folder), the projects shown last, the other git projects found on this Mac
+ * (`git-projects.ts`), and the settings. On the first run, until its plugins are installed, a
+ * welcome and the choices instead (`StartPlugins`).
  */
 function StartScreen() {
   const ts = useTextSize()
@@ -943,6 +1006,9 @@ function StartScreen() {
     const ids = [...recent, ...projects.map((s) => s.project_id)].filter((id, i, all) => byId.has(id) && id !== window.project && all.indexOf(id) === i)
     return ids.slice(0, START_RECENT).map((id) => byId.get(id)!)
   }, [projects, recent, window.project])
+  // Under the projects pumi remembers: the rest of this Mac's, the project shown aside.
+  const { projects: git } = useFoundProjects()
+  const found = beyond(git, [shown?.path, ...others.map((p) => p.path)]).slice(0, START_FOUND)
   const command = (name: string) => () => runCommand(name, window.id)
   const starters = useStarters()
   const appIcon = assets.appIcon()
@@ -986,11 +1052,19 @@ function StartScreen() {
       <StartSection title="Start">
         {shown ? <StartRow icon="terminal" title="New View" command="new_view" onClick={command("new_view")} /> : null}
         <StartRow icon="folder_open" title="Open Folder…" command="open_folder" onClick={command("open_folder")} />
+        <StartRow icon="git_branch" title="Clone Repository…" onClick={command("clone_repository")} />
       </StartSection>
       {others.length ? (
         <StartSection title="Recent">
           {others.map((s) => (
             <StartRow key={s.project_id} icon="folder" title={s.label || s.project_id} detail={tildePath(s.path)} onClick={() => window.show(s.project_id)} />
+          ))}
+        </StartSection>
+      ) : null}
+      {found.length ? (
+        <StartSection title="Projects on This Mac">
+          {found.map((p) => (
+            <StartRow key={p.path} icon="git_branch" title={p.name} detail={tildePath(p.path)} onClick={() => openFound(window, p.path).catch(swallow)} />
           ))}
         </StartSection>
       ) : null}

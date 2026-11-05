@@ -74,3 +74,9 @@ export function pathOf(url: string): string | undefined {
     return undefined
   }
 }
+
+/** The folder a repository's address names: its last part, without `.git` (`…/pumi.git` is `pumi`). */
+export function repoName(address: string): string {
+  const last = address.trim().replace(/[\\/]+$/, "").split(/[\\/:]/).pop() ?? ""
+  return last.replace(/\.git$/, "")
+}
