@@ -87,13 +87,13 @@ export class SettingsWindow {
     for (const listener of this.listeners) listener()
   }
 
-  /** What a plugin's component drawn here reads of its window (`useWindow`): this one, which shows no session. */
+  /** What a plugin's component drawn here reads of its window (`useWindow`): this one, which shows no project. */
   info(): WindowInfo {
     const key = `${this.active}`
     if (this.shown?.key === key) return this.shown.info
     const info: WindowInfo = {
       id: 0,
-      session: undefined,
+      project: undefined,
       view: undefined,
       active: this.active,
       show: () => {},

@@ -9,7 +9,7 @@
   <circle cx="20" cy="9" r="3" fill="#febc2e"/>
   <circle cx="30" cy="9" r="3" fill="#28c840"/>
   <rect y="18" width="96" height="1" fill="#393b41"/>
-  <!-- The session's name. -->
+  <!-- The project's name. -->
   <rect x="10" y="27" width="40" height="5" rx="2.5" fill="#dfe1e5"/>
   <!-- Its views, one picked, with agents' status dots. -->
   <rect x="6" y="39" width="84" height="14" rx="4" fill="#494a4d"/>
@@ -21,7 +21,7 @@
   <rect x="21" y="72" width="36" height="4" rx="2" fill="#b0b1b3"/>
   <circle cx="14" cy="88" r="2.5" fill="#9399b2"/>
   <rect x="21" y="86" width="46" height="4" rx="2" fill="#b0b1b3"/>
-  <!-- A second session, folded. -->
+  <!-- A second project, folded. -->
   <rect x="10" y="104" width="32" height="4" rx="2" fill="#888a8f"/>
   <rect x="10" y="116" width="26" height="4" rx="2" fill="#888a8f"/>
   <!-- The buttons at its foot. -->

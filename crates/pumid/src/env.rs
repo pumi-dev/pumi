@@ -9,7 +9,7 @@ const DROP: &[&str] = &[
     "PUMI_TAB",
     LEGACY_TAB,
     "PUMI_VIEW",
-    "PUMI_SESSION",
+    "PUMI_PROJECT",
     "PUMI_CLIENT",
     crate::handoff::RESTART_AFTER,
     "TMUX",
@@ -78,7 +78,7 @@ fn read_login_env(shell: &str) -> Option<BTreeMap<String, String>> {
 pub struct Identity {
     pub tab: u64,
     pub view: Option<u64>,
-    pub session: Option<u64>,
+    pub project: Option<u64>,
 }
 #[derive(Debug, Clone, Default)]
 pub struct Context {
@@ -96,7 +96,7 @@ const TAB_VARS: &[Var] = &[
     ("PUMI_TAB", |_, i| Some(format!("%{}", i.tab))),
     (LEGACY_TAB, |_, i| Some(format!("%{}", i.tab))),
     ("PUMI_VIEW", |_, i| i.view.map(|t| format!("@{t}"))),
-    ("PUMI_SESSION", |_, i| i.session.map(|s| format!("${s}"))),
+    ("PUMI_PROJECT", |_, i| i.project.map(|s| format!("${s}"))),
 ];
 pub fn tab_env(
     base: &BTreeMap<String, String>,
@@ -136,14 +136,14 @@ mod tests {
         let base =
             BTreeMap::from([("PATH".to_string(), "/usr/bin".to_string()), ("TMUX".to_string(), "x".to_string())]);
         let context = Context { socket: "/d/pumi.sock".into(), bin_dir: Some("/app/bin".into()) };
-        let identity = Identity { tab: 12, view: Some(3), session: Some(1) };
+        let identity = Identity { tab: 12, view: Some(3), project: Some(1) };
         let env: BTreeMap<_, _> =
             tab_env(&base, &context, &identity, &BTreeMap::from([("A".into(), "b".into())])).into_iter().collect();
         assert_eq!(env["PUMI"], "/d/pumi.sock");
         assert_eq!(env["PUMI_TAB"], "%12");
         assert_eq!(env["PUMI_PANE"], "%12", "what a hook that reads `PUMI_PANE` sees");
         assert_eq!(env["PUMI_VIEW"], "@3");
-        assert_eq!(env["PUMI_SESSION"], "$1");
+        assert_eq!(env["PUMI_PROJECT"], "$1");
         let sep = if cfg!(windows) { ';' } else { ':' };
         assert_eq!(env["PATH"], format!("/app/bin{sep}/usr/bin"));
         assert_eq!(env["A"], "b");

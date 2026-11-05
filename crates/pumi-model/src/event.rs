@@ -5,9 +5,9 @@ use serde_json::Value;
 /// as everywhere else.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct About {
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "prefixed::session")]
-    #[schemars(with = "Option<pumi_api::SessionRef>")]
-    pub session: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "prefixed::project")]
+    #[schemars(with = "Option<pumi_api::ProjectRef>")]
+    pub project: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "prefixed::view")]
     #[schemars(with = "Option<pumi_api::ViewRef>")]
     pub view: Option<u64>,
@@ -30,13 +30,13 @@ mod prefixed {
             }
         };
     }
-    field!(session, pumi_api::SessionRef);
+    field!(project, pumi_api::ProjectRef);
     field!(view, pumi_api::ViewRef);
     field!(tab, pumi_api::TabRef);
 }
 impl About {
-    pub fn session(id: u64) -> About {
-        About { session: Some(id), ..About::default() }
+    pub fn project(id: u64) -> About {
+        About { project: Some(id), ..About::default() }
     }
     pub fn view(id: u64) -> About {
         About { view: Some(id), ..About::default() }

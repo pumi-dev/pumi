@@ -22,7 +22,7 @@ const debug = join(import.meta.dir, "..", "..", "..", "target", "debug", process
 if (existsSync(debug) && (process.env.PUMI_APPNAME !== "pumi-dev" || !process.env.PUMID_BIN)) {
   const env: Record<string, string | undefined> = { ...process.env, PUMI_APPNAME: "pumi-dev", PUMID_BIN: process.env.PUMID_BIN || debug }
   if (process.env.PUMI_APPNAME !== "pumi-dev") {
-    for (const name of ["PUMI", "PUMI_TAB", "PUMI_VIEW", "PUMI_SESSION", "PUMI_VERSION"]) delete env[name]
+    for (const name of ["PUMI", "PUMI_TAB", "PUMI_VIEW", "PUMI_PROJECT", "PUMI_VERSION"]) delete env[name]
   }
   const child = Bun.spawn([process.execPath, ...process.argv.slice(1)], { env, stdio: ["inherit", "inherit", "inherit"] })
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => child.kill(signal))

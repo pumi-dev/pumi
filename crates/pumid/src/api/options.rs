@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime};
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CoreOptionOpts {
-    /// `global`, `session`, `view`, `tab` or `client`; `plugin` is pumi-host's.
+    /// `global`, `project`, `view`, `tab` or `client`; `plugin` is pumi-host's.
     #[serde(default)]
     pub scope: Option<String>,
     /// The object's id (`$1`, `@2`, `%3`). Without one, the numeric fields name it, as the
@@ -19,7 +19,7 @@ pub struct CoreOptionOpts {
     #[serde(default)]
     pub id: Option<Ref>,
     #[serde(default)]
-    pub session: Option<u64>,
+    pub project: Option<u64>,
     #[serde(default)]
     pub view: Option<u64>,
     #[serde(default)]
@@ -40,7 +40,7 @@ pub struct CoreOptionOpts {
 fn requested(opts: &CoreOptionOpts) -> Result<Option<Scope>> {
     let named = match &opts.id {
         Some(id) => Some(match id.kind {
-            Kind::Session => Scope::Session,
+            Kind::Project => Scope::Project,
             Kind::View => Scope::View,
             Kind::Tab => Scope::Tab,
             Kind::Pane => return Err(Error::invalid_params("a pane has no options: its tabs do")),
@@ -48,14 +48,14 @@ fn requested(opts: &CoreOptionOpts) -> Result<Option<Scope>> {
         }),
         None if opts.tab.is_some() => Some(Scope::Tab),
         None if opts.view.is_some() => Some(Scope::View),
-        None if opts.session.is_some() => Some(Scope::Session),
+        None if opts.project.is_some() => Some(Scope::Project),
         None if opts.client.is_some() => Some(Scope::Client),
         None => None,
     };
     let Some(scope) = opts.scope.as_deref() else { return Ok(named) };
     let scope = match scope {
         "global" => Scope::Global,
-        "session" => Scope::Session,
+        "project" => Scope::Project,
         "view" => Scope::View,
         "tab" => Scope::Tab,
         "client" => Scope::Client,
@@ -74,7 +74,7 @@ fn target(k: &Kernel, caller: &Caller, name: &str, opts: &CoreOptionOpts) -> Res
         match &opts.id {
             Some(id) => id.of(kind),
             None => Ok(match kind {
-                Kind::Session => opts.session,
+                Kind::Project => opts.project,
                 Kind::View => opts.view,
                 Kind::Tab => opts.tab,
                 Kind::Pane | Kind::Request => None,
@@ -84,7 +84,7 @@ fn target(k: &Kernel, caller: &Caller, name: &str, opts: &CoreOptionOpts) -> Res
     };
     let key = match scope {
         Scope::Global => Key::Global,
-        Scope::Session => Key::Session(k.model.session_id(caller, number(Kind::Session)?)?),
+        Scope::Project => Key::Project(k.model.project_id(caller, number(Kind::Project)?)?),
         Scope::View => Key::View(k.model.view_id(caller, number(Kind::View)?)?),
         Scope::Tab => Key::Tab(k.model.tab_id(caller, number(Kind::Tab)?)?),
         Scope::Client => {
@@ -98,7 +98,7 @@ fn target(k: &Kernel, caller: &Caller, name: &str, opts: &CoreOptionOpts) -> Res
     let chain = match key {
         Key::Tab(p) => k.model.chain(Some(p), None, None),
         Key::View(t) => k.model.chain(None, Some(t), None),
-        Key::Session(s) => k.model.chain(None, None, Some(s)),
+        Key::Project(s) => k.model.chain(None, None, Some(s)),
         Key::Client(c) => vec![Key::Client(c), Key::Global],
         Key::Global => vec![Key::Global],
     };
@@ -123,7 +123,7 @@ fn now() -> SystemTime {
     SystemTime::now()
 }
 /// An option's value as an object sees it: its own, else the nearest one it inherits (a tab's
-/// from its view, session, then the server), else the default. `null` for a `@user` option that
+/// from its view, project, then the server), else the default. `null` for a `@user` option that
 /// is not set.
 #[api(
     name = "core.getOptionValue",

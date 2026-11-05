@@ -5,8 +5,8 @@
 export interface WireEvent<D = any> {
   event: string;
   match: string;
-  /** The session it is about (`$3`, `devbox/$3`); none when it is about no one. */
-  session?: string | null;
+  /** The project it is about (`$3`, `devbox/$3`); none when it is about no one. */
+  project?: string | null;
   view?: string | null;
   tab?: string | null;
   data: D;

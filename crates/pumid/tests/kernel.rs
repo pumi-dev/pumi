@@ -9,7 +9,7 @@ const TERM: &str = "test.term.shell";
 use std::sync::mpsc::channel;
 const CHAN: u64 = 7;
 const LISTEN: u64 = 8;
-/// A tab's, view's or session's id, as the API spells it.
+/// A tab's, view's or project's id, as the API spells it.
 fn tab(n: u64) -> Value {
     json!(format!("%{n}"))
 }
@@ -20,7 +20,7 @@ fn id(opened: &Value) -> Value {
 fn view(n: u64) -> Value {
     json!(format!("@{n}"))
 }
-fn session(n: u64) -> Value {
+fn project(n: u64) -> Value {
     json!(format!("${n}"))
 }
 fn pane(n: u64) -> Value {
@@ -45,7 +45,7 @@ impl Fixture {
     fn new() -> Fixture {
         let mut fixture = Fixture::empty();
         fixture.call("client.attach", json!([{"width": 80, "height": 24}]));
-        fixture.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "session", "name": "main"}]));
+        fixture.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "project"}]));
         fixture.call("event.on", json!(["tab.closed", {}]));
         fixture
     }
@@ -153,41 +153,42 @@ fn every_core_function_is_described_and_its_examples_fit() {
         );
         // An example says how a function is called, and fits its schema. What it answers is the
         // export's business (`cargo xtask api` calls every one): an example names the tabs, views
-        // and requests a session has (`%3`, `+7`), which a bare fixture has not got.
+        // and requests a project has (`%3`, `+7`), which a bare fixture has not got.
         assert!(!info.examples.is_empty(), "{}: an example says how it is called", info.name);
     }
 }
 #[test]
-fn a_session_without_a_name_is_named_for_its_folder() {
+fn a_project_is_its_folder() {
     let mut f = Fixture::empty();
     f.call("client.attach", json!([{"width": 80, "height": 24}]));
-    let mut name = |place: Value| {
-        let tab = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, place]));
-        let session = f.kernel.model.session_of_tab(tab.as_u64().unwrap()).unwrap();
-        f.kernel.model.sessions[&session].name.clone()
+    let open = |f: &mut Fixture, place: Value| {
+        let opened = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, place]));
+        f.kernel.model.project_of_tab(opened.as_u64().unwrap()).unwrap()
     };
-    assert_eq!(name(json!({"kind": "session", "cwd": "/tmp/my.app"})), "my_app");
-    assert_eq!(name(json!({"kind": "session", "cwd": "/tmp/my.app/"})), "my_app-2");
-    assert_eq!(name(json!({"kind": "session", "cwd": "/"})), "0");
-    let home = pumi_proto::paths::home_dir();
-    if let Some(home) = home.file_name() {
-        let home = home.to_string_lossy().replace([':', '.'], "_");
-        assert_eq!(name(json!({"kind": "session"})), home, "no folder is the home folder's name");
-        assert_eq!(name(json!({"kind": "session"})), format!("{home}-2"));
-    }
-    assert_eq!(name(json!({"kind": "session", "name": "work", "cwd": "/tmp"})), "work");
+    let first = open(&mut f, json!({"kind": "project", "path": "/tmp/my.app"}));
+    assert_eq!(f.kernel.model.projects[&first].path, "/tmp/my.app");
+    assert_eq!(open(&mut f, json!({"kind": "project", "path": "/tmp/my.app/"})), first, "the same folder");
+    assert_eq!(open(&mut f, json!({"kind": "project", "path": "/tmp/./my.app"})), first, "however it is written");
+    let home = pumi_proto::paths::home_dir().to_string_lossy().to_string();
+    let at_home = open(&mut f, json!({"kind": "project"}));
+    assert_eq!(f.kernel.model.projects[&at_home].path, home, "no folder is the home folder");
+    assert_eq!(open(&mut f, json!({"kind": "project", "path": "~"})), at_home, "and `~` is it");
+    let root = open(&mut f, json!({"kind": "project", "path": "/"}));
+    assert_eq!(f.kernel.model.projects[&root].path, "/");
+    assert_eq!(f.call("project.list", json!([])).as_array().map(Vec::len), Some(3), "one a folder");
+    assert_eq!(f.call("project.get", json!([project(first)]))["views"].as_array().map(Vec::len), Some(3), "each open a view");
 }
 #[test]
-fn a_terminal_given_no_folder_starts_in_its_sessions() {
+fn a_terminal_given_no_folder_starts_in_its_projects() {
     let mut f = Fixture::empty();
     f.call("client.attach", json!([{"width": 80, "height": 24}]));
     let dir = std::env::temp_dir().canonicalize().unwrap().display().to_string();
-    let session = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "session", "cwd": dir}]));
-    let session = f.kernel.model.session_of_tab(session.as_u64().unwrap()).unwrap();
+    let project = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "project", "path": dir}]));
+    let project = f.kernel.model.project_of_tab(project.as_u64().unwrap()).unwrap();
     let path = |f: &mut Fixture, tab: Value| f.option("tab_current_path", tab);
     let split = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 1}]));
-    assert_eq!(path(&mut f, split), json!(dir), "a split starts in the session's folder");
-    let opened = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "view", "session": session}]));
+    assert_eq!(path(&mut f, split), json!(dir), "a split starts in the project's folder");
+    let opened = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "view", "project": project}]));
     assert_eq!(path(&mut f, opened.clone()), json!(dir), "and so does a new view");
     let home = pumi_proto::paths::home_dir().display().to_string();
     let given =
@@ -198,7 +199,7 @@ fn a_terminal_given_no_folder_starts_in_its_sessions() {
     let worked = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": opened}]));
     assert_eq!(path(&mut f, worked), json!(home), "a tab in a worktree keeps to it");
     let split = f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"split": "right", "beside": 1}]));
-    assert_eq!(path(&mut f, split), json!(dir), "and the session's other views to its folder");
+    assert_eq!(path(&mut f, split), json!(dir), "and the project's other views to its folder");
 }
 #[test]
 fn splitting_keeps_the_tree_and_whoever_shows_a_pane_sizes_it() {
@@ -282,29 +283,40 @@ fn every_tab_of_a_pane_takes_its_size() {
     assert_eq!(f.option("pane_height", 2), json!(30));
 }
 #[test]
-fn closing_the_last_tab_closes_its_view_and_session_and_keeps_its_state() {
+fn closing_the_last_tab_closes_its_view_but_keeps_its_project_and_its_state() {
     let mut f = Fixture::new();
-    let seen = f.listen(&["tab.closed", "view.closed", "session.closed"]);
+    let seen = f.listen(&["tab.closed", "view.closed", "project.closed"]);
     f.call("tab.close", json!([tab(1)]));
     let names: Vec<Value> = f.heard(seen).iter().map(|e| e["event"].clone()).collect();
-    assert_eq!(names, ["tab.closed", "view.closed", "session.closed"]);
-    assert_eq!(f.call("session.list", json!([])), json!([]));
+    assert_eq!(names, ["tab.closed", "view.closed"], "the view closes, the project does not");
+    assert_eq!(f.call("project.list", json!([])), json!([project(1)]), "a project with no views is still there");
+    assert_eq!(f.call("project.get", json!([project(1)]))["views"], json!([]));
     let closed = f.call("tab.list", json!([{"closed": true}]));
     assert_eq!(closed[0]["state"]["block"], TERM);
     assert_eq!(closed[0]["state"]["data"]["command"], json!(["cat"]));
     let state = closed[0]["state"].clone();
-    let tab = f.call("core.openTab", json!([TERM, {"state": state}, {"kind": "session"}]));
-    assert_eq!(tab, 2, "ids are never reused");
-    assert_eq!(f.call("session.list", json!([])), json!([session(2)]));
+    let opened = f.call("core.openTab", json!([TERM, {"state": state}, {"kind": "view", "project": 1}]));
+    assert_eq!(id(&opened), tab(2), "ids are never reused");
+    let views = f.call("project.get", json!([project(1)]))["views"].clone();
+    assert_eq!(views.as_array().map(|v| v.len()), Some(1), "a new view in the project it was: {views}");
+}
+#[test]
+fn closing_a_project_with_no_views_closes_it() {
+    let mut f = Fixture::new();
+    f.call("tab.close", json!([tab(1)]));
+    let seen = f.listen(&["project.closed"]);
+    f.call("project.close", json!([project(1)]));
+    assert_eq!(f.heard(seen).len(), 1, "it was closed, and said so");
+    assert_eq!(f.call("project.list", json!([])), json!([]));
 }
 #[test]
 fn options_inherit_and_name_the_option_that_changed() {
     let mut f = Fixture::new();
     f.browser();
-    let seen = f.listen(&["session.changed", "tab.changed"]);
+    let seen = f.listen(&["project.changed", "tab.changed"]);
     f.call("channel.setInfo", json!(["init.lua", {}, "plugin", {}, {}]));
-    f.call("core.setOptionValue", json!(["remain_on_exit", true, {"scope": "session"}]));
-    assert_eq!(f.option("remain_on_exit", 1), json!(true), "a tab takes the session's");
+    f.call("core.setOptionValue", json!(["remain_on_exit", true, {"scope": "project"}]));
+    assert_eq!(f.option("remain_on_exit", 1), json!(true), "a tab takes the project's");
     let decl = f
         .call("core.options", json!([]))
         .as_array()
@@ -331,8 +343,8 @@ fn moving_swapping_and_floating() {
         f.call("view.get", json!([view(1)]))["layout"],
         json!({"axis": "row", "ratio": 0.5, "first": leaf(1, &[2]), "second": leaf(2, &[1])})
     );
-    f.call("core.tabSetPlace", json!([2, {"kind": "view", "session": 1}]));
-    assert_eq!(f.call("session.get", json!([session(1)]))["views"], json!([view(1), view(2)]));
+    f.call("core.tabSetPlace", json!([2, {"kind": "view", "project": 1}]));
+    assert_eq!(f.call("project.get", json!([project(1)]))["views"], json!([view(1), view(2)]));
     let float = f.call(
         "core.openTab",
         json!([TERM, {"command": ["cat"]}, {"kind": "float", "view": 1, "width": 40, "height": 10, "row": 7, "col": 20}]),
@@ -370,11 +382,11 @@ fn a_plugin_block_opens_and_is_listed() {
     assert_eq!((board["version"].clone(), board["strategy"].clone()), (json!(1), json!("exact")));
     assert!(names(&mut f).contains(&"1password.vault.itemList".to_string()));
     let tab = f
-        .call("core.openTab", json!(["pumi_dev.queue.board", {"pumi_dev.queue.rows": 5, "x": 1}, {"kind": "session"}]));
+        .call("core.openTab", json!(["pumi_dev.queue.board", {"pumi_dev.queue.rows": 5, "x": 1}, {"kind": "project"}]));
     assert_eq!(f.call("tab.get", json!([id(&tab), {"state": true}]))["state"]["block"], "pumi_dev.queue.board");
     assert_eq!(f.option("pumi_dev.queue.rows", tab.clone()), json!(5), "an argument named like its option");
     assert_eq!(f.call("core.tabCall", json!([tab, "args"]))["x"], 1);
-    let other = f.try_call("core.openTab", json!(["pumi_dev.hello.badge", {}, {"kind": "session"}]));
+    let other = f.try_call("core.openTab", json!(["pumi_dev.hello.badge", {}, {"kind": "project"}]));
     assert!(other.is_err(), "a block no manifest named does not open");
     assert_eq!(board["provider"], "pumi_dev/queue");
     f.call("core.setBlocks", blocks(json!([])));
@@ -421,7 +433,7 @@ fn a_plugin_block_has_its_version_strategy_and_methods() {
     let listed = types.as_array().unwrap().iter().find(|t| t["id"] == "pumi_dev.browser.page").expect("listed");
     assert_eq!((listed["version"].clone(), listed["strategy"].clone()), (json!(2), json!("reference")));
     assert_eq!(listed["methods"], json!(["args", "describe", "navigate"]));
-    let tab = f.call("core.openTab", json!(["pumi_dev.browser.page", {"url": "a"}, {"kind": "session"}]));
+    let tab = f.call("core.openTab", json!(["pumi_dev.browser.page", {"url": "a"}, {"kind": "project"}]));
     let state = f.call("tab.get", json!([id(&tab), {"state": true}]))["state"].clone();
     assert_eq!((state["block_version"].clone(), state["strategy"].clone()), (json!(2), json!("reference")));
     // Its own methods are its plugin's functions: the host calls `pumi_dev.browser.page.navigate`.
@@ -430,7 +442,7 @@ fn a_plugin_block_has_its_version_strategy_and_methods() {
     let mut older = state.clone();
     older["block_version"] = json!(1);
     assert!(
-        f.try_call("core.openTab", json!(["pumi_dev.browser.page", {"state": older}, {"kind": "session"}])).is_err()
+        f.try_call("core.openTab", json!(["pumi_dev.browser.page", {"state": older}, {"kind": "project"}])).is_err()
     );
     f.call("core.setBlocks", blocks(json!([])));
     assert!(f.try_call("core.tabCall", json!([tab, "navigate"])).is_err(), "the plugin went, and its methods");
@@ -466,7 +478,7 @@ fn a_block_on_the_terminal_engine_may_not_declare_an_engine_method() {
 fn a_terminal_block_nobody_declared_is_not_found() {
     let mut f = Fixture::empty();
     f.call("core.setBlocks", json!([[]]));
-    let refused = f.try_call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"kind": "session"}]));
+    let refused = f.try_call("core.openTab", json!(["terminal", {"command": ["cat"]}, {"kind": "project"}]));
     let refused = refused.unwrap_err();
     assert_eq!(refused.kind, pumi_api::ErrorKind::NotFound, "{refused:?}");
     assert!(refused.message.contains("terminal"), "{refused:?}");
@@ -504,7 +516,7 @@ fn a_file_tab_keeps_its_file_and_where_in_it_and_reads_it_without_a_renderer() {
     assert_eq!(f.call("core.tabCall", json!([tab, "at"])), json!({"path": a}), "`path` set: that file, from its top");
     let state = f.call("tab.get", json!([id(&tab), {"state": true}]))["state"].clone();
     assert_eq!(state["strategy"], "reference");
-    let copy = f.call("core.openTab", json!(["file", {"state": state}, {"kind": "session"}]));
+    let copy = f.call("core.openTab", json!(["file", {"state": state}, {"kind": "project"}]));
     assert_eq!(f.option("path", copy.clone()), json!(a), "restored");
     assert!(f.try_call("core.setOptionValue", json!(["path", a, {"tab": 1}])).is_err(), "a file tab's option");
     std::fs::remove_dir_all(&dir).unwrap();
@@ -513,7 +525,7 @@ fn a_file_tab_keeps_its_file_and_where_in_it_and_reads_it_without_a_renderer() {
 fn a_client_drawn_tab_keeps_what_it_reported_and_restores_exactly() {
     let mut f = Fixture::new();
     f.browser();
-    let tab = f.call("core.openTab", json!([PAGE, {"url": "https://example.com"}, {"kind": "view", "session": 1}]));
+    let tab = f.call("core.openTab", json!([PAGE, {"url": "https://example.com"}, {"kind": "view", "project": 1}]));
     assert_eq!(f.option("url", tab.clone()), json!("https://example.com"), "an argument named like its option");
     f.call("core.setOptionValue", json!(["url", "https://example.com/b", {"tab": tab}]));
     let data = json!({"back": ["https://example.com"]});
@@ -521,7 +533,7 @@ fn a_client_drawn_tab_keeps_what_it_reported_and_restores_exactly() {
     f.call("core.setOptionValue", json!(["zoom", 1.5, {"tab": tab}]));
     let state = f.call("tab.get", json!([id(&tab), {"state": true}]))["state"].clone();
     assert_eq!(state["strategy"], "exact");
-    let copy = f.call("core.openTab", json!([PAGE, {"state": state}, {"kind": "view", "session": 1}]));
+    let copy = f.call("core.openTab", json!([PAGE, {"state": state}, {"kind": "view", "project": 1}]));
     for name in ["url", "zoom", "title"] {
         let a = f.option(name, tab.clone());
         assert_eq!(f.option(name, copy.clone()), a, "{name}");
@@ -535,20 +547,21 @@ fn an_older_state_is_refused() {
     let mut f = Fixture::new();
     let mut state = f.call("tab.get", json!([tab(1), {"state": true}]))["state"].clone();
     state["block_version"] = json!(0);
-    let err = f.try_call("core.openTab", json!([TERM, {"state": state}, {"kind": "session"}])).unwrap_err();
+    let err = f.try_call("core.openTab", json!([TERM, {"state": state}, {"kind": "project"}])).unwrap_err();
     assert!(err.message.contains("version 0"), "{}", err.message);
 }
 #[test]
 fn chan_autocmds_queue_notifications_for_their_channel() {
     let mut f = Fixture::new();
-    f.call("event.on", json!(["session.changed", {}]));
+    f.call("event.on", json!(["project.changed", {}]));
     f.kernel.out.clear();
-    f.call("session.update", json!([session(1), {"name": "work"}]));
+    f.call("core.openTab", json!([TERM, {"command": ["cat"]}, {"kind": "view", "project": 1}]));
+    f.call("core.setCurrentView", json!([2]));
     let sent: Vec<Value> =
         f.kernel.out.iter().filter(|(chan, _)| *chan == CHAN).map(|(_, m)| serde_json::from_str(m).unwrap()).collect();
     let methods: Vec<&str> = sent.iter().map(|m| m["method"].as_str().unwrap()).collect();
     assert_eq!(methods, ["redraw", "rpc.event"], "an attached client gets the change in its stream too");
-    assert_eq!(sent[1]["params"][1]["event"], "session.changed");
-    assert_eq!(sent[1]["params"][1]["match"], session(1), "matched by the session's id");
-    assert_eq!(sent[1]["params"][1]["data"]["patch"]["name"], "work");
+    assert_eq!(sent[1]["params"][1]["event"], "project.changed");
+    assert_eq!(sent[1]["params"][1]["match"], project(1), "matched by the project's id");
+    assert_eq!(sent[1]["params"][1]["data"]["patch"]["activeView"], view(2));
 }

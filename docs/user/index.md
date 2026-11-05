@@ -5,7 +5,7 @@ order: 1
 description: Install pumi on macOS, Linux or Windows, and find your way around.
 ---
 
-pumi is a terminal app for running coding agents side by side. A window holds sessions, a session holds views, a view holds panes, and a pane holds tabs. Every part of it is a plugin you can turn off, replace or write yourself.
+pumi is a terminal app for running coding agents side by side. A window holds projects, a project holds views, a view holds panes, and a pane holds tabs. Every part of it is a plugin you can turn off, replace or write yourself.
 
 One line installs the app, its server and the `pumi` command, then opens the app. On macOS and Linux:
 
@@ -53,13 +53,13 @@ scripts/release/build.sh          # any OS: a release build for this machine, in
 
 ## How it fits together
 
-`pumid` is the server. It owns every session, view, pane and tab, and the programs in them, so they keep running when you close the window. The app draws the window and runs the plugins. The `pumi` command talks to the server, and is on the `PATH` of every tab.
+`pumid` is the server. It owns every project, view, pane and tab, and the programs in them, so they keep running when you close the window. The app draws the window and runs the plugins. The `pumi` command talks to the server, and is on the `PATH` of every tab.
 
 ```text
-session ─ view ─ pane ─ tab      %3 is a tab, :4 a pane, @2 a view, $1 a session, +7 a request
+project ─ view ─ pane ─ tab      %3 is a tab, :4 a pane, @2 a view, $1 a project, +7 a request
 ```
 
-A view is what the window shows: its panes, split side by side. A session can have several views, and each window shows one of its own — a second window opens a view of its own, and the view bar switches only that window. A pane holds tabs, with a strip of them on top and one in front; a tab holds a terminal, an agent, a page or a file. Set `pane_tabs` to `false` for one tab to a pane, as in tmux.
+A project is a folder, and there is one project per folder: opening a folder that is already open shows that project. A view is what the window shows: its panes, split side by side. A project can have several views, and each window shows one of its own — a second window opens a view of its own, and the view bar switches only that window. A pane holds tabs, with a strip of them on top and one in front; a tab holds a terminal, an agent, a page or a file. Set `pane_tabs` to `false` for one tab to a pane, as in tmux.
 
 pumi opens nothing by itself: every tab is a plugin's. The server runs terminals, but a shell in a tab is the [Terminal](https://github.com/pumi-dev/plugins/tree/main/terminal) plugin, agents are the [Agents](https://github.com/pumi-dev/plugins/tree/main/agents) plugin, and the list of what to open is the [Launcher](https://github.com/pumi-dev/plugins/tree/main/launcher) plugin. On the first run the start screen offers Launcher, Terminal, Agents and Browser, all ticked; untick what you don't want. New tabs then open the first of them you installed, in that order. Settings ▸ General ▸ New tabs open (the `new_tab` option) changes it, from the same list as the `+` menu: Terminal, each agent, the Launcher's list, and the blocks of plugins that add nothing to the menu (Film, Diff). While it names nothing installed, new tabs open the Launcher's list, else a shell, else the first thing on that list. With nothing installed, a new tab doesn't open, and pumi says to install a plugin.
 
@@ -73,7 +73,7 @@ Everything pumi keeps is in plain files you can read, edit and commit. On macOS 
 | `~/.config/pumi/config.ghostty` | The terminals' settings (font, cursor, colours, padding), in Ghostty's config syntax: [Command line](cli.md#settings) lists the keys. Watched too. |
 | `~/.config/pumi/plugin-lock.json` | Installed plugins and where they came from. |
 | `~/.local/share/pumi/installed/` | The plugins themselves (their logs are beside them, in `plugins/`). |
-| `~/Library/Application Support/pumi/` (Linux: `~/.local/share/pumi/`) | The server's state: its sessions, views, tabs and options, its log, and its socket (`$PUMI`). |
+| `~/Library/Application Support/pumi/` (Linux: `~/.local/share/pumi/`) | The server's state: its projects, views, tabs and options, its log, and its socket (`$PUMI`). |
 | `~/.local/state/pumi/plugins/<owner.name>/` | What a plugin keeps between runs. |
 
 On Windows, settings and the plugin lock are in `%APPDATA%\pumi\`, the plugins in `%LOCALAPPDATA%\pumi\data\installed\`, what they keep in `%LOCALAPPDATA%\pumi\state\plugins\<owner.name>\`, and the server's state in `%LOCALAPPDATA%\pumi\`; `$PUMI` is a named pipe. A set `XDG_CONFIG_HOME`, `XDG_DATA_HOME` or `XDG_STATE_HOME` moves the matching directory on every OS.

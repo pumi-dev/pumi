@@ -283,7 +283,7 @@ fn sigil(param: &str) -> Option<char> {
         "tab" => Some('%'),
         "pane" => Some(':'),
         "view" => Some('@'),
-        "session" => Some('$'),
+        "project" => Some('$'),
         "request" => Some('+'),
         _ => None,
     }
@@ -464,7 +464,7 @@ fn explained(command: &Command, err: Error) -> Error {
     if command.flag("kind").is_some() && err.message.contains("missing field `kind`") {
         let mut err = err;
         err.message = format!(
-            "{}: add --kind tiled (in a pane: --split, --pane, --beside), --kind float, --kind view or --kind session",
+            "{}: add --kind tiled (in a pane: --split, --pane, --beside), --kind float, --kind view or --kind project",
             err.message
         );
         return err;
@@ -489,7 +489,7 @@ fn text(word: &str) -> Value {
     serde_json::from_str(word).unwrap_or_else(|_| Value::String(word.to_string()))
 }
 
-/// The ids a tab's environment names, where a command's own argument leaves it out: `$PUMI_SESSION`
+/// The ids a tab's environment names, where a command's own argument leaves it out: `$PUMI_PROJECT`
 /// and `$PUMI_VIEW`.
 fn fill_defaults(command: &Command, given: &mut Given) -> Result<(), Error> {
     for (i, param) in command.params.iter().enumerate() {
@@ -497,7 +497,7 @@ fn fill_defaults(command: &Command, given: &mut Given) -> Result<(), Error> {
             continue;
         }
         let var = match param.name.as_str() {
-            "session" => "PUMI_SESSION",
+            "project" => "PUMI_PROJECT",
             "view" => "PUMI_VIEW",
             _ => continue,
         };
@@ -603,7 +603,7 @@ fn heard(event: &Value) -> String {
     let name = event["event"].as_str().unwrap_or("");
     let matched = event["match"].as_str().filter(|m| !m.is_empty()).map(|m| format!(" {m}")).unwrap_or_default();
     let mut about = String::new();
-    for key in ["session", "view", "tab", "request"] {
+    for key in ["project", "view", "tab", "request"] {
         if let Some(id) = event[key].as_str() {
             about.push(' ');
             about.push_str(id);

@@ -1,5 +1,5 @@
 // The plugins the start screen offers on the first run: pumi itself runs terminals, pages and
-// agents' sessions, but every tab is a plugin's block (`pumi-dev/plugins`), so a fresh install has
+// agents' projects, but every tab is a plugin's block (`pumi-dev/plugins`), so a fresh install has
 // nothing to open until some are installed. Each is ticked to start with; the user unticks what
 // they don't want. They are offered on the first run only: once shown, a later run doesn't offer
 // them again, answered or not (`OFFERED`, kept in window.json: the window's own, not a setting).

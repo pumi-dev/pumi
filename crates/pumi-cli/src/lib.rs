@@ -41,7 +41,7 @@ pub fn usage_text() -> String {
         "
 An argument is JSON when it reads as JSON (`3`, `true`, `{}`) and text when it does not. Flags are
 the options of the function's last argument, in kebab case: `--title x`, `--no-focus`, `--state`.
-A tab is an id (`%3`), a pane `:4`, a view `@2`, a session `$1`, a request `+4`; a bare number
+A tab is an id (`%3`), a pane `:4`, a view `@2`, a project `$1`, a request `+4`; a bare number
 takes the sigil its place asks for. After `--`, a program and its words: `pumi tab open
 pumi_dev.terminal.shell --split right -- pi \"hi\"` (the Terminal plugin's block).
 

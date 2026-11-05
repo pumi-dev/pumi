@@ -4,7 +4,7 @@ version = "0.48.0"
 edition = "2024"
 publish = false
 license = "GPL-3.0-or-later"
-description = "The core's model as pumi-host sees it: sessions, views, tabs, options and channels, read from the core (`core.model`) when its events say it moved, and the groups autocmds are made in."
+description = "The core's model as pumi-host sees it: projects, views, tabs, options and channels, read from the core (`core.model`) when its events say it moved, and the groups autocmds are made in."
 [dependencies]
 pumi-sys = { path = "../pumi-sys" }
 pumi-api = { path = "../pumi-api" }

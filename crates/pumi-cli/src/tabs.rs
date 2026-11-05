@@ -69,10 +69,10 @@ fn connect(address: &Address) -> Result<Client, Error> {
     Ok(client)
 }
 
-/// `tab.list`'s filters from the command line: `--session`, `--view`, `--block`, `--trait`.
+/// `tab.list`'s filters from the command line: `--project`, `--view`, `--block`, `--trait`.
 fn filters(words: &Words) -> Value {
     let mut opts = serde_json::Map::new();
-    for name in ["session", "view", "block", "trait"] {
+    for name in ["project", "view", "block", "trait"] {
         if let Some(value) = words.flag(name) {
             opts.insert(name.into(), json!(value));
         }
@@ -94,11 +94,11 @@ fn tabs(client: &mut Client, opts: Value) -> Result<Vec<Value>, Error> {
     Ok(out)
 }
 
-/// `pumi tab list [--session ID] [--view ID] [--block NAME] [--trait NAME]`: a table of the tabs.
+/// `pumi tab list [--project ID] [--view ID] [--block NAME] [--trait NAME]`: a table of the tabs.
 fn tab_list(address: &Address, rest: &[String]) -> Result<i32, Error> {
     let words = words(rest)?;
-    let form = "pumi tab list [--session ID] [--view ID] [--block NAME] [--trait NAME] [--closed] [--json]";
-    words.only(&["session", "view", "block", "trait"], form)?;
+    let form = "pumi tab list [--project ID] [--view ID] [--block NAME] [--trait NAME] [--closed] [--json]";
+    words.only(&["project", "view", "block", "trait"], form)?;
     if !words.positionals.is_empty() {
         return Err(usage(format!("it takes no arguments\n{form}")));
     }
@@ -213,6 +213,6 @@ mod tests {
         assert_eq!(words.positionals, vec!["--literal"]);
         assert_eq!((words.flag("view"), words.flag("block")), (Some("@2"), Some("terminal")));
         assert!(words.only(&["view"], "form").is_err(), "--block is not allowed there");
-        assert!(super::words(&["--session".to_string()]).is_err(), "a flag needs its value");
+        assert!(super::words(&["--project".to_string()]).is_err(), "a flag needs its value");
     }
 }

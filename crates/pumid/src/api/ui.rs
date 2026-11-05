@@ -8,9 +8,9 @@ use serde_json::{Value, json};
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AttachOpts {
-    /// The session it shows; the current one by default.
+    /// The project it shows; the current one by default.
     #[serde(default)]
-    pub session: Option<u64>,
+    pub project: Option<u64>,
     /// Its size in cells: what its views are laid out in.
     #[serde(default)]
     pub width: Option<u32>,
@@ -25,10 +25,10 @@ pub struct Attached {
     /// The last event already in `state`; every later one arrives as a `redraw` notification,
     /// `{"method": "redraw", "params": [event, …]}`, in order.
     pub seq: u64,
-    /// The whole model: sessions, views, tabs with their places and options, and options.
+    /// The whole model: projects, views, tabs with their places and options, and options.
     pub state: Value,
 }
-/// Attach as a UI: the channel becomes a client showing a session,
+/// Attach as a UI: the channel becomes a client showing a project,
 /// is sent the model, then every change to it in order (the attach stream).
 #[api(name = "client.attach", internal, example(args = r#"[{"width": 120, "height": 40}]"#))]
 pub fn pumi_ui_attach(cx: &mut Cx, opts: Option<AttachOpts>) -> Result<Attached> {
@@ -37,18 +37,18 @@ pub fn pumi_ui_attach(cx: &mut Cx, opts: Option<AttachOpts>) -> Result<Attached>
     if caller.channel == crate::kernel::SERVER {
         return Err(Error::invalid_params("the core cannot attach to itself"));
     }
-    let session = match opts.session {
-        Some(s) => k.model.session_id(&caller, s)?,
-        None => k.model.current(&caller).map(|c| c.session).unwrap_or(0),
+    let project = match opts.project {
+        Some(s) => k.model.project_id(&caller, s)?,
+        None => k.model.current(&caller).map(|c| c.project).unwrap_or(0),
     };
     let (width, height) = (opts.width.unwrap_or(80).max(1), opts.height.unwrap_or(24).max(1));
     let chan = k.model.chans.get_mut(&caller.channel).ok_or_else(|| Error::not_found("no such channel"))?;
-    chan.ui = Some(Ui { session, width, height, from_seq: u64::MAX });
+    chan.ui = Some(Ui { project, width, height, from_seq: u64::MAX });
     set_size(k, caller.channel, width, height);
-    if session != 0 {
-        k.touch_session(session);
+    if project != 0 {
+        k.touch_project(project);
     }
-    k.emit("client.attached", "", About::default(), json!({ "client": caller.channel, "session": session }));
+    k.emit("client.attached", "", About::default(), json!({ "client": caller.channel, "project": project }));
     let seq = k.events.seq();
     if let Some(ui) = k.model.chans.get_mut(&caller.channel).and_then(|c| c.ui.as_mut()) {
         ui.from_seq = seq;
@@ -62,7 +62,7 @@ pub fn pumi_get_state(cx: &mut Cx) -> Result<Value> {
     let (_, k) = kernel(cx)?;
     Ok(json!({ "seq": k.events.seq(), "state": k.dump() }))
 }
-/// The core's whole model, as pumi-host's replica holds it: sessions, views, tabs, channels and
+/// The core's whole model, as pumi-host's replica holds it: projects, views, tabs, channels and
 /// options, and `events`, the last event whose change it includes. The host reads it again when
 /// it may have moved; events reach it as they reach anyone, by `event.on`.
 #[api(name = "core.model", internal, effect = "read", example(args = "[]"))]
@@ -149,7 +149,7 @@ fn chan_info(k: &Kernel, id: ChanId) -> Value {
         "id": id,
         "client": { "name": chan.info.name, "version": chan.info.version, "type": chan.info.ty, "attributes": chan.info.attributes },
         "tab": chan.tab,
-        "ui": chan.ui.as_ref().map(|ui| json!({ "session": ui.session, "width": ui.width, "height": ui.height })),
+        "ui": chan.ui.as_ref().map(|ui| json!({ "project": ui.project, "width": ui.width, "height": ui.height })),
         "primary": primary(k) == Some(id),
     })
 }

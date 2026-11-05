@@ -1,12 +1,12 @@
-//! `view.update`: a view's name, its place among its session's views (or another session's), its
+//! `view.update`: a view's name, its place among its project's views (or another project's), its
 //! layout (a tree, one of tmux's presets, or the next preset) and its zoom.
 use super::kernel;
 use super::select::{Zoom, set_zoom};
 use crate::kernel::layout::{self, Size};
 use crate::kernel::objects::{LayoutTree, patch_field};
 use crate::kernel::options::Key;
-use crate::kernel::{Kernel, SessionId, ViewId};
-use pumi_api::{Cx, Error, PaneRef, Result, SessionRef, ViewRef, api};
+use crate::kernel::{Kernel, ProjectId, ViewId};
+use pumi_api::{Cx, Error, PaneRef, ProjectRef, Result, ViewRef, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -42,28 +42,28 @@ pub struct ViewPatch {
     /// Its name; `null` gives it back its automatic name (its active tab's title).
     #[serde(default, deserialize_with = "patch_field", skip_serializing_if = "Option::is_none")]
     pub name: Option<Option<String>>,
-    /// Its index in its session, which must be free.
+    /// Its index in its project, which must be free.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index: Option<u32>,
-    /// The session it moves to, at `index` or its first free one.
+    /// The project it moves to, at `index` or its first free one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<SessionRef>,
+    pub project: Option<ProjectRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layout: Option<LayoutSpec>,
     /// The pane zoomed to fill it, which gets its focus; `null` unzooms it.
     #[serde(default, deserialize_with = "patch_field", skip_serializing_if = "Option::is_none")]
     pub zoom: Option<Option<PaneRef>>,
 }
-/// Change a view: its name, index or session, layout, and zoom. Each change fires `view.changed`
+/// Change a view: its name, index or project, layout, and zoom. Each change fires `view.changed`
 /// with what changed. No id is the caller's view.
 #[api(
     name = "view.update",
     example(args = r#"["@1", {"name": "tests", "zoom": ":3"}]"#, result = "null"),
-    example(args = r#"["@1", {"index": 5}]"#, result = "null", desc = "To index 5 of its session."),
+    example(args = r#"["@1", {"index": 5}]"#, result = "null", desc = "To index 5 of its project."),
     example(
-        args = r#"["@1", {"session": "$2"}]"#,
+        args = r#"["@1", {"project": "$2"}]"#,
         result = "null",
-        desc = "Into session $2, at its first free index."
+        desc = "Into project $2, at its first free index."
     ),
     example(args = r#"["@1", {"layout": "even-horizontal"}]"#, result = "null"),
     example(args = r#"["@1", {"layout": {"offset": 1}}]"#, result = "null", desc = "The next preset."),
@@ -79,8 +79,8 @@ pub fn pumi_view_update(cx: &mut Cx, view: Option<ViewRef>, patch: ViewPatch) ->
     if let Some(name) = patch.name {
         k.call_core(&caller, "core.viewSetName", json!([view, name]))?;
     }
-    if patch.index.is_some() || patch.session.is_some() {
-        set_place(cx, view, patch.session, patch.index)?;
+    if patch.index.is_some() || patch.project.is_some() {
+        set_place(cx, view, patch.project, patch.index)?;
     }
     if let Some(layout) = patch.layout {
         set_layout(cx, view, layout)?;
@@ -128,29 +128,29 @@ fn set_layout(cx: &mut Cx, view: ViewId, layout: LayoutSpec) -> Result<()> {
     let laid = layout::preset(layout::PRESETS[at], &panes, main, k.view_area(view))?;
     k.call_core(&caller, "core.viewSetLayout", json!([view, laid.to_value()])).map(|_| ())
 }
-/// Moves a view to another index or session. A view is in one session.
-fn set_place(cx: &mut Cx, view: ViewId, session: Option<SessionRef>, index: Option<u32>) -> Result<()> {
+/// Moves a view to another index or project. A view is in one project.
+fn set_place(cx: &mut Cx, view: ViewId, project: Option<ProjectRef>, index: Option<u32>) -> Result<()> {
     let (caller, k) = kernel(cx)?;
-    let holding: Vec<SessionId> =
-        k.model.sessions.values().filter(|s| s.views.iter().any(|(_, v)| *v == view)).map(|s| s.id).collect();
-    let edit = |k: &Kernel, session: SessionId| {
-        let s = &k.model.sessions[&session];
+    let holding: Vec<ProjectId> =
+        k.model.projects.values().filter(|s| s.views.iter().any(|(_, v)| *v == view)).map(|s| s.id).collect();
+    let edit = |k: &Kernel, project: ProjectId| {
+        let s = &k.model.projects[&project];
         (s.views.clone(), s.current, s.last)
     };
-    let session = match session {
-        Some(s) => k.model.session_ref(&caller, Some(s))?,
+    let project = match project {
+        Some(s) => k.model.project_ref(&caller, Some(s))?,
         None => {
-            k.model.session_of_view(view).ok_or_else(|| Error::not_found(format!("view @{view} is in no session")))?
+            k.model.project_of_view(view).ok_or_else(|| Error::not_found(format!("view @{view} is in no project")))?
         }
     };
-    let index = index.unwrap_or_else(|| free_index(k, session));
-    match k.model.sessions[&session].views.iter().find(|(i, _)| *i == index).map(|(_, v)| *v) {
+    let index = index.unwrap_or_else(|| free_index(k, project));
+    match k.model.projects[&project].views.iter().find(|(i, _)| *i == index).map(|(_, v)| *v) {
         Some(v) if v == view => return Ok(()),
         Some(_) => return Err(Error::invalid_params(format!("index {index} in use"))),
         None => {}
     }
-    let mut put: BTreeMap<SessionId, Views> = BTreeMap::new();
-    for other in holding.iter().copied().filter(|s| *s != session) {
+    let mut put: BTreeMap<ProjectId, Views> = BTreeMap::new();
+    for other in holding.iter().copied().filter(|s| *s != project) {
         let (mut views, mut current, last) = edit(k, other);
         views.retain(|(_, v)| *v != view);
         if current == Some(view) {
@@ -158,30 +158,30 @@ fn set_place(cx: &mut Cx, view: ViewId, session: Option<SessionRef>, index: Opti
         }
         put.insert(other, (views, current, last));
     }
-    let (mut views, mut current, last) = edit(k, session);
+    let (mut views, mut current, last) = edit(k, project);
     views.retain(|(_, v)| *v != view);
     views.push((index, view));
     views.sort_by_key(|(i, _)| *i);
     if current.is_none() {
         current = Some(view);
     }
-    put.insert(session, (views, current, last));
-    let sessions: Vec<Value> = put
+    put.insert(project, (views, current, last));
+    let projects: Vec<Value> = put
         .into_iter()
-        .map(|(session, (views, current, last))| json!({ "session": session, "views": views, "current": current, "last": last }))
+        .map(|(project, (views, current, last))| json!({ "project": project, "views": views, "current": current, "last": last }))
         .collect();
-    k.call_core(&caller, "core.viewSetPlace", json!([view, sessions])).map(|_| ())
+    k.call_core(&caller, "core.viewSetPlace", json!([view, projects])).map(|_| ())
 }
-/// A session's views as they will be: `[index, view]`, then current and last.
+/// A project's views as they will be: `[index, view]`, then current and last.
 type Views = (Vec<(u32, ViewId)>, Option<ViewId>, Option<ViewId>);
 /// The lowest free index at or above `base_index`.
-fn free_index(k: &Kernel, session: SessionId) -> u32 {
+fn free_index(k: &Kernel, project: ProjectId) -> u32 {
     let base = k
         .model
         .options
-        .get("base_index", &[Key::Session(session), Key::Global])
+        .get("base_index", &[Key::Project(project), Key::Global])
         .and_then(|(v, _)| v.as_u64())
         .unwrap_or(0) as u32;
-    let used: Vec<u32> = k.model.sessions[&session].views.iter().map(|(i, _)| *i).collect();
+    let used: Vec<u32> = k.model.projects[&project].views.iter().map(|(i, _)| *i).collect();
     (base..).find(|i| !used.contains(i)).expect("a free index")
 }

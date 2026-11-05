@@ -3,7 +3,7 @@ use super::ops::{StateOpts, get_state};
 use super::options::{Decl, Key, Set};
 use super::state::{Blob, TabState};
 use super::types::Restore;
-use super::{Closed, Ids, Kernel, Place, Session, Tab, TabId, View};
+use super::{Closed, Ids, Kernel, Place, Project, Tab, TabId, View};
 use crate::tab::generic::GenericType;
 use pumi_api::{Cx, Error, Result};
 use serde::{Deserialize, Serialize};
@@ -13,15 +13,15 @@ use std::io::Write;
 use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
-/// The version of `state.json`'s shape: 2 has views of panes of tabs. An older one is set aside.
-pub const FORMAT: u32 = 2;
+/// The version of `state.json`'s shape: 3 has projects that are a path. Another one is set aside.
+pub const FORMAT: u32 = 3;
 pub const BLOBS_EVERY: Duration = Duration::from_secs(30);
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Saved {
     pumi_server: u32,
     ids: Ids,
-    sessions: Vec<Session>,
+    projects: Vec<Project>,
     views: Vec<View>,
     tabs: Vec<SavedTab>,
     options: Vec<(Key, BTreeMap<String, Set>)>,
@@ -105,13 +105,13 @@ pub fn save(cx: &mut Cx, full: bool) -> Result<()> {
         .options
         .keys()
         .into_iter()
-        .filter(|k| matches!(k, Key::Global | Key::Session(_) | Key::View(_)))
+        .filter(|k| matches!(k, Key::Global | Key::Project(_) | Key::View(_)))
         .map(|k| (k, kernel.model.options.local(k)))
         .collect();
     let saved = Saved {
         pumi_server: FORMAT,
         ids: kernel.ids.clone(),
-        sessions: kernel.model.sessions.values().cloned().collect(),
+        projects: kernel.model.projects.values().cloned().collect(),
         views: kernel.model.views.values().cloned().collect(),
         tabs: saved_tabs,
         options,
@@ -166,7 +166,7 @@ pub fn restore(cx: &mut Cx) -> Result<usize> {
     {
         let kernel = cx.host::<Kernel>()?;
         kernel.ids = saved.ids;
-        kernel.model.sessions = saved.sessions.into_iter().map(|s| (s.id, s)).collect();
+        kernel.model.projects = saved.projects.into_iter().map(|s| (s.id, s)).collect();
         kernel.model.views = saved.views.into_iter().map(|t| (t.id, t)).collect();
         for decl in saved.decls {
             kernel.model.options.restore_decl(decl);

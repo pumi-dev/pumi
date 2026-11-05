@@ -4,8 +4,8 @@ pub use super::layout::{PlaceKind, PlaceSpec};
 use super::options::Key;
 use super::state::{Origin, STATE_VERSION, TabState, now_rfc3339};
 use super::types::{Restore, SaveOpts};
-use super::{CLOSED_LIMIT, Closed, Float, Kernel, Place, Session, SessionId, Tab, TabId, View, ViewId};
-use pumi_api::{Cx, Error, Kind, PaneRef, Ref, Result, SessionRef, TabRef, ViewRef};
+use super::{CLOSED_LIMIT, Closed, Float, Kernel, Place, Project, ProjectId, Tab, TabId, View, ViewId};
+use pumi_api::{Cx, Error, Kind, PaneRef, ProjectRef, Ref, Result, TabRef, ViewRef};
 use pumi_model::objects::TabPlace;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -27,13 +27,12 @@ enum Target {
         index: Option<usize>,
     },
     NewView {
-        session: SessionId,
+        project: ProjectId,
         index: Option<u32>,
         name: Option<String>,
     },
-    NewSession {
-        name: Option<String>,
-        cwd: Option<String>,
+    NewProject {
+        path: Option<String>,
     },
     Float {
         view: ViewId,
@@ -79,15 +78,15 @@ fn target(cx: &mut Cx, spec: &PlaceSpec, moving: Option<TabId>) -> Result<Target
             Ok(Target::Split { view, beside: pane, side: spec.split.unwrap_or(Side::Down), share, full })
         }
         PlaceKind::View => {
-            let session = kernel.model.session_id(&caller, spec.session.ok_or_else(|| needs("session"))?)?;
+            let project = kernel.model.project_id(&caller, spec.project.ok_or_else(|| needs("project"))?)?;
             if let Some(index) = spec.index
-                && kernel.model.sessions[&session].views.iter().any(|(i, _)| *i == index)
+                && kernel.model.projects[&project].views.iter().any(|(i, _)| *i == index)
             {
                 return Err(Error::invalid_params(format!("index {index} in use")));
             }
-            Ok(Target::NewView { session, index: spec.index, name: spec.name.clone() })
+            Ok(Target::NewView { project, index: spec.index, name: spec.name.clone() })
         }
-        PlaceKind::Session => Ok(Target::NewSession { name: spec.name.clone(), cwd: spec.cwd.clone() }),
+        PlaceKind::Project => Ok(Target::NewProject { path: spec.path.clone() }),
         PlaceKind::Float => {
             let view = kernel.model.view_id(&caller, spec.view.ok_or_else(|| needs("view"))?)?;
             let dim = |value: &Option<Value>, what: &str| match value.as_ref() {
@@ -177,6 +176,12 @@ pub fn open_tab(cx: &mut Cx, ty: &str, mut args: Value, place: PlaceSpec) -> Res
             kernel.model.tabs.remove(&tab);
             kernel.model.options.drop_object(Key::Tab(tab));
             kernel.prune();
+            // A project this tab was to be the first of has nothing left to hold: it goes too.
+            if let Some(project) = created.project
+                && kernel.model.projects.get(&project).is_some_and(|s| s.views.is_empty())
+            {
+                kernel.close_project(project);
+            }
             return Err(err);
         }
     };
@@ -244,8 +249,7 @@ fn replace_block(cx: &mut Cx, tab: TabId, ty: &str, args: Value, state: Option<T
     Ok(tab)
 }
 /// Where a block in `tab` starts when it is given no directory: its view's `worktree`, else the
-/// folder of the session its view joins, so a session stays in the folder it was opened at (tmux's
-/// `session_path`).
+/// folder of the project its view joins.
 pub fn default_cwd(kernel: &Kernel, tab: TabId) -> Option<String> {
     let view = kernel.model.tabs.get(&tab)?.place.view()?;
     if let Some(set) = kernel.model.options.get_local("worktree", Key::View(view))
@@ -253,16 +257,27 @@ pub fn default_cwd(kernel: &Kernel, tab: TabId) -> Option<String> {
     {
         return Some(dir.to_string());
     }
-    let session = kernel.model.session_of_view(view)?;
-    kernel.model.sessions.get(&session)?.cwd.clone().filter(|cwd| !cwd.is_empty())
+    let project = kernel.model.project_of_view(view)?;
+    Some(kernel.model.projects.get(&project)?.path.clone())
 }
 /// What a new tab made besides itself, to announce in order.
 #[derive(Default)]
 struct Created {
-    session: Option<SessionId>,
+    project: Option<ProjectId>,
     view: Option<ViewId>,
 }
-/// Puts a new tab (or a moving one) where `target` says, making the pane, view or session it
+fn folder(path: Option<String>) -> String {
+    let home = pumi_proto::paths::home_dir();
+    let path = match path.as_deref() {
+        None | Some("") | Some("~") => home,
+        Some(dir) => match dir.strip_prefix("~/") {
+            Some(rest) => home.join(rest),
+            None => std::path::PathBuf::from(dir),
+        },
+    };
+    path.components().collect::<std::path::PathBuf>().to_string_lossy().to_string()
+}
+/// Puts a new tab (or a moving one) where `target` says, making the pane, view or project it
 /// needs. A tab put into a pane comes to its front when `front`.
 fn build(kernel: &mut Kernel, tab: TabId, target: Target, args: &Value, front: bool) -> Result<(Place, Created)> {
     let mut created = Created::default();
@@ -282,21 +297,26 @@ fn build(kernel: &mut Kernel, tab: TabId, target: Target, args: &Value, front: b
             v.insert(pane, tab, index, front)?;
             Place::Tiled { view }
         }
-        Target::NewView { session, index, name } => {
-            let view = new_view(kernel, session, index, name, tab);
+        Target::NewView { project, index, name } => {
+            let view = new_view(kernel, project, index, name, tab);
             created.view = Some(view);
             Place::Tiled { view }
         }
-        Target::NewSession { name, cwd } => {
-            let cwd = cwd.or_else(|| args.get("cwd").and_then(Value::as_str).map(str::to_string));
-            let name = kernel.session_name(name, cwd.as_deref())?;
-            let id = kernel.new_session_id();
-            kernel.model.sessions.insert(
+        Target::NewProject { path } => {
+            let path = path.or_else(|| args.get("path").and_then(Value::as_str).map(str::to_string));
+            let path = folder(path);
+            if let Some(project) = kernel.model.project_at(&path) {
+                kernel.touch_project(project);
+                let view = new_view(kernel, project, None, None, tab);
+                created.view = Some(view);
+                return Ok((Place::Tiled { view }, created));
+            }
+            let id = kernel.new_project_id();
+            kernel.model.projects.insert(
                 id,
-                Session {
+                Project {
                     id,
-                    name,
-                    cwd,
+                    path,
                     views: Vec::new(),
                     current: None,
                     last: None,
@@ -304,10 +324,10 @@ fn build(kernel: &mut Kernel, tab: TabId, target: Target, args: &Value, front: b
                     created: super::state::epoch(),
                 },
             );
-            kernel.touch_session(id);
+            kernel.touch_project(id);
             let view = new_view(kernel, id, None, None, tab);
             kernel.adopt_clients(id);
-            created.session = Some(id);
+            created.project = Some(id);
             created.view = Some(view);
             Place::Tiled { view }
         }
@@ -315,12 +335,12 @@ fn build(kernel: &mut Kernel, tab: TabId, target: Target, args: &Value, front: b
     };
     Ok((place, created))
 }
-fn new_view(kernel: &mut Kernel, session: SessionId, index: Option<u32>, name: Option<String>, tab: TabId) -> ViewId {
+fn new_view(kernel: &mut Kernel, project: ProjectId, index: Option<u32>, name: Option<String>, tab: TabId) -> ViewId {
     let view = kernel.new_view_id();
     let pane = kernel.new_pane_id();
     kernel.model.views.insert(view, View::new(view, name, pane, tab));
-    let index = index.unwrap_or_else(|| kernel.free_index(session));
-    let s = kernel.model.sessions.get_mut(&session).expect("a resolved session");
+    let index = index.unwrap_or_else(|| kernel.free_index(project));
+    let s = kernel.model.projects.get_mut(&project).expect("a resolved project");
     s.views.push((index, view));
     s.views.sort_by_key(|(i, _)| *i);
     if s.current.is_none() {
@@ -328,19 +348,19 @@ fn new_view(kernel: &mut Kernel, session: SessionId, index: Option<u32>, name: O
     }
     view
 }
-/// Fires `session.opened` and `view.opened` for what a tab's place made.
+/// Fires `project.opened` and `view.opened` for what a tab's place made.
 fn announce_created(kernel: &mut Kernel, created: &Created) {
-    if let Some(session) = created.session {
-        let s = &kernel.model.sessions[&session];
-        let id = Ref::local(Kind::Session, session).to_string();
-        let data = json!({ "session": id, "name": s.name, "activeView": s.current.map(ViewRef) });
-        kernel.emit("session.opened", &id, About::session(session), data);
+    if let Some(project) = created.project {
+        let s = &kernel.model.projects[&project];
+        let id = Ref::local(Kind::Project, project).to_string();
+        let data = json!({ "project": id, "path": s.path, "activeView": s.current.map(ViewRef) });
+        kernel.emit("project.opened", &id, About::project(project), data);
     }
     if let Some(view) = created.view {
-        let session = kernel.model.session_of_view(view).expect("a new view is in a session");
+        let project = kernel.model.project_of_view(view).expect("a new view is in a project");
         let id = Ref::local(Kind::View, view).to_string();
-        let data = json!({ "view": id, "session": SessionRef(session) });
-        kernel.emit("view.opened", &id, About { session: Some(session), view: Some(view), tab: None }, data);
+        let data = json!({ "view": id, "project": ProjectRef(project) });
+        kernel.emit("view.opened", &id, About { project: Some(project), view: Some(view), tab: None }, data);
         kernel.panes_changed(view);
     }
 }
@@ -396,7 +416,7 @@ fn unplace(kernel: &mut Kernel, tab: TabId) -> Option<ViewId> {
     kernel.model.tabs.get_mut(&tab)?.place = Place::Detached;
     Some(view)
 }
-/// Closes what was left empty; `view.closed` carries the sessions it changed.
+/// Closes what was left empty; `view.closed` carries the projects it changed.
 fn prune(kernel: &mut Kernel) {
     kernel.prune();
 }
@@ -481,24 +501,21 @@ pub fn close_view(cx: &mut Cx, view: ViewId) -> Result<()> {
     }
     Ok(())
 }
-pub fn close_session(cx: &mut Cx, session: SessionId) -> Result<()> {
+pub fn close_project(cx: &mut Cx, project: ProjectId) -> Result<()> {
     let views: Vec<ViewId> = {
         let kernel = cx.host::<Kernel>()?;
-        let s = &kernel.model.sessions[&session];
+        let s = &kernel.model.projects[&project];
         s.views
             .iter()
             .map(|(_, t)| *t)
-            .filter(|t| kernel.model.sessions.values().filter(|o| o.views.iter().any(|(_, x)| x == t)).count() == 1)
+            .filter(|t| kernel.model.projects.values().filter(|o| o.views.iter().any(|(_, x)| x == t)).count() == 1)
             .collect()
     };
     for view in views {
         close_view(cx, view)?;
     }
     let kernel = cx.host::<Kernel>()?;
-    if let Some(s) = kernel.model.sessions.get_mut(&session) {
-        s.views.clear();
-    }
-    prune(kernel);
+    kernel.close_project(project);
     Ok(())
 }
 /// Moves a tab: anywhere a new tab could go, or into another tab's place (`swap`).
@@ -597,8 +614,8 @@ fn swap(kernel: &mut Kernel, a: TabId, b: TabId) -> Result<()> {
     }
     Ok(())
 }
-/// Makes a tab its pane's front tab and its view's active tab, its view its session's current
-/// view, and its session the caller's (its client's, or the server's last).
+/// Makes a tab its pane's front tab and its view's active tab, its view its project's current
+/// view, and its project the caller's (its client's, or the server's last).
 pub fn set_current_tab_in(kernel: &mut Kernel, tab: TabId) {
     let Some(view) = kernel.model.view_of_tab(tab) else { return };
     let tiled = matches!(kernel.model.tabs[&tab].place, Place::Tiled { .. });
@@ -614,19 +631,19 @@ pub fn set_current_tab_in(kernel: &mut Kernel, tab: TabId) {
         focus_changed(kernel, before);
     }
     kernel.touch_tab(tab);
-    if let Some(session) = kernel.model.session_of_view(view) {
-        set_current_view_in(kernel, session, view);
+    if let Some(project) = kernel.model.project_of_view(view) {
+        set_current_view_in(kernel, project, view);
     }
 }
-pub fn set_current_view_in(kernel: &mut Kernel, session: SessionId, view: ViewId) {
-    let previous = kernel.model.sessions[&session].current;
+pub fn set_current_view_in(kernel: &mut Kernel, project: ProjectId, view: ViewId) {
+    let previous = kernel.model.projects[&project].current;
     if previous != Some(view) {
-        let s = kernel.model.sessions.get_mut(&session).expect("a session");
+        let s = kernel.model.projects.get_mut(&project).expect("a project");
         s.last = previous;
         s.current = Some(view);
-        kernel.active_view_changed(session);
+        kernel.active_view_changed(project);
     }
-    kernel.touch_session(session);
+    kernel.touch_project(project);
 }
 /// Options for [`get_state`].
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]

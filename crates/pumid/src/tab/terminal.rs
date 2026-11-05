@@ -80,8 +80,7 @@ pub fn open(kernel: &mut Kernel, tab: TabId, args: &Value, restore: Option<Resto
         None => {
             let mut args = args.clone();
             if let Some(keep) = args.as_object_mut().and_then(|m| m.remove("keep")) {
-                let keep =
-                    keep.as_bool().ok_or_else(|| Error::invalid_params("terminal: `keep` is true or false"))?;
+                let keep = keep.as_bool().ok_or_else(|| Error::invalid_params("terminal: `keep` is true or false"))?;
                 kernel.model.options.set("remain_on_exit", Key::Tab(tab), json!(keep), "tab.open", true)?;
             }
             let mut launch = Launch::from_args(&args)?;
@@ -99,9 +98,9 @@ pub struct Terminal {
     pub term: Arc<Term>,
     pub launch: Launch,
 }
-fn base_env(kernel: &Kernel, session: Option<u64>) -> BTreeMap<String, String> {
+fn base_env(kernel: &Kernel, project: Option<u64>) -> BTreeMap<String, String> {
     let mut base = kernel.config.base_env.clone();
-    let chain: Vec<Key> = session.map(Key::Session).into_iter().chain([Key::Global]).collect();
+    let chain: Vec<Key> = project.map(Key::Project).into_iter().chain([Key::Global]).collect();
     if let Some((Value::Object(vars), _)) = kernel.model.options.get("environment", &chain) {
         for (name, value) in vars {
             match value {
@@ -146,9 +145,9 @@ fn spawn(kernel: &mut Kernel, tab: TabId, launch: &Launch, history: Option<&[u8]
         }
     };
     let view = kernel.model.view_of_tab(tab);
-    let identity = crate::env::Identity { tab, view, session: view.and_then(|t| kernel.model.session_of_view(t)) };
+    let identity = crate::env::Identity { tab, view, project: view.and_then(|t| kernel.model.project_of_view(t)) };
     let context = crate::env::Context { socket: kernel.config.socket.clone(), bin_dir: kernel.config.bin_dir.clone() };
-    let env = crate::env::tab_env(&base_env(kernel, identity.session), &context, &identity, &launch.env);
+    let env = crate::env::tab_env(&base_env(kernel, identity.project), &context, &identity, &launch.env);
     let (width, height) = kernel.default_size();
     let cols = width.max(2) as u16;
     let rows = height.max(2) as u16;

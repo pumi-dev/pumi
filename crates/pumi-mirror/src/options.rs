@@ -72,7 +72,7 @@ pub fn builtin() -> Vec<Decl> {
             String,
             json!(""),
             Global,
-            "What a new tab, split, view or session starts: a block (`pumi_dev.launcher.new`) or a plugin's `tab.new` action, by its function (`pumi_dev.agents.new_claude`). Empty, or naming nothing installed: the Launcher's list, else a shell, else the first thing installed that starts one.",
+            "What a new tab, split, view or project starts: a block (`pumi_dev.launcher.new`) or a plugin's `tab.new` action, by its function (`pumi_dev.agents.new_claude`). Empty, or naming nothing installed: the Launcher's list, else a shell, else the first thing installed that starts one.",
         )
         .label("New tabs open")
         .group("General")
@@ -86,13 +86,13 @@ pub fn builtin() -> Vec<Decl> {
         )
         .label("Tabs in panes")
         .group(DEFAULT_THEME_PANES),
-        Decl::new("base_index", Number, json!(0), Session, "The index of a session's first view."),
+        Decl::new("base_index", Number, json!(0), Project, "The index of a project's first view."),
         Decl::new(
             "worktree",
             String,
             json!(""),
             View,
-            "The git worktree a view works in, as a folder: where a terminal opened in the view without a `cwd` starts. Empty is its session's folder.",
+            "The git worktree a view works in, as a folder: where a terminal opened in the view without a `cwd` starts. Empty is its project's folder.",
         ),
         Decl::new(
             "worktree_dir",
@@ -121,7 +121,7 @@ pub fn builtin() -> Vec<Decl> {
             Boolean,
             json!(true),
             Global,
-            "The server exits a while after its last session closed and no one is connected.",
+            "The server exits a while after its last project closed and no one is connected.",
         ),
         Decl::new(
             "viewoptions",
@@ -131,11 +131,11 @@ pub fn builtin() -> Vec<Decl> {
             "What a tab's saved state includes beyond its options and type data: `scrollback` (terminals), `history` (browsers), `cookies`.",
         ),
         Decl::new(
-            "sessionoptions",
+            "projectoptions",
             String,
-            json!("sessions,views,tabs,floats,options"),
+            json!("projects,views,tabs,floats,options"),
             Global,
-            "What `mksession` writes.",
+            "What `mkproject` writes.",
         ),
         Decl::new(
             "renderers",
@@ -174,21 +174,21 @@ pub fn builtin() -> Vec<Decl> {
             Global,
             "Command aliases, each `alias=command line`.",
         ),
-        Decl::new("prefix", String, json!("C-b"), Session, "The prefix key: it enters the `prefix` key table."),
-        Decl::new("prefix2", String, json!("None"), Session, "A second prefix key."),
-        Decl::new("status_interval", Number, json!(15), Session, "Seconds between status line redraws."),
+        Decl::new("prefix", String, json!("C-b"), Project, "The prefix key: it enters the `prefix` key table."),
+        Decl::new("prefix2", String, json!("None"), Project, "A second prefix key."),
+        Decl::new("status_interval", Number, json!(15), Project, "Seconds between status line redraws."),
         Decl::new(
             "status_left",
             String,
-            json!("[#{session_name}] "),
-            Session,
+            json!("[#{project_name}] "),
+            Project,
             "The left of the default status line, a format.",
         ),
         Decl::new(
             "status_right",
             String,
             json!("\"#{=21:tab_title}\" %H:%M %d-%b-%y"),
-            Session,
+            Project,
             "The right of the default status line, a format.",
         ),
         Decl::new(
@@ -252,7 +252,7 @@ pub fn builtin() -> Vec<Decl> {
             "statusline",
             String,
             json!("#{T:status_left}#[align=right]#{T:status_right}"),
-            Session,
+            Project,
             "The status bar, a format.",
         ),
         Decl::new(
@@ -261,11 +261,11 @@ pub fn builtin() -> Vec<Decl> {
             json!(
                 "#{W:#[range=window|#{window_index}]#{?window_active,#[fg=TabLineSel],#[fg=TabLine]} #{window_index}:#{window_name} #[norange default]}"
             ),
-            Session,
+            Project,
             "The view bar, a format; each view a `range=window|N` so a click selects it.",
         ),
         Decl::new("winbar", String, json!(""), Tab, "A bar on each tab, a format; empty shows none."),
-        Decl::new("titlestring", String, json!("#{session_name}"), Session, "The window's title, a format."),
+        Decl::new("titlestring", String, json!("#{project_name}"), Project, "The window's title, a format."),
     ];
     decls.extend([
         Decl::new(

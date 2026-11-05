@@ -1,5 +1,5 @@
 // Questions over the window, drawn by the theme's `Dialog` part: `confirm` (go ahead or not) and
-// `prompt` (a name), each a promise of the answer. What ends a whole tree (a session's every view
+// `prompt` (a name), each a promise of the answer. What ends a whole tree (a project's every view
 // and program) asks first with one; a rename nothing on screen can take in place asks with the
 // other. One at a time, in the window in front.
 import { createElement, useState, useSyncExternalStore } from "react"

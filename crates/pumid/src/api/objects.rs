@@ -1,52 +1,52 @@
-//! Sessions, views, panes and tabs as the API reads, closes and patches them in the core, and the internal
+//! Projects, views, panes and tabs as the API reads, closes and patches them in the core, and the internal
 //! `core.*` functions the host's `focus`, `open` and `update` resolve into. Every id in and out is a
 //! prefixed string; a left-out id is the caller's own.
 use super::kernel;
 use crate::kernel::layout::{Layout, Rect, Side};
 use crate::kernel::ops::{self, PlaceSpec, StateOpts};
 use crate::kernel::options::Key;
-use crate::kernel::{Closed, Kernel, PaneId, Place, SessionId, TabId, ViewId};
-use pumi_api::{Cx, Error, Kind, PaneRef, Result, SessionRef, TabRef, ViewRef, api};
+use crate::kernel::{Closed, Kernel, PaneId, Place, ProjectId, TabId, ViewId};
+use pumi_api::{Cx, Error, Kind, PaneRef, ProjectRef, Result, TabRef, ViewRef, api};
 use pumi_model::objects::{
-    Neighbors, PaneInfo, Process, Scroll, SessionInfo, TabInfo, TabPlace, ViewInfo, ViewTree, neighbour, patch_field,
+    Neighbors, PaneInfo, Process, ProjectInfo, Scroll, TabInfo, TabPlace, ViewInfo, ViewTree, neighbour,
 };
 use pumi_model::state::TabState;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
-/// List every session, in creation order.
-#[api(name = "session.list", effect = "read", example(args = "[]", result = r#"["$1"]"#))]
-pub fn pumi_session_list(cx: &mut Cx) -> Result<Vec<SessionRef>> {
+/// List every project, in creation order.
+#[api(name = "project.list", effect = "read", example(args = "[]", result = r#"["$1"]"#))]
+pub fn pumi_project_list(cx: &mut Cx) -> Result<Vec<ProjectRef>> {
     let (_, k) = kernel(cx)?;
-    Ok(k.model.sessions.keys().copied().map(SessionRef).collect())
+    Ok(k.model.projects.keys().copied().map(ProjectRef).collect())
 }
-/// What `session.get` adds.
+/// What `project.get` adds.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SessionGetOpts {
+pub struct ProjectGetOpts {
     /// The whole tree: every view, each with its tabs.
     #[serde(default)]
     pub deep: bool,
 }
-/// A session: its name, directory, views and active view; with `deep`, the whole tree in one call.
-/// No id is the caller's: its tab's session, its client's, or the one used last.
+/// A project: its name, directory, views and active view; with `deep`, the whole tree in one call.
+/// No id is the caller's: its tab's project, its client's, or the one used last.
 #[api(
-    name = "session.get",
+    name = "project.get",
     effect = "read",
     example(args = "[]", desc = "The caller's."),
     example(
         args = r#"["$1", {"deep": true}]"#,
-        result = r#"{"id": "$1", "name": "work", "cwd": "/src", "views": ["@1"], "activeView": "@1", "tree": []}"#
+        result = r#"{"id": "$1", "path": "/src", "views": ["@1"], "activeView": "@1", "tree": []}"#
     )
 )]
-pub fn pumi_session_get(cx: &mut Cx, session: Option<SessionRef>, opts: Option<SessionGetOpts>) -> Result<SessionInfo> {
+pub fn pumi_project_get(cx: &mut Cx, project: Option<ProjectRef>, opts: Option<ProjectGetOpts>) -> Result<ProjectInfo> {
     let (caller, k) = kernel(cx)?;
-    let id = k.model.session_ref(&caller, session)?;
-    let mut info = k.model.session_info(id);
+    let id = k.model.project_ref(&caller, project)?;
+    let mut info = k.model.project_info(id);
     if opts.unwrap_or_default().deep {
         let mut tree = Vec::new();
-        for (_, view) in k.model.sessions[&id].views.clone() {
+        for (_, view) in k.model.projects[&id].views.clone() {
             let tabs = tabs_of(k, view).into_iter().map(|t| tab_info(k, t)).collect::<Result<_>>()?;
             tree.push(ViewTree { view: k.model.view_info(view)?, tabs });
         }
@@ -54,61 +54,21 @@ pub fn pumi_session_get(cx: &mut Cx, session: Option<SessionRef>, opts: Option<S
     }
     Ok(info)
 }
-/// A patch to a session: what `session.update` changes.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SessionPatch {
-    /// Its name; `null` gives it a free one of its own (its folder's, else a number).
-    #[serde(default, deserialize_with = "patch_field", skip_serializing_if = "Option::is_none")]
-    pub name: Option<Option<String>>,
-    /// Its directory, where its terminals start without a `cwd` of their own; `null` has none.
-    #[serde(default, deserialize_with = "patch_field", skip_serializing_if = "Option::is_none")]
-    pub cwd: Option<Option<String>>,
-}
-/// Change a session's name or directory. Fires `session.changed` with what changed. No id is the
-/// caller's session.
-#[api(
-    name = "session.update",
-    example(args = r#"["$1", {"name": "work"}]"#, result = "null"),
-    example(args = r#"["$1", {"cwd": "/src"}]"#, result = "null", desc = "New terminals in it start in /src.")
-)]
-pub fn pumi_session_update(cx: &mut Cx, session: Option<SessionRef>, patch: SessionPatch) -> Result<()> {
+/// Close a project and its views and tabs. No id is the caller's.
+#[api(name = "project.close", example(args = r#"["$1"]"#, result = "null"))]
+pub fn pumi_project_close(cx: &mut Cx, project: Option<ProjectRef>) -> Result<()> {
     let (caller, k) = kernel(cx)?;
-    let session = k.model.session_ref(&caller, session)?;
-    let mut changed = Map::new();
-    if let Some(cwd) = patch.cwd
-        && k.model.sessions[&session].cwd != cwd
-    {
-        k.model.sessions.get_mut(&session).expect("a session").cwd = cwd.clone();
-        changed.insert("cwd".into(), json!(cwd));
-    }
-    if let Some(name) = patch.name {
-        let current = k.model.sessions[&session].name.clone();
-        if name.as_ref() != Some(&current) {
-            let cwd = k.model.sessions[&session].cwd.clone();
-            let name = k.session_name(name, cwd.as_deref())?;
-            k.model.sessions.get_mut(&session).expect("a session").name = name.clone();
-            changed.insert("name".into(), json!(name));
-        }
-    }
-    k.changed(Kind::Session, session, Value::Object(changed));
-    Ok(())
+    let project = k.model.project_ref(&caller, project)?;
+    ops::close_project(cx, project)
 }
-/// Close a session and its views and tabs. No id is the caller's.
-#[api(name = "session.close", example(args = r#"["$1"]"#, result = "null"))]
-pub fn pumi_session_close(cx: &mut Cx, session: Option<SessionRef>) -> Result<()> {
-    let (caller, k) = kernel(cx)?;
-    let session = k.model.session_ref(&caller, session)?;
-    ops::close_session(cx, session)
-}
-/// A view: its session, name, index, layout of panes (each with its tabs), active tab and pane,
-/// and zoom. No id is the caller's: its session's active view.
+/// A view: its project, name, index, layout of panes (each with its tabs), active tab and pane,
+/// and zoom. No id is the caller's: its project's active view.
 #[api(
     name = "view.get",
     effect = "read",
     example(
         args = r#"["@1"]"#,
-        result = r#"{"id": "@1", "session": "$1", "name": null, "index": 0, "layout": {"pane": ":1", "tabs": ["%1"], "active": "%1"}, "activeTab": "%1", "activePane": ":1", "zoom": null}"#
+        result = r#"{"id": "@1", "project": "$1", "name": null, "index": 0, "layout": {"pane": ":1", "tabs": ["%1"], "active": "%1"}, "activeTab": "%1", "activePane": ":1", "zoom": null}"#
     )
 )]
 pub fn pumi_view_get(cx: &mut Cx, view: Option<ViewRef>) -> Result<ViewInfo> {
@@ -127,9 +87,9 @@ pub fn pumi_view_close(cx: &mut Cx, view: Option<ViewRef>) -> Result<()> {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ListTabs {
-    /// Only this session's.
+    /// Only this project's.
     #[serde(default)]
-    pub session: Option<SessionRef>,
+    pub project: Option<ProjectRef>,
     /// Only this view's.
     #[serde(default)]
     pub view: Option<ViewRef>,
@@ -190,7 +150,11 @@ fn tabs_of(k: &Kernel, view: ViewId) -> Vec<TabId> {
     name = "tab.list",
     effect = "read",
     example(args = "[{}]", result = r#"["%1"]"#, desc = "Every tab."),
-    example(args = r#"[{"block": "pumi_dev.terminal.shell"}]"#, result = r#"["%1"]"#, desc = "Only the Terminal plugin's shells."),
+    example(
+        args = r#"[{"block": "pumi_dev.terminal.shell"}]"#,
+        result = r#"["%1"]"#,
+        desc = "Only the Terminal plugin's shells."
+    ),
     example(args = r#"[{"trait": "pumi_dev.files.file"}]"#, result = r#"["%3"]"#, desc = "Only files."),
     example(args = r#"[{"closed": true}]"#, result = "[]", desc = "The tabs closed lately, to reopen one.")
 )]
@@ -200,7 +164,7 @@ pub fn pumi_tab_list(cx: &mut Cx, opts: Option<ListTabs>) -> Result<TabList> {
     if opts.closed {
         return Ok(TabList::Closed(k.closed.iter().map(ClosedTab::of).collect()));
     }
-    let session = opts.session.map(|s| k.model.session_ref(&caller, Some(s))).transpose()?;
+    let project = opts.project.map(|s| k.model.project_ref(&caller, Some(s))).transpose()?;
     let view = opts.view.map(|v| k.model.view_ref(&caller, Some(v))).transpose()?;
     let mut ordered: Vec<TabId> = Vec::new();
     for v in k.model.views.keys() {
@@ -216,8 +180,8 @@ pub fn pumi_tab_list(cx: &mut Cx, opts: Option<ListTabs>) -> Result<TabList> {
                 opts.block.as_ref().is_none_or(|b| &t.block == b)
                     && opts.has.as_ref().is_none_or(|t| super::traits::has(k, *id, t))
                     && view.is_none_or(|view| in_view == Some(view))
-                    && session.is_none_or(|s| {
-                        in_view.is_some_and(|t| k.model.sessions[&s].views.iter().any(|(_, x)| *x == t))
+                    && project.is_none_or(|s| {
+                        in_view.is_some_and(|t| k.model.projects[&s].views.iter().any(|(_, x)| *x == t))
                     })
             })
             .map(TabRef)
@@ -307,8 +271,8 @@ pub fn tab_info(k: &Kernel, tab: TabId) -> Result<TabInfo> {
     let text = |name: &str| k.tab_option(tab, name).as_str().filter(|s| !s.is_empty()).map(str::to_string);
     let number = |name: &str| k.tab_option(tab, name).as_u64().map(|n| n as u32);
     let view = t.place.view();
-    let session =
-        k.model.session_of_tab(tab).ok_or_else(|| Error::not_found(format!("tab %{tab} is in no session")))?;
+    let project =
+        k.model.project_of_tab(tab).ok_or_else(|| Error::not_found(format!("tab %{tab} is in no project")))?;
     let foreground = number("tab_foreground_pgid");
     let process = foreground
         .or_else(|| number("tab_pid"))
@@ -318,7 +282,7 @@ pub fn tab_info(k: &Kernel, tab: TabId) -> Result<TabInfo> {
         view.and_then(|v| k.model.views.get(&v)).is_some_and(|v| v.zoomed && pane.is_some() && v.active_pane() == pane);
     Ok(TabInfo {
         id: TabRef(tab),
-        session: SessionRef(session),
+        project: ProjectRef(project),
         view: view.map(ViewRef),
         block: t.block.clone(),
         traits: traits(k, tab),
@@ -417,37 +381,37 @@ pub fn pumi_pane_close(cx: &mut Cx, pane: Option<PaneRef>) -> Result<()> {
     }
     Ok(())
 }
-/// Make a session current: the caller's client shows it (`session.focus`).
-#[api(name = "core.setCurrentSession", internal, example(args = "[1]"))]
-pub fn pumi_core_set_current_session(cx: &mut Cx, session: u64) -> Result<()> {
+/// Make a project current: the caller's client shows it (`project.focus`).
+#[api(name = "core.setCurrentProject", internal, example(args = "[1]"))]
+pub fn pumi_core_set_current_project(cx: &mut Cx, project: u64) -> Result<()> {
     let (caller, k) = kernel(cx)?;
-    let session = k.model.session_id(&caller, session)?;
+    let project = k.model.project_id(&caller, project)?;
     let mut entered = false;
     if let Some(ui) = k.model.chans.get_mut(&caller.channel).and_then(|c| c.ui.as_mut())
-        && ui.session != session
+        && ui.project != project
     {
-        ui.session = session;
+        ui.project = project;
         entered = true;
     }
-    k.touch_session(session);
+    k.touch_project(project);
     if entered {
-        k.client_changed(caller.channel, session);
+        k.client_changed(caller.channel, project);
     }
     Ok(())
 }
-/// Make a view its session's current view (`view.focus`).
+/// Make a view its project's current view (`view.focus`).
 #[api(name = "core.setCurrentView", internal, example(args = "[1]"))]
 pub fn pumi_core_set_current_view(cx: &mut Cx, view: u64) -> Result<()> {
     let (caller, k) = kernel(cx)?;
     let view = k.model.view_id(&caller, view)?;
-    let session = k
+    let project = k
         .model
         .current(&caller)
-        .map(|c| c.session)
-        .filter(|s| k.model.sessions[s].views.iter().any(|(_, t)| *t == view))
-        .or_else(|| k.model.session_of_view(view))
-        .ok_or_else(|| Error::not_found(format!("view @{view} is in no session")))?;
-    ops::set_current_view_in(k, session, view);
+        .map(|c| c.project)
+        .filter(|s| k.model.projects[s].views.iter().any(|(_, t)| *t == view))
+        .or_else(|| k.model.project_of_view(view))
+        .ok_or_else(|| Error::not_found(format!("view @{view} is in no project")))?;
+    ops::set_current_view_in(k, project, view);
     Ok(())
 }
 /// Make a tab its pane's front tab and its view's active tab, and its view current (`tab.focus`).
@@ -464,12 +428,16 @@ pub fn pumi_core_set_current_tab(cx: &mut Cx, tab: u64) -> Result<()> {
     Ok(())
 }
 /// `tab.open` as the core does it, with its place resolved (the host's `tab.open`).
-#[api(name = "core.openTab", internal, example(args = r#"["pumi_dev.terminal.shell", {}, {"kind": "session"}]"#, result = "2"))]
+#[api(
+    name = "core.openTab",
+    internal,
+    example(args = r#"["pumi_dev.terminal.shell", {}, {"kind": "project"}]"#, result = "2")
+)]
 pub fn pumi_core_open_tab(cx: &mut Cx, block: String, args: Option<Value>, place: Option<PlaceSpec>) -> Result<u64> {
     ops::open_tab(cx, &block, args.unwrap_or(Value::Null), place.unwrap_or_default())
 }
 /// `tab.update`'s `place` as the core does it.
-#[api(name = "core.tabSetPlace", internal, example(args = r#"[1, {"kind": "view", "session": 1}]"#))]
+#[api(name = "core.tabSetPlace", internal, example(args = r#"[1, {"kind": "view", "project": 1}]"#))]
 pub fn pumi_core_tab_set_place(cx: &mut Cx, tab: u64, place: PlaceSpec) -> Result<()> {
     let (caller, k) = kernel(cx)?;
     let tab = k.model.tab_id(&caller, tab)?;
@@ -527,79 +495,79 @@ pub fn pumi_core_view_set_layout(cx: &mut Cx, view: u64, layout: Value) -> Resul
     k.layout_changed(view);
     Ok(())
 }
-/// One session's views as `core.viewSetPlace` sets them: every `[index, view]`, and which
+/// One project's views as `core.viewSetPlace` sets them: every `[index, view]`, and which
 /// is current and last.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SessionViews {
-    pub session: u64,
+pub struct ProjectViews {
+    pub project: u64,
     pub views: Vec<(u32, u64)>,
     #[serde(default)]
     pub current: Option<u64>,
     #[serde(default)]
     pub last: Option<u64>,
 }
-/// Where each view of these sessions is: its session and index there.
-fn positions(k: &Kernel, sessions: &[SessionId]) -> BTreeMap<ViewId, (SessionId, u32)> {
+/// Where each view of these projects is: its project and index there.
+fn positions(k: &Kernel, projects: &[ProjectId]) -> BTreeMap<ViewId, (ProjectId, u32)> {
     let mut out = BTreeMap::new();
-    for s in sessions {
-        for (index, view) in k.model.sessions.get(s).map(|s| s.views.clone()).unwrap_or_default() {
-            if k.model.session_of_view(view) == Some(*s) {
+    for s in projects {
+        for (index, view) in k.model.projects.get(s).map(|s| s.views.clone()).unwrap_or_default() {
+            if k.model.project_of_view(view) == Some(*s) {
                 out.insert(view, (*s, index));
             }
         }
     }
     out
 }
-/// `view.update`'s `index` and `session` as the core does it: the sessions it changed, each with
+/// `view.update`'s `index` and `project` as the core does it: the projects it changed, each with
 /// its views as they are now (the host works out moving).
 #[api(
     name = "core.viewSetPlace",
     internal,
-    example(args = r#"[1, [{"session": 1, "views": [[3, 1]], "current": 1}]]"#)
+    example(args = r#"[1, [{"project": 1, "views": [[3, 1]], "current": 1}]]"#)
 )]
-pub fn pumi_core_view_set_place(cx: &mut Cx, view: u64, sessions: Vec<SessionViews>) -> Result<()> {
+pub fn pumi_core_view_set_place(cx: &mut Cx, view: u64, projects: Vec<ProjectViews>) -> Result<()> {
     let (caller, k) = kernel(cx)?;
     k.model.view_id(&caller, view)?;
-    for s in &sessions {
-        let session =
-            k.model.sessions.get(&s.session).ok_or_else(|| Error::not_found(format!("no session ${}", s.session)))?;
+    for s in &projects {
+        let project =
+            k.model.projects.get(&s.project).ok_or_else(|| Error::not_found(format!("no project ${}", s.project)))?;
         let mut indices: Vec<u32> = s.views.iter().map(|(i, _)| *i).collect();
         indices.sort_unstable();
         indices.dedup();
         if indices.len() != s.views.len() {
-            return Err(Error::invalid_params(format!("session ${} has an index twice", session.id)));
+            return Err(Error::invalid_params(format!("project ${} has an index twice", project.id)));
         }
         if let Some((_, t)) = s.views.iter().find(|(_, t)| !k.model.views.contains_key(t)) {
             return Err(Error::not_found(format!("no view @{t}")));
         }
     }
-    let ids: Vec<SessionId> = sessions.iter().map(|s| s.session).collect();
+    let ids: Vec<ProjectId> = projects.iter().map(|s| s.project).collect();
     let before = positions(k, &ids);
-    let current: Vec<Option<ViewId>> = ids.iter().map(|s| k.model.sessions[s].current).collect();
-    for s in &sessions {
-        let session = k.model.sessions.get_mut(&s.session).expect("checked");
-        session.views = s.views.clone();
-        session.views.sort_by_key(|(i, _)| *i);
+    let current: Vec<Option<ViewId>> = ids.iter().map(|s| k.model.projects[s].current).collect();
+    for s in &projects {
+        let project = k.model.projects.get_mut(&s.project).expect("checked");
+        project.views = s.views.clone();
+        project.views.sort_by_key(|(i, _)| *i);
         let holds = |t: &u64| s.views.iter().any(|(_, x)| x == t);
-        session.current = s.current.filter(holds).or_else(|| session.views.first().map(|(_, t)| *t));
-        session.last = s.last.filter(holds);
+        project.current = s.current.filter(holds).or_else(|| project.views.first().map(|(_, t)| *t));
+        project.last = s.last.filter(holds);
     }
     let after = positions(k, &ids);
-    for (view, (session, index)) in &after {
+    for (view, (project, index)) in &after {
         let mut patch = Map::new();
         let was = before.get(view);
-        if was.map(|(s, _)| s) != Some(session) {
-            patch.insert("session".into(), json!(SessionRef(*session)));
+        if was.map(|(s, _)| s) != Some(project) {
+            patch.insert("project".into(), json!(ProjectRef(*project)));
         }
         if was.map(|(_, i)| i) != Some(index) {
             patch.insert("index".into(), json!(index));
         }
         k.changed(Kind::View, *view, Value::Object(patch));
     }
-    for (session, was) in ids.iter().zip(current) {
-        if k.model.sessions.get(session).is_some_and(|s| s.current != was && s.current.is_some()) {
-            k.active_view_changed(*session);
+    for (project, was) in ids.iter().zip(current) {
+        if k.model.projects.get(project).is_some_and(|s| s.current != was && s.current.is_some()) {
+            k.active_view_changed(*project);
         }
     }
     k.prune();
