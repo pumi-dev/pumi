@@ -277,7 +277,11 @@ fn a_tab_opened_with_no_block_holds_what_a_new_tab_does() {
     let dir = Server::dir();
     let server = Server::start_home(dir.path());
     let mut client = server.client();
-    // pumi has no block of its own for a new tab: until a plugin that starts one is installed, nothing opens.
+    // Launchpad ships with pumi: a new tab holds its list before any plugin is installed.
+    let launchpad = client.call("tab.open", json!([null, {}, {"kind": "session", "name": "launchpad"}]));
+    assert_eq!(client.call("tab.get", json!([&launchpad]))["block"], json!("pumi.launchpad.new"));
+    // Turned off, and while no plugin that starts one is installed, nothing opens.
+    client.call("plugin.update", json!(["pumi/launchpad", {"enabled": false}]));
     let refused = client.try_call("tab.open", json!([null, {}, {"kind": "session"}])).unwrap_err();
     assert!(refused.to_string().contains("no plugin opens new tabs"), "{refused}");
     client.term();
@@ -736,7 +740,7 @@ fn a_linked_plugin_is_refreshed_where_it_is_and_removing_it_keeps_its_directory(
     assert!(client.try_call("plugin.update", json!([id, {}])).is_err(), "its directory is gone");
 }
 /// A runtime whose `bundled/` holds one plugin, `sample` (owner `pumi`, block `pumi.sample.thing`):
-/// pumi ships none, so the tests of what a bundled plugin is bring their own.
+/// pumi ships one of its own (Launchpad), so this is a second: the tests bring their own.
 fn runtime_with_a_bundled_plugin(root: &Path) -> PathBuf {
     let runtime = root.join("runtime");
     let plugin = runtime.join("bundled/sample");

@@ -1,12 +1,14 @@
 // The plugins the start screen offers on the first run: pumi itself runs terminals, pages and
 // agents' sessions, but every tab is a plugin's block (`pumi-dev/plugins`), so a fresh install has
-// nothing to open until some are installed. Each is ticked to start with; the user unticks what
-// they don't want. They are offered on the first run only: once shown, a later run doesn't offer
-// them again, answered or not (`OFFERED`, kept in window.json: the window's own, not a setting).
-// In the run that shows them, installing them puts them away.
+// nothing to open until some are installed. Launchpad, which opens what new tabs hold, ships with
+// pumi and is not offered. Each is ticked to start with; the user unticks what they don't want.
+// They are offered on the first run only: once shown, a later run doesn't offer them again,
+// answered or not (`OFFERED`, kept in window.json: the window's own, not a setting). In the run
+// that shows them, installing them puts them away.
 //
-// After installing, new tabs open the first of them that is installed, in this order: what a new
-// tab holds is the `new_tab` option, which pumi leaves empty.
+// New tabs keep opening Launchpad after installing these: `new_tab` is left empty, and pumi reads
+// that as Launchpad's list (`startable.ts`'s `PREFERRED`). Settings ▸ General ▸ New tabs open
+// changes it.
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import { subscribeEvent } from "../sdk/events.ts"
 import { call } from "./engine.ts"
@@ -21,16 +23,14 @@ export interface Starter {
   icon: string
   /** What `plugin.add` is given. */
   source: string
-  /** The block it declares that a new tab can hold (`new_tab`). */
-  block: string
 }
 
-/** In the order they are offered, and the order `new_tab` takes the first installed of. */
+/** In the order they are offered, and the order `new_tab` takes the first installed of. Launchpad is
+ *  not here: it ships with pumi (`runtime/bundled/launchpad`), so a fresh install has it already. */
 export const STARTERS: Starter[] = [
-  { name: "launcher", title: "Launcher", detail: "a list of what to open", icon: "plus", source: "pumi-dev/plugins/launcher", block: "pumi_dev.launcher.new" },
-  { name: "terminal", title: "Terminal", detail: "a shell in a tab", icon: "terminal", source: "pumi-dev/plugins/terminal", block: "pumi_dev.terminal.shell" },
-  { name: "agents", title: "Agents", detail: "Claude Code, Codex, pi…", icon: "sparkle", source: "pumi-dev/plugins/agents", block: "pumi_dev.agents.term" },
-  { name: "browser", title: "Browser", detail: "a web page in a tab", icon: "globe", source: "pumi-dev/plugins/browser", block: "pumi_dev.browser.page" },
+  { name: "terminal", title: "Terminal", detail: "a shell in a tab", icon: "terminal", source: "pumi-dev/plugins/terminal" },
+  { name: "agents", title: "Agents", detail: "Claude Code, Codex, pi…", icon: "sparkle", source: "pumi-dev/plugins/agents" },
+  { name: "browser", title: "Browser", detail: "a web page in a tab", icon: "globe", source: "pumi-dev/plugins/browser" },
 ]
 
 /** How Agents opens them, as its `prefer` option says: in their terminal, or in a chat tab (its GUI over the SDK, else ACP). */
@@ -72,12 +72,6 @@ export function notInstalled(installed: Installed, starters = STARTERS): Starter
   return starters.filter((s) => !names.has(s.name))
 }
 
-/** The block new tabs open once these are installed: the first starter's that is, in order. */
-export function newTabBlock(installed: Installed, starters = STARTERS): string | undefined {
-  const names = namesOf(installed)
-  return starters.find((s) => names.has(s.name))?.block
-}
-
 export interface Starters {
   /** What to offer: the starters not installed, on the first run until answered. `undefined` until read. */
   offered?: Starter[]
@@ -87,7 +81,7 @@ export interface Starters {
   /** The one being installed. */
   busy?: string
   error?: string
-  /** Installs the ticked ones, in order, then points `new_tab` at the first installed. */
+  /** Installs the ticked ones, in order. New tabs keep opening Launchpad. */
   install(): void
   /** How agents open, set as Agents installs: the chat until picked. */
   agents: AgentsMode
@@ -154,8 +148,7 @@ export function useStarters(): Starters {
         // Its option is declared once it is installed. The terminal is its default already.
         if (s.name === "agents" && agents !== "terminal") await setOption(AGENTS_PREFER, agents).catch((err) => failed.push(`Open agents in: ${String(err?.message ?? err)}`))
       }
-      const block = newTabBlock(await reload())
-      if (block) await setOption("new_tab", block).catch((err) => failed.push(`New tabs: ${String(err?.message ?? err)}`))
+      await reload()
       if (failed.length) setError(failed.join("\n"))
       else answer()
     })().finally(() => setBusy(undefined))

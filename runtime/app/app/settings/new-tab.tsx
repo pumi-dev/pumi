@@ -1,6 +1,6 @@
 // Settings → General → New tabs open: the `new_tab` option as a menu of what a new tab can start,
-// the `+` menu's list (`startable.ts`): Terminal, Pi, Claude Code, the Launcher's list, Film…
-// While the option names nothing installed, the menu shows what new tabs open then (the Launcher's
+// the `+` menu's list (`startable.ts`): Terminal, Pi, Claude Code, Launchpad's list, Film…
+// While the option names nothing installed, the menu shows what new tabs open then (Launchpad's
 // list, else a shell, else the first); with nothing installed there is nothing to pick, and the
 // row offers plugins.
 import { useSyncExternalStore } from "react"

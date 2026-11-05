@@ -219,7 +219,7 @@ pub struct TraitSpec {
 /// default theme's, or a UI theme's own). `sidebar.footer` is the bar at the side bar's foot: an
 /// action there is a button beside the panel buttons, for a component that opens elsewhere (a
 /// float, a view) rather than filling the side bar. `tab.new` is what a new tab can be (a pane's
-/// `+` menu, the Launcher's list): each action is run with `{tab, place}`, the tab it goes beside
+/// `+` menu, Launchpad's list): each action is run with `{tab, place}`, the tab it goes beside
 /// and where it opens, as `tab.open` takes it. pumi adds nothing of its own there; a file, an image
 /// or anything else picked from disk is a plugin's action with a `pick`.
 pub const SLOTS: &[&str] = &[

@@ -1,8 +1,9 @@
 // The start screen's first-run choices, as cards with a picture of each, four to a row: the plugins
-// to install (a launcher's list, a shell, an agent's session, a page), how agents open, whether the
-// window is transparent, and the colour scheme. Plugins have a box to tick, any number of them, and
-// those unticked are dimmed; the other choices are one of each, with a round button. The pictures
-// are drawn in the theme's colours (and the terminals' palette), so they look like what they choose.
+// to install (a shell, an agent's session, a page), how agents open, whether the window is
+// transparent, and the colour scheme. Launchpad is not one of them: it ships with pumi. Plugins
+// have a box to tick, any number of them, and those unticked are dimmed; the other choices are one
+// of each, with a round button. The pictures are drawn in the theme's colours (and the terminals'
+// palette), so they look like what they choose.
 import { memo, useState, type ReactNode } from "react"
 import { FONT_DEFAULT, parseFont } from "../../sdk/font.ts"
 import { Icon } from "../../sdk/elements.tsx"
@@ -145,7 +146,6 @@ function Choice<T extends string>({ cards, value, onChange, testId }: { cards: {
 }
 
 function Preview({ name }: { name: string }) {
-  if (name === "launcher") return <LauncherPreview />
   if (name === "terminal") return <TerminalPreview />
   if (name === "agents") return <AgentsPreview />
   if (name === "browser") return <BrowserPreview />
@@ -184,31 +184,6 @@ function Line({ runs, font }: { runs: [string, string, string?][]; font: string 
           {text}
         </text>
       ))}
-    </div>
-  )
-}
-
-/** The Launcher: a search over a list of what to open, the first one picked. */
-function LauncherPreview() {
-  const t = useTheme()
-  const c = useColors()
-  const row = (color: string, width: string, picked?: boolean) => (
-    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6, height: 13, paddingLeft: 5, paddingRight: 5, borderRadius: 3, ...(picked ? { backgroundColor: t.selected } : {}) }}>
-      <div style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: color, flexShrink: 0 }} />
-      <Bar width={width} color={picked ? t.text : t.faint} height={3} />
-    </div>
-  )
-  return (
-    <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center", paddingLeft: 14, paddingRight: 14 }}>
-      <div style={{ display: "flex", flexDirection: "column", width: "100%", gap: 2, padding: 5, borderRadius: 6, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface }}>
-        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 5, height: 14, paddingLeft: 4, marginBottom: 2, borderRadius: 3, backgroundColor: t.editor }}>
-          <Icon name="magnifying_glass" size={8} color={t.faint} />
-          <Bar width="30%" color={t.muted} height={3} />
-        </div>
-        {row(c.green, "55%", true)}
-        {row(c.magenta, "40%")}
-        {row(c.blue, "65%")}
-      </div>
     </div>
   )
 }

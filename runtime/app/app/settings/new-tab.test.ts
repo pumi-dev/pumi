@@ -12,7 +12,7 @@ const entry = (id: string, title: string, blocks: { id: string; title?: string }
   manifest: { name: id.split("/")[1]!, contributes: { blocks, slots: actions.length ? { "tab.new": { actions } } : {} } },
 })
 
-const launcher = entry("pumi_dev/launcher", "Launcher", [{ id: "new", title: "New Tab" }])
+const launchpad = entry("pumi/launchpad", "Launchpad", [{ id: "new", title: "New Tab" }])
 const terminal = entry("pumi_dev/terminal", "Terminal", [{ id: "shell", title: "Terminal" }], [{ id: "open", title: "Terminal", command: "open" }])
 const agents = entry(
   "pumi_dev/agents",
@@ -42,12 +42,12 @@ test("a plugin's tab.new actions are what it starts, else its blocks; one that d
   expect(list[0]!.alias).toBeUndefined()
 })
 
-test("new tabs open what new_tab names, else the Launcher's list, else a shell, else the first", () => {
-  const all = startables([agents, film, terminal, launcher, editor])
+test("new tabs open what new_tab names, else Launchpad's list, else a shell, else the first", () => {
+  const all = startables([agents, film, terminal, launchpad, editor])
   expect(newTabOf(all, "pumi_dev.agents.new_claude")?.title).toBe("Claude Code")
   expect(newTabOf(all, "pumi_dev.terminal.shell")?.value).toBe("pumi_dev.terminal.open")
-  expect(newTabOf(all, "")?.value).toBe("pumi_dev.launcher.new")
-  expect(newTabOf(all, "gone.plugin.block")?.value).toBe("pumi_dev.launcher.new")
+  expect(newTabOf(all, "")?.value).toBe("pumi.launchpad.new")
+  expect(newTabOf(all, "gone.plugin.block")?.value).toBe("pumi.launchpad.new")
   expect(newTabOf(startables([agents, terminal]), "")?.value).toBe("pumi_dev.terminal.open")
   expect(newTabOf(startables([editor, agents]), "")?.value).toBe("pumi_dev.agents.new_pi")
   expect(newTabOf(startables([editor]), "")).toBeUndefined()

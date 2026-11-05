@@ -7,9 +7,9 @@ import { shownOf } from "./layout.ts"
 import { entries, prefixOf } from "./plugins.ts"
 
 /**
- * The name a block's plugin gives it in its manifest (`New Tab`, for the Launcher's `new`): what
+ * The name a block's plugin gives it in its manifest (`New Tab`, for Launchpad's `new`): what
  * a tab of a plugin block goes by when it has no name, title or directory of its own, rather than
- * the block's id (`pumi_dev.launcher.new`). `undefined` for a core block's, or one no plugin of
+ * the block's id (`pumi.launchpad.new`). `undefined` for a core block's, or one no plugin of
  * ours declares (a tab whose plugin is gone keeps the id).
  */
 export function blockTitle(block: string): string | undefined {

@@ -37,25 +37,25 @@ describe("viewName", () => {
 })
 
 describe("tabLabel", () => {
-  const launcher: Entry = {
-    id: "pumi_dev/launcher",
-    prefix: "pumi_dev.launcher.",
+  const launchpad: Entry = {
+    id: "pumi/launchpad",
+    prefix: "pumi.launchpad.",
     dir: "/nowhere",
-    manifest: { name: "launcher", contributes: { blocks: [{ id: "new", title: "New Tab" }] } },
+    manifest: { name: "launchpad", contributes: { blocks: [{ id: "new", title: "New Tab" }] } },
     state: "running",
     active: true,
     sent: true,
   }
-  entries.set(launcher.id, launcher)
+  entries.set(launchpad.id, launchpad)
 
   test("a tab of a plugin block goes by the block's name in its manifest", () => {
-    expect(tabLabel({ block: "pumi_dev.launcher.new" })).toBe("New Tab")
+    expect(tabLabel({ block: "pumi.launchpad.new" })).toBe("New Tab")
   })
 
   test("a terminal's title, its directory and its own name still come first", () => {
-    expect(tabLabel({ block: "pumi_dev.launcher.new", terminal_title: "zsh" })).toBe("zsh")
-    expect(tabLabel({ block: "pumi_dev.launcher.new", cwd: "/src/pumi" })).toBe("pumi")
-    expect(tabLabel({ block: "pumi_dev.launcher.new", label: "tabs", terminal_title: "zsh" })).toBe("tabs")
+    expect(tabLabel({ block: "pumi.launchpad.new", terminal_title: "zsh" })).toBe("zsh")
+    expect(tabLabel({ block: "pumi.launchpad.new", cwd: "/src/pumi" })).toBe("pumi")
+    expect(tabLabel({ block: "pumi.launchpad.new", label: "tabs", terminal_title: "zsh" })).toBe("tabs")
   })
 
   test("a block no manifest of ours names keeps its id", () => {

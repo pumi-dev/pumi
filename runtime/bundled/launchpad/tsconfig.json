@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "typeRoots": ["./node_modules/@types", "../../app/node_modules/@types"],
+    "strict": true,
+    "noImplicitAny": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "pumi": ["../../app/types/index.ts"],
+      "pumi/theme": ["../../app/types/theme.ts"],
+      "pumi/jsx-runtime": ["../../app/types/jsx-runtime.ts"],
+      "pumi/jsx-dev-runtime": ["../../app/types/jsx-dev-runtime.ts"]
+    },
+    "jsx": "react-jsx",
+    "jsxImportSource": "pumi"
+  },
+  "exclude": ["node_modules"]
+}
