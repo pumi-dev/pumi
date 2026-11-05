@@ -28,7 +28,7 @@
 // - docks (`defineTheme({ docks })`): `Dock`, `useDock`, `useDockPanels`, `componentKey`
 // - commands: `commands`, `useBinding`, `run`, `windowContext`, `setContextResolver`
 // - what the theme keeps: `useLocal` (by key, kept across restarts)
-// - the theme: `useAppearance`, `useThemeOption`
+// - the theme: `useThemeOption`
 export {
   useApp,
   useConnection,
@@ -54,7 +54,6 @@ export {
 } from "../app/state.ts"
 export { call, num, serverOf, via } from "../app/engine.ts"
 export {
-  useAppearance,
   useComponents,
   useLayoutStyle,
   useThemeOption,

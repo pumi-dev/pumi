@@ -1,18 +1,16 @@
-// A window's tree: the theme in use, resolved for the appearance, drawing its `Window` (or the
-// app's). A theme that throws falls back to the app's own window, saying why.
+// A window's tree: the theme in use, resolved, drawing its `Window` (or the app's). A theme that
+// throws falls back to the app's own window, saying why.
 import { readFileSync } from "node:fs"
 import { createContext, useEffect, useMemo, useState, type ComponentType } from "react"
-import { Engine } from "../native/addon.js"
 import { onSlowLoop, slowLoopWarning } from "../react/components/index.ts"
 import { useGpuix } from "../react/hooks/use-gpuix.ts"
 import { blamed, Boundary, inCompartment } from "../sdk/contributions.ts"
 import { useApp, useOption, useWindow } from "./state.ts"
 import {
-  DARK,
-  LIGHT,
+  isDark,
   METRICS,
   ThemeContext,
-  type Appearance,
+  TOKENS,
   type TerminalPalette,
   type ThemeSpec,
   type ThemeState,
@@ -23,36 +21,19 @@ import { note, prefixOf } from "./plugins.ts"
 import { AppLayers } from "./layers.tsx"
 import { UpdateToasts } from "./update-toast.tsx"
 import { DEFAULT } from "./theme/default.tsx"
-import { appearanceOf, schemeLook, terminalScheme } from "./theme/terminal/index.ts"
+import { DEFAULT_SCHEME, schemeLook, terminalScheme } from "./theme/terminal/index.ts"
 import { useThemeSpec, useThemes } from "./themes.ts"
 import { declareDocks } from "./docks.ts"
 
-const TERMINAL: { dark: TerminalPalette; light: TerminalPalette } = {
-  dark: {
-    background: "#1e1f22",
-    foreground: "#d4d6da",
-    selection: "#3a4a63",
-    cursor: "#d8d8d8",
-    ansi: ["#000000", "#fa5355", "#56b45a", "#c2c300", "#4581eb", "#fa54ff", "#33c2c1", "#adadad", "#555555", "#fb7172", "#67ff4f", "#ffff00", "#6d9df1", "#fb82ff", "#60d3d1", "#eeeeee"],
-  },
-  light: {
-    background: "#ffffff",
-    foreground: "#383a42",
-    selection: "#bfceff",
-    cursor: "#4f525e",
-    ansi: ["#383a42", "#e45649", "#50a14f", "#c18401", "#0184bc", "#a626a4", "#0997b3", "#bcbcbc", "#4f525e", "#e06c75", "#6aa65e", "#d19a2a", "#3b8ee8", "#b359b1", "#2aa8c2", "#ffffff"],
-  },
-}
-
-/** The system's appearance, as macOS says it. */
-const SYSTEM = Engine.systemAppearance()
+/** The terminals' palette the default theme gives with no scheme picked: GitHub Dark Default's. */
+const TERMINAL: TerminalPalette = terminalScheme(DEFAULT_SCHEME)!
 
 /**
- * pumi's own theme: one look, `terminal_colorscheme`'s scheme made into tokens (`schemeLook`), or
- * the default's dark one without a scheme. Dark or light is what its background is. Its settings
- * (`ui_font_size`, `ui_inactive_pane_fade`, `ui_pane_gap`, `ui_radius`, `ui_accent`,
- * `ui_background_opacity`, `ui_background_blur`) are its metrics, layout and window, and its
- * accent over the look (`usePumi`).
+ * pumi's own theme: `terminal_colorscheme`'s scheme made into tokens (`schemeLook`), else the
+ * default theme's own (GitHub Dark Default's, `TOKENS`). Its settings (`ui_font_size`,
+ * `ui_inactive_pane_fade`, `ui_pane_gap`, `ui_radius`, `ui_accent`, `ui_background_opacity`,
+ * `ui_background_blur`) are its metrics, layout and window, and its accent over the look
+ * (`usePumi`).
  */
 const PUMI: ThemeSpec = { name: "pumi" }
 
@@ -93,20 +74,6 @@ function usePumi(): { spec: ThemeSpec; accent?: string } {
 }
 
 /**
- * The look a theme draws: its only one, or the one its `appearance` says (its own setting's
- * value, the system's, or a fixed one). A theme that gives neither look has both, the default's.
- */
-function useLook(spec: ThemeSpec, prefix: string | undefined): Appearance {
-  const given = (["dark", "light"] as const).filter((a) => spec.colors?.[a] || spec.terminal?.[a])
-  const want = spec.appearance
-  const key = typeof want === "object" ? `${prefix ?? ""}${want.option}` : ""
-  const chosen = useOption<string>(key)
-  if (given.length === 1) return given[0]!
-  const pick = typeof want === "object" ? chosen : want
-  return pick === "dark" || pick === "light" ? pick : SYSTEM
-}
-
-/**
  * The parts a theme gives that are drawn in a compartment of their own (`inCompartment`): what
  * they draw costs the window's frames only when it changes, and a slow one only its share. Not
  * the parts that hold tabs (`Window`, `Layout`, `Split`, `Pane`, `Float`): a terminal's output
@@ -130,13 +97,11 @@ function ownParts(spec: ThemeSpec): Partial<ThemeState["components"]> {
   return given as Partial<ThemeState["components"]>
 }
 
-function resolve(spec: ThemeSpec, appearance: Appearance, prefix?: string, colors?: Partial<ThemeState["tokens"]>, pumi = false): ThemeState {
-  const base = appearance === "dark" ? DARK : LIGHT
-  const own = colors ?? spec.colors?.[appearance] ?? {}
+function resolve(spec: ThemeSpec, prefix?: string, colors?: Partial<ThemeState["tokens"]>, pumi = false): ThemeState {
+  const own = colors ?? spec.colors ?? {}
   return {
     spec,
-    appearance,
-    tokens: { ...base, ...own } as ThemeState["tokens"],
+    tokens: { ...TOKENS, ...own } as ThemeState["tokens"],
     metrics: { ...METRICS, ...(spec.metrics ?? {}) } as ThemeState["metrics"],
     components: { ...DEFAULT, ...ownParts(spec) },
     prefix: pumi ? undefined : prefix,
@@ -183,38 +148,41 @@ export function useResolvedTheme(safe: boolean, failed?: string): { state: Theme
   const pumi = !shown
   const drawn = shown ?? own.spec
   const prefix = plugin ? prefixOf(plugin) : undefined
-  const look = useLook(drawn, pumi ? undefined : prefix)
   // `terminal_colorscheme`, when it names a scheme, colours the terminals instead of the theme,
-  // and pumi's own theme takes its look from it too. Without one, the terminals sit on the
+  // and pumi's own theme takes its colours from it too. Unset is its default (GitHub Dark
+  // Default); empty means the theme's own colours, and without a scheme the terminals sit on the
   // window's colour unless the theme gives them their own.
-  const schemeName = useOption<string>("terminal_colorscheme")
+  const picked = useOption<string>("terminal_colorscheme")
+  const schemeName = picked ?? DEFAULT_SCHEME
   const scheme = useMemo(() => terminalScheme(schemeName), [schemeName])
   const matched = useMemo(() => (pumi && scheme ? schemeLook(scheme) : undefined), [pumi, scheme])
-  // A theme that makes its colours from the palette (`fromPalette`) looks as the scheme does: dark
-  // or light as its background is.
+  // A theme that makes its colours from the palette (`fromPalette`) looks as the scheme does.
   const follows = !pumi && !!drawn.fromPalette
-  const appearance = pumi ? (matched?.appearance ?? appearanceOf(DARK.editor)) : follows && scheme ? appearanceOf(scheme.background) : look
   const accent = pumi ? own.accent : undefined
   const state = useMemo(() => {
-    const colors = accent ? { ...(matched?.tokens ?? {}), accent } : matched?.tokens
-    const made = resolve(drawn, appearance, prefix, colors, pumi)
-    const own = drawn.terminal?.[appearance] ?? {}
+    const colors = accent ? { ...(matched ?? {}), accent } : matched
+    const made = resolve(drawn, prefix, colors, pumi)
+    const own = drawn.terminal ?? {}
+    // pumi's own theme without a scheme is exactly GitHub Dark Default, the scheme it draws itself
+    // from; another theme's terminals sit on its window's colour, unless it gives their own.
     const given: TerminalPalette = scheme
       ? { ...scheme, ...(own.opacity === undefined ? {} : { opacity: own.opacity }) }
-      : { ...TERMINAL[appearance], background: made.tokens.window, ...own }
-    const resolved = follows ? { ...made, tokens: { ...made.tokens, ...drawn.fromPalette!(given, appearance) } as ThemeState["tokens"] } : made
+      : pumi
+        ? { ...TERMINAL, ...own }
+        : { ...TERMINAL, background: made.tokens.window, ...own }
+    const resolved = follows ? { ...made, tokens: { ...made.tokens, ...drawn.fromPalette!(given) } as ThemeState["tokens"] } : made
     // See-through (`backgroundOpacity`), the window still paints its colours as they are: the
     // renderer lets the desktop through every background by as much (`window.setGlass`).
     return { ...resolved, palette: given }
-  }, [drawn, appearance, prefix, scheme, matched, accent, pumi, follows])
-  // The palette with no scheme picked: the theme's own, on its own look (pumi's is the default's
-  // dark one), for Settings to show beside the schemes.
+  }, [drawn, prefix, scheme, matched, accent, pumi, follows])
+  // The palette with no scheme picked: the theme's own, on the default theme's colours, for
+  // Settings to show beside the schemes (the same as the default scheme's, for pumi's own).
   const ownPalette = useMemo<TerminalPalette>(() => {
     if (!scheme) return state.palette
-    const mode = pumi ? appearanceOf(DARK.editor) : look
-    const tokens = { ...(mode === "dark" ? DARK : LIGHT), ...(pumi ? {} : drawn.colors?.[mode]) }
-    return { ...TERMINAL[mode], background: tokens.window, ...drawn.terminal?.[mode] }
-  }, [state.palette, scheme, pumi, look, drawn])
+    if (pumi) return { ...TERMINAL, ...drawn.terminal }
+    const tokens = { ...TOKENS, ...drawn.colors }
+    return { ...TERMINAL, background: tokens.window, ...drawn.terminal }
+  }, [state.palette, scheme, pumi, drawn])
   return { state, own: ownPalette, shown, drawn, plugin }
 }
 
@@ -287,14 +255,16 @@ export function Root({ safe }: { safe: boolean }) {
       console.error("pumi: the window's background:", (err as Error)?.message ?? err)
     }
   }, [background, blur, glass, window])
-  // The native chrome (a webview tab's) follows the look the theme resolved to, not macOS's.
+  // The native chrome (a webview tab's) follows the look the theme resolved to, not macOS's: a
+  // dark window means a dark title bar and page chrome.
+  const dark = isDark(state.tokens.window)
   useEffect(() => {
     try {
-      engine.setAppearance(state.appearance)
+      engine.setAppearance(dark ? "dark" : "light")
     } catch (err) {
       console.error("pumi: the appearance:", (err as Error)?.message ?? err)
     }
-  }, [state.appearance])
+  }, [dark])
   const generate = useOption<boolean>("terminal_palette_generate") === true
   const harmonious = useOption<boolean>("terminal_palette_harmonious") === true
   const own = useTerminalColors()

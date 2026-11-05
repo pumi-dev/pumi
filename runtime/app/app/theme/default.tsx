@@ -3138,7 +3138,7 @@ function NeedsAttention() {
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
   const loud = loudTabs(tabs)
   if (!loud.length) return null
-  // On the yellow, the window's colour reads: dark on the dark theme's light yellow, light on the light theme's amber.
+  // The window's colour reads on the yellow, whatever colours the theme gives.
   const ink = t.window
   return (
     <div style={{ display: "flex", flexDirection: "column", flexShrink: 0, paddingTop: 4, paddingBottom: 4, backgroundColor: t.warning, borderBottomWidth: 1, borderColor: t.border }}>

@@ -35,8 +35,8 @@ function View({ index, active }: { view: string; active: boolean; index: number 
 
 export default defineTheme({
   name: "My Theme",
-  colors: { dark: { accent: "#ff6b6b" }, light: { accent: "#c92a2a" } },
-  terminal: { dark: { background: "#101014" } },
+  colors: { accent: "#ff6b6b" },
+  terminal: { background: "#101014" },
   metrics: { radius: 0, fontSize: 13 },
   fonts: [`${import.meta.dir}/fonts/pixel.ttf`],
   components: { View },
@@ -51,13 +51,15 @@ export default defineTheme({
 | `fonts` | font files |
 | `window` | `{ background: "opaque" \| "transparent" \| "blurred", blur }` (`blur`, macOS: px of the window server's blur behind a background that is not opaque) |
 | `layout` | `gap`, `divider`, `lifted`; or a function `(tokens, metrics, option) => ({ … })`, where `option("pane_style")` reads the theme's own setting, drawn again as it changes |
-| `fromPalette` | `(palette, appearance) => tokens`: colours made from the terminals' palette (the picked colour scheme, else the theme's `terminal`), over `colors`, so the window matches whatever scheme is picked; with a scheme picked, the look is the scheme's |
+| `fromPalette` | `(palette) => tokens`: colours made from the terminals' palette (the picked colour scheme, else the theme's `terminal`), over `colors`, so the window matches whatever scheme is picked; with a scheme picked, the look is the scheme's |
 | `docks` | extra sidebars |
 | `components` | parts to replace |
 
 Above the sixteen ANSI colours, terminals use xterm's 256-colour cube and grey ramp. With `terminal_palette_generate` on (Settings: "Generate 256 colors from the scheme"), pumi builds them from the sixteen, the background and the foreground instead, as Ghostty's `palette-generate` does, so programs that use 256 colours match the scheme. `terminal_palette_harmonious` keeps a light background's generated colours running from light to dark. Generation never overwrites a colour a theme pins in `palette`.
 
 Pick a theme with `pumi option set ui_theme NAME`, or in `settings.json` (`"options": { "ui_theme": "mytheme" }`). If one throws, the window falls back to the default theme, and the app started with `--safe` (or Settings → Plugins → Safe mode) runs without any plugin.
+
+The default theme has no look of its own beyond the colour scheme: it draws `terminal_colorscheme`'s colours made into tokens, so picking a scheme (Settings → Appearance → Color scheme, or `pumi option set terminal_colorscheme "TokyoNight"`) changes the window and the terminals together. Its own colours, for an empty `terminal_colorscheme` (Settings: "Match the theme"), are GitHub Dark Default's, which is the default too. A plugin's theme is drawn with its own colours, and gets any it leaves out from the default theme's.
 
 The default theme has settings of its own, under the theme picker in Settings: `ui_font_size` (the window's text, 10–16pt), `ui_inactive_pane_fade` (0–80%), `ui_pane_gap` (px), `ui_radius` (px), `ui_accent` (`#rrggbb`), `ui_background_opacity` (20–100%, 95 by default; 100 is opaque, lower shows the desktop through the window) and `ui_background_blur` (0–60px, 40 by default; how much what shows through is blurred). A plugin's theme declares its own in its manifest and reads them with `useThemeOption`.
 
@@ -125,7 +127,7 @@ export default defineTheme({
 
 ## Styling
 
-Styles are objects, not CSS: flexbox, plus gradients, nine-slice borders, sprite sheets and motion. Take colours from `useTheme()` so they follow light and dark.
+Styles are objects, not CSS: flexbox, plus gradients, nine-slice borders, sprite sheets and motion. Take colours from `useTheme()` so they follow the theme in use.
 
 ```tsx
 <div style={{ background: { type: "linear-gradient", angle: 90, stops: [{ color: t.accent }, { color: t.surface }] } }} />

@@ -317,7 +317,7 @@ export function WindowChoice() {
 /** The schemes the start screen offers after the theme's own: the best known. */
 export const START_SCHEMES = ["Catppuccin Mocha", "Dracula", "TokyoNight"]
 
-/** `terminal_colorscheme`, set as it is picked: the theme's own (the default), or one of `START_SCHEMES`; the rest are a page of Settings away. */
+/** `terminal_colorscheme`, set as it is picked: the theme's own colours, or one of `START_SCHEMES`; the rest are a page of Settings away. */
 export function SchemeChoice() {
   const t = useTheme()
   const ts = useTextSize()
@@ -331,7 +331,7 @@ export function SchemeChoice() {
   if (!shown && palette && palette !== own) setOwn(palette)
   const pick = (v: string) => {
     setPicked(v)
-    setOption("terminal_colorscheme", v || null).catch((err) => console.error("pumi: setting terminal_colorscheme:", err?.message ?? err))
+    setOption("terminal_colorscheme", v).catch((err) => console.error("pumi: setting terminal_colorscheme:", err?.message ?? err))
   }
   const cards = [
     {
