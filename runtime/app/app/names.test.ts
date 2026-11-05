@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { Snapshot } from "./engine.ts"
-import { viewName } from "./names.ts"
+import { tabLabel, viewName } from "./names.ts"
+import { entries, type Entry } from "./plugins.ts"
 
 const tab = (id: string, more: Partial<Snapshot["tabs"][number]> = {}) => ({ tab_id: id, block: "terminal", view_id: "@1", workspace_id: "$1", status: "", ...more })
 
@@ -32,5 +33,32 @@ describe("viewName", () => {
 
   test("never by its index", () => {
     expect(viewName(snapshot(null), {}, "@9")).not.toMatch(/\d/)
+  })
+})
+
+describe("tabLabel", () => {
+  const launcher: Entry = {
+    id: "pumi_dev/launcher",
+    prefix: "pumi_dev.launcher.",
+    dir: "/nowhere",
+    manifest: { name: "launcher", contributes: { blocks: [{ id: "new", title: "New Tab" }] } },
+    state: "running",
+    active: true,
+    sent: true,
+  }
+  entries.set(launcher.id, launcher)
+
+  test("a tab of a plugin block goes by the block's name in its manifest", () => {
+    expect(tabLabel({ block: "pumi_dev.launcher.new" })).toBe("New Tab")
+  })
+
+  test("a terminal's title, its directory and its own name still come first", () => {
+    expect(tabLabel({ block: "pumi_dev.launcher.new", terminal_title: "zsh" })).toBe("zsh")
+    expect(tabLabel({ block: "pumi_dev.launcher.new", cwd: "/src/pumi" })).toBe("pumi")
+    expect(tabLabel({ block: "pumi_dev.launcher.new", label: "tabs", terminal_title: "zsh" })).toBe("tabs")
+  })
+
+  test("a block no manifest of ours names keeps its id", () => {
+    expect(tabLabel({ block: "someone.else.board" })).toBe("someone.else.board")
   })
 })
