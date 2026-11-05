@@ -1,4 +1,5 @@
 use crate::theme;
+use crate::ui::blocklist;
 use futures::StreamExt;
 use futures::channel::mpsc::{UnboundedSender, unbounded};
 use gpui::{
@@ -443,6 +444,8 @@ enum Native {
     System(String),
     NewWindow(String),
     Download(String, Option<String>, bool),
+    /// Something the page could not do, said as it happens (`WebviewEvent::Notice`).
+    Notice(String),
 }
 pub enum WebviewEvent {
     Focused,
@@ -493,6 +496,13 @@ pub struct Webview {
     id: gpui::EntityId,
     /// The pointer the page asks for where the mouse is (`Ipc::Cursor`).
     cursor: gpui::CursorStyle,
+    /// The JS the page runs before its own, in every document it loads (`scripts`): handed to the
+    /// builder, so it is in place before the first one.
+    scripts: Vec<String>,
+    /// The files of rules it is blocked by (`blocklists`), and those rules as they were read: the
+    /// compile identifiers and their JSON.
+    blocklists: Vec<String>,
+    lists: Vec<blocklist::List>,
 }
 impl EventEmitter<WebviewEvent> for Webview {}
 impl Focusable for Webview {
@@ -501,11 +511,30 @@ impl Focusable for Webview {
     }
 }
 impl Webview {
-    pub fn new(src: &str, plugin: Option<Plugin>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        src: &str,
+        plugin: Option<Plugin>,
+        scripts: Vec<String>,
+        blocklists: Vec<String>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let url = plugin.as_ref().map(|p| p.url(src)).unwrap_or_else(|| src.to_string());
         let mut this = Self::make(cx.focus_handle(), url, 1.0, cx);
         this.own_focus = true;
         this.plugin = plugin;
+        this.scripts = scripts;
+        this.blocklists = blocklists;
+        // Read here, once: a list is refused whole, and the page is still a page without it.
+        this.lists = match blocklist::read(&this.blocklists, this.plugin.as_ref().map(|p| p.dir.as_path())) {
+            Ok(lists) => lists,
+            Err(err) => {
+                // In the app's log (Console.app, or the terminal that started it), and as a notice
+                // the window shows: a list that is refused is never a silent one.
+                eprintln!("pumi: {err}");
+                cx.emit(WebviewEvent::Notice(err));
+                Vec::new()
+            }
+        };
         this
     }
     fn make(focus: FocusHandle, url: String, zoom: f64, cx: &mut Context<Self>) -> Self {
@@ -557,6 +586,9 @@ impl Webview {
             polling: false,
             background: None,
             keep: Vec::new(),
+            scripts: Vec::new(),
+            blocklists: Vec::new(),
+            lists: Vec::new(),
             keys_told: 0,
         }
     }
@@ -677,6 +709,16 @@ impl Webview {
                 match self.build(&parent, cx) {
                     Ok(w) => {
                         self.surface = Some(platform::Surface::new(&w, &parent));
+                        // The rules are asked of the engine before the page's first request it
+                        // makes (macOS compiles them then; the store makes a second look cheap).
+                        if let (false, Some(surface)) = (self.lists.is_empty(), &self.surface) {
+                            let tx = self.native.clone();
+                            surface.blocklists(
+                                &w,
+                                &self.lists,
+                                Box::new(move |text| drop(tx.unbounded_send(Native::Notice(text)))),
+                            );
+                        }
                         self.webview = Some(w);
                     }
                     Err(err) => {
@@ -795,6 +837,9 @@ impl Webview {
                 None => builder,
             };
         }
+        for script in &self.scripts {
+            builder = builder.with_initialization_script_for_main_only(script.clone(), true);
+        }
         let webview = builder
             .with_url(url.as_ref())
             .with_visible(false)
@@ -859,6 +904,7 @@ impl Webview {
             Native::Bridge(body) => cx.emit(WebviewEvent::Bridge(body)),
             Native::Reply(body) => cx.emit(WebviewEvent::Reply(body)),
             Native::Snapshot(path, result) => cx.emit(WebviewEvent::Snapshot(path, result.err())),
+            Native::Notice(text) => cx.emit(WebviewEvent::Notice(text)),
             Native::Ipc(Ipc::Focus) => cx.emit(WebviewEvent::Focused),
             Native::Ipc(Ipc::Nav(nav)) => {
                 if let Some(surface) = &self.surface {

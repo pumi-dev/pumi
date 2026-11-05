@@ -379,6 +379,60 @@ impl Surface {
             std::ptr::eq(parent.cast_const(), Retained::as_ptr(&self.container).cast())
         }
     }
+    /// Hands the page `lists`: each one compiled by WebKit — once per identifier, kept in its store
+    /// — and attached to the page's user content controller, so the requests its rules name are
+    /// answered before they leave. `say` hears about a list that would not compile.
+    pub fn blocklists(&self, w: &WebView, lists: &[crate::ui::blocklist::List], say: Box<dyn Fn(String)>) {
+        let Some(controller) = Self::controller(w) else {
+            say("web page: no user content controller for its blocklists".into());
+            return;
+        };
+        // The blocks outlive this call: the page's controller is retained for them, and `say` is
+        // shared by each list's completion.
+        let Some(controller) = (unsafe { Retained::retain(controller) }) else { return };
+        let say: std::rc::Rc<dyn Fn(String)> = std::rc::Rc::from(say);
+        for list in lists {
+            let identifier = NSString::from_str(&list.identifier);
+            let rules = NSString::from_str(&list.rules);
+            let say = std::rc::Rc::clone(&say);
+            let controller = controller.clone();
+            let block = block2::RcBlock::new(move |compiled: *mut AnyObject, error: *mut AnyObject| unsafe {
+                if compiled.is_null() {
+                    let what: *mut NSString =
+                        if error.is_null() { null_mut() } else { msg_send![error, localizedDescription] };
+                    say(what.as_ref().map_or_else(|| "WebKit compiled no blocklist".into(), |err| err.to_string()));
+                    return;
+                }
+                let _: () = msg_send![&*controller, addContentRuleList: compiled];
+            });
+            unsafe {
+                // Compiled rules are the store's own: the second page with the same rules, and the
+                // next launch, is a lookup rather than a compile.
+                let store: *mut AnyObject = msg_send![objc2::class!(WKContentRuleListStore), defaultStore];
+                if store.is_null() {
+                    return;
+                }
+                let _: () = msg_send![
+                    store,
+                    compileContentRuleListForIdentifier: &*identifier,
+                    encodedContentRuleList: &*rules,
+                    completionHandler: &*block
+                ];
+            }
+        }
+    }
+    /// The page's user content controller: where its content rule lists and its scripts live.
+    fn controller(w: &WebView) -> Option<*mut AnyObject> {
+        unsafe {
+            let wk = wk(w);
+            let configuration: *mut AnyObject = msg_send![&*wk, configuration];
+            if configuration.is_null() {
+                return None;
+            }
+            let controller: *mut AnyObject = msg_send![configuration, userContentController];
+            (!controller.is_null()).then_some(controller)
+        }
+    }
     /// Writes a PNG of what the page shows to `path`: WKWebView's own picture of it, at the
     /// window's scale. `done` hears when it is written, or why not.
     pub fn snapshot(&self, w: &WebView, path: &str, done: Box<dyn FnOnce(Result<(), String>)>) {

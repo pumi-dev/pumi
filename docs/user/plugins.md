@@ -441,6 +441,35 @@ const title = await webviewRun<string>(handle, "return document.title")
 await webviewSnapshot(handle, "/tmp/page.png")
 ```
 
+### What a page runs first
+
+`scripts` is JS the page runs **before its own**, at document start, in the main frame, on every document it loads — `WKUserScript`, WebView2's `AddScriptToExecuteOnDocumentCreated`, WebKitGTK's user script. It is for what must be there from the first paint and stay through every navigation: a filter, a keyboard shortcut, a skip. Changing the list makes the page again; the same world `webviewRun` runs in, so either sees the other's globals.
+
+```tsx
+// web/install.ts: the loop, once, for every document
+export const install = (): string => `(() => { …window.__mine = { … } })()`;
+
+<WebView handle={handle} src={src} scripts={[install()]} />
+```
+
+`blocklists` is a page's content blocking: JSON files of WebKit's rules, the format uBO Lite and AdGuard for Safari compile EasyList into, answered **before a request leaves** — something no script can do. A relative path is the plugin's own folder (as `src` is), an absolute one is read as this user. The rules are compiled once per store and kept by their own hash, so the tenth page with the same list is a lookup; a list with a rule WebKit cannot take is refused whole and the page still loads, without it (`pumi plugin logs` says which rule).
+
+```json
+// blocklists/youtube.json
+[
+  { "trigger": { "url-filter": "youtube\.com/pagead/" }, "action": { "type": "block" } },
+  { "trigger": { "url-filter": "googleads\.g\.doubleclick\.net" }, "action": { "type": "block" } },
+  { "trigger": { "url-filter": "^https?://(www|m)\.youtube\.com/" },
+    "action": { "type": "css-display-none", "selector": ".ytp-ad-module, #masthead-ad" } }
+]
+```
+
+```tsx
+<WebView handle={handle} src={src} blocklists={["blocklists/youtube.json"]} />
+```
+
+The actions are WebKit's: `block`, `block-cookies`, `css-display-none` (with `action.selector`), `ignore-previous-rules`, `make-https`, `upgrade-insecure-requests`; `block` and `block-cookies` need `trigger.url-filter`. The file is read when the page is made, so an edited list is a page loaded again. macOS and Linux take the rules natively; Windows is request interception and a stylesheet, not yet implemented (it says so in the log).
+
 ## Files
 
 `pumi plugin dev` links a folder, so its own files are what runs. What it keeps between runs goes in `paths`: `paths.config`, `paths.state` and `paths.cache`, a directory each under pumi's, for that plugin alone. An option in the `plugin` scope is the store pumi keeps for it.

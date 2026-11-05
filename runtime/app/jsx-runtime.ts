@@ -41,6 +41,22 @@ export namespace JSX {
     /** A tab's screen, scaled into the box. */
     preview: Props & { tab: string | number | { id: number; server?: string } }
     /** A web page (sdk/webview.tsx's `WebView` fills in a plugin's own). */
-    webview: Props & { handle: string; src: string; plugin?: string; dir?: string; args?: unknown; theme?: unknown; themeCss?: string; background?: string; keepKeys?: string[]; zoom?: number; autoFocus?: boolean }
+    webview: Props & {
+      handle: string
+      src: string
+      plugin?: string
+      dir?: string
+      args?: unknown
+      theme?: unknown
+      themeCss?: string
+      background?: string
+      keepKeys?: string[]
+      /** JS the page runs before its own, at document start, in the main frame (`<WebView scripts>`). */
+      scripts?: string[]
+      /** Files of WebKit content-blocker rules the page is blocked by (`<WebView blocklists>`). */
+      blocklists?: string[]
+      zoom?: number
+      autoFocus?: boolean
+    }
   }
 }

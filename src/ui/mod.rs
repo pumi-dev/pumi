@@ -2,6 +2,7 @@
 //! Diagnostics window (Settings is React: runtime/app/app/settings).
 pub use pumi_ui as kit;
 
+pub mod blocklist;
 pub mod diagnostics;
 pub mod elements;
 pub mod ime;
