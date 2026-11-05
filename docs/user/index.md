@@ -19,7 +19,7 @@ On Windows, in PowerShell:
 irm https://pumi.dev/install.ps1 | iex
 ```
 
-pumi runs on macOS 14 or later (Apple silicon and Intel), Linux with glibc 2.35 or later (Debian 12, Ubuntu 22.04, Fedora 36, Arch; x86_64 and arm64), and Windows 10 1809 or later (x86_64).
+pumi runs on macOS 14 or later (Apple silicon and Intel), Linux with glibc 2.35 or later (Debian 12, Ubuntu 22.04, Fedora 36, Arch; x86_64 and arm64), and Windows 10 1809 or later (x86_64; on arm64, Windows 11 on ARM, which runs that build under x64 emulation).
 
 Flags go after `sh -s --` (`curl -fsSL https://pumi.dev/install.sh | sh -s -- --version 0.42.0`):
 
