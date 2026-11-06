@@ -39,8 +39,9 @@ export interface NewTab {
 /** window.json's key: how many times each row was opened from either list, by its id. */
 export const USES = "new_tab.uses"
 
-/** The letters no row gets: Launchpad's own `File…` is `F`, so a row's letter is the same in both lists. */
-export const RESERVED_LETTERS = ["f"]
+/** The letters no row gets: none, now that Launchpad's own row is gone; a list's own row reserves its
+ *  letter here, so a row keeps the same one in both lists. */
+export const RESERVED_LETTERS: string[] = []
 
 /** Counts one use of the row `id`. */
 export function noteUse(id: string) {
