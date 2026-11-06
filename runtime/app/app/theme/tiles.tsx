@@ -44,6 +44,12 @@ export const TileMotion = createContext<TileMotion>({})
 /** Whether the pane drawn here meets the top of its layout (or covers it, zoomed): its bar is in the title bar's row. */
 export const AtTop = createContext(false)
 
+/**
+ * Whether the pane drawn here meets the top left of its layout (or covers it, zoomed): with the
+ * side bar away, it is the window's corner, where the window's own controls are drawn.
+ */
+export const AtCorner = createContext(false)
+
 /** What a view's edges do to its layout, and what a tab dropped on one of its panes does. */
 export interface TilingEdit {
   resize(node: Branch, ratio: number): Promise<void>
@@ -422,7 +428,9 @@ function Tile({
             }}
           >
             <AtTop.Provider value={lifted || box.y < NOTHING}>
-              <Leaf frozen={frozen} lifted={lifted} {...props} />
+              <AtCorner.Provider value={lifted || (box.y < NOTHING && box.x < NOTHING)}>
+                <Leaf frozen={frozen} lifted={lifted} {...props} />
+              </AtCorner.Provider>
             </AtTop.Provider>
             {move && !frozen ? <PaneDrop leaf={props.leaf} move={move} /> : null}
           </div>

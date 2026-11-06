@@ -46,7 +46,7 @@ import { useTab as useTabModel } from "../../sdk/state.ts"
 import { useLocal } from "../local.ts"
 import { tabLabel, viewName } from "../names.ts"
 import { FONT_DEFAULT } from "../../sdk/font.ts"
-import { AtTop, TileMotion, Tiling } from "./tiles.tsx"
+import { AtCorner, AtTop, TileMotion, Tiling } from "./tiles.tsx"
 import * as worktreeViews from "../worktree-views.ts"
 import { nameOf, shortName } from "../worktrees.ts"
 import { runsTerminal } from "../terminals.ts"
@@ -125,7 +125,7 @@ function Window() {
   const m = useMetrics()
   const C = useComponents()
   const [open, setShown] = useSidebar()
-  // While the start screen shows the first run's choices, neither the side bar nor the header over the panes.
+  // While the start screen shows the first run's choices, no side bar.
   const [setup, setSetup] = useState(false)
   const shown = open && !setup
   const [width, setWidth] = useLocal(PREFS.sidebarWidth, 260)
@@ -145,9 +145,8 @@ function Window() {
             <Resizer width={width} setWidth={setWidth} />
           </div>
         ) : null}
-        {/* The panes run top to bottom beside it, their title bars in the title bar's row; with it hidden, the views are a header over them. */}
+        {/* The panes run top to bottom beside it, their title bars in the title bar's row; with the side bar away they take the window whole, and the first pane's bar carries the window's own controls (`WindowControls`). */}
         <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, backgroundColor: t.editor }}>
-          {shown || setup ? null : <Header />}
           <div style={{ display: "flex", flexGrow: 1, minWidth: 0, minHeight: 0 }}>
             <C.Layout />
           </div>
@@ -185,18 +184,17 @@ const TITLE_INSET = 78
 /** How far down from the window's top edge a press moves the window, whatever is under it. */
 const TOP_EDGE = 4
 
-/** The title bar while the side bar is hidden: the button that shows it, the project, the views. */
-function Header() {
+/**
+ * The window's own corner while the side bar is away: the traffic lights' room and the button
+ * that brings the bar back, at the start of the first pane's bar, which the pane's tabs start
+ * after. A press on it moves the window, as the title bar's did.
+ */
+function WindowControls() {
   const t = useTheme()
-  const C = useComponents()
   const [, setOpen] = useSidebar()
   return (
-    <div cache style={{ display: "flex", flexDirection: "row", alignItems: "center", height: TITLE_BAR, flexShrink: 0, gap: 6, paddingLeft: TITLE_INSET, paddingRight: 8, backgroundColor: t.surface, position: "relative", appRegion: "drag" }}>
-      {/* The bar's bottom edge, drawn first so the front view can paint over it and open into the pane below. */}
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 1, backgroundColor: t.border }} />
+    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", alignSelf: "stretch", flexShrink: 0, gap: 4, paddingLeft: TITLE_INSET, paddingRight: 6, borderRightWidth: 1, borderBottomWidth: 1, borderColor: t.border, appRegion: "drag" }}>
       <IconButton icon="layout_sidebar_left" title="Show Side Bar" onClick={() => setOpen(true)} />
-      <ProjectButton shrink={false} />
-      <C.ViewBar />
     </div>
   )
 }
@@ -1380,9 +1378,13 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
   const tree = useLayout(tab?.view_id)
   const draggable = useDraggable<moves.Carried>({ kind: "pumi.tab", tab: front ?? "" })
   const toolbar = useMemo(() => ({ tab: front }), [front])
-  // With the side bar hidden, the title bar is the header over the panes instead.
+  // The top panes' bars are in the title bar's row: the strip's empty end and the room round
+  // the buttons move the window.
+  const inTitleBar = useContext(AtTop)
+  // With the side bar away the window has no title bar of its own: the pane at its top left holds
+  // the window's controls in its bar, and its tabs start after them.
   const [sidebarShown] = useSidebar()
-  const inTitleBar = useContext(AtTop) && sidebarShown
+  const corner = useContext(AtCorner) && !sidebarShown
   const [splitting, setSplitting] = useState(false)
   const [adding, setAdding] = useState(false)
   // The bar and the buttons' section each stop the mouse, so each tells the pane it is over it.
@@ -1433,6 +1435,8 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
         // rest of the bar, so the front tab opens into its body as Zed's does.
         style={{ ...bar, alignItems: "stretch", borderBottomWidth: 0, backgroundColor: t.surface }}
       >
+        {/* The window's own controls, before the strip: they stay put while its tabs scroll. */}
+        {corner ? <WindowControls /> : null}
         <div style={{ display: "flex", flexDirection: "row", alignItems: "stretch", alignSelf: "stretch", minWidth: 0, flexShrink: 1, overflowX: "scroll" }}>
           {tabs.map((tab, index) => (
             <C.PaneTab key={tab} tab={tab} pane={id} index={index} active={tab === front} focused={focused} />
@@ -1467,8 +1471,9 @@ function PaneTitle({ pane: id, tabs, active, focused, zoomed, over, menu }: { pa
         menu(e)
       }}
       title={tab.cwd ?? undefined}
-      style={{ ...bar, gap: 6, paddingLeft: 10, opacity: draggable.dragging ? 0.55 : 1, cursor: draggable.dragging ? "grabbing" : "default" }}
+      style={{ ...bar, gap: 6, paddingLeft: corner ? 0 : 10, opacity: draggable.dragging ? 0.55 : 1, cursor: draggable.dragging ? "grabbing" : "default" }}
     >
+      {corner ? <WindowControls /> : null}
       <TabIcon tab={tab.tab_id} size={12} color={t.faint} />
       <text style={{ fontSize: ts(12), color: focused ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }}>{tabLabel(tab)}</text>
       <div style={{ flexGrow: 1 }} />
