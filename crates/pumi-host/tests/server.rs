@@ -1421,3 +1421,36 @@ fn a_file_opens_on_the_right_and_reads_without_a_renderer() {
     assert!(relative.unwrap_err().to_string().contains("absolute"), "the caller resolves the path");
     assert_eq!(c.call("tab.call", json!([below, "read"])), json!({"text": "# a\n"}), "no renderer: the file");
 }
+
+/// Whether the server declares option `name`.
+fn declared(client: &mut Client, name: &str) -> bool {
+    let listed = client.call("registry.list", json!(["option", {}]));
+    listed.as_array().is_some_and(|all| all.iter().any(|o| o["name"] == name))
+}
+
+#[test]
+fn a_plugins_options_go_with_it() {
+    let dir = Server::dir();
+    let root = dir.path();
+    let pkg = root.join("opts");
+    std::fs::create_dir_all(&pkg).unwrap();
+    let manifest = r#"{ "name": "opts", "pumi": { "name": "opts", "owner": "me", "api": 1, "contributes": {
+      "options": { "greeting": { "type": "string", "default": "hi", "desc": "What it says." } } } } }"#;
+    std::fs::write(pkg.join("package.json"), manifest).unwrap();
+    let server = Server::start_home(root);
+    let mut client = server.client();
+    let path = pkg.to_str().unwrap();
+    client.call("plugin.add", json!([path, {}]));
+    assert!(declared(&mut client, "me.opts.greeting"));
+    client.call("option.set", json!(["me.opts.greeting", "hello", {}]));
+    // Without `data`: the declaration goes with the plugin, the value stays for when it comes back.
+    client.call("plugin.remove", json!(["me/opts", {}]));
+    assert!(!declared(&mut client, "me.opts.greeting"), "the declaration went with it");
+    client.call("plugin.add", json!([path, {}]));
+    assert_eq!(client.call("option.get", json!(["me.opts.greeting", {}])), json!("hello"), "what it was set to");
+    // With `data`: the value goes too.
+    client.call("plugin.remove", json!(["me/opts", {"data": true}]));
+    assert!(!declared(&mut client, "me.opts.greeting"));
+    client.call("plugin.add", json!([path, {}]));
+    assert_eq!(client.call("option.get", json!(["me.opts.greeting", {}])), json!("hi"), "the default again");
+}

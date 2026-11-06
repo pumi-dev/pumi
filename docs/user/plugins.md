@@ -496,7 +496,10 @@ pumi plugin add owner/repo                   # install from GitHub
 pumi plugin add owner/repo --version v1.2   # a version of it
 pumi plugin update owner/name                # refresh it from its source (its id, which may differ from the repo's name)
 pumi plugin remove owner/name                # uninstall it
+pumi plugin remove owner/name --data         # and what it kept: its own files, its secrets, its options' values
 ```
+
+An option a plugin declared goes with the plugin: removing it takes the declaration back, so Settings has no row for it. What its options were set to stays, and is there again when it is installed again, unless `data` says: then every object's value of them goes too.
 
 A plugin runs with your permissions and no sandbox, so say what yours does.
 

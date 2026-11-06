@@ -3,8 +3,8 @@
 //! their keys mapped in the `root` table, each calling its command (`owner.name.<command>`),
 //! which the app provides for the plugin and starts its worker on, and their blocks
 //! (`owner.name.<id>`, with a block's `version`, `strategy` and `methods`) told to the server,
-//! which `block.list` lists and `tab.open` opens. A plugin that goes takes its keys and blocks
-//! with it.
+//! which `block.list` lists and `tab.open` opens. A plugin that goes takes its keys, its blocks and
+//! its options' declarations with it.
 //!
 //! A running plugin can change what it contributes (`plugin.contribute`): what it says is kept
 //! here, in place of its manifest's `contributes`, until it gives it back or stops.
@@ -94,6 +94,23 @@ pub fn follow(cx: &mut Cx) {
     }
     if let Err(err) = cx.call("core.setTraits", json!([traits])) {
         crate::server::log(&format!("traits: {}", err.message));
+    }
+    // An option a plugin declared is a declaration, not a value: one whose plugin is gone is taken
+    // back, or Settings keeps a page for a plugin that is not installed (`Decl.plugin` names it).
+    let gone: Vec<String> = match cx.host::<Kernel>() {
+        Ok(k) => k
+            .model
+            .options
+            .decls()
+            .filter(|d| d.plugin.as_ref().is_some_and(|p| !now.contains_key(p)))
+            .map(|d| d.name.clone())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    for name in gone {
+        if let Err(err) = cx.call("option.undeclare", json!([name])) {
+            crate::server::log(&format!("option {name}: {}", err.message));
+        }
     }
     let Ok(k) = cx.host::<Kernel>() else { return };
     let before = std::mem::take(&mut k.ext.get_or_default::<Mapped>().0);

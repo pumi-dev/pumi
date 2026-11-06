@@ -276,3 +276,33 @@ pub fn pumi_create_option(cx: &mut Cx, name: String, spec: OptionSpec) -> Result
     k.emit("registry.changed", "option", About::default(), json!({ "kind": "option", "names": [name] }));
     Ok(())
 }
+/// What `option.undeclare` takes beyond the declaration.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UndeclareOpts {
+    /// Also the values it was set to, at every object that held one (`plugin.remove`'s `data`).
+    #[serde(default)]
+    pub data: Option<bool>,
+}
+/// Take a declaration back: an option a plugin declared is one no more, so Settings has no row for
+/// it. Its values stay, for the plugin that comes back, unless `data` says: then they go too.
+#[api(
+    name = "option.undeclare",
+    internal,
+    example(args = r#"["files.sort"]"#, result = "null"),
+    example(args = r#"["files.sort", {"data": true}]"#, result = "null", desc = "And what it was set to.")
+)]
+pub fn pumi_undeclare_option(cx: &mut Cx, name: String, opts: Option<UndeclareOpts>) -> Result<()> {
+    let data = opts.unwrap_or_default().data.unwrap_or(false);
+    let (_, k) = kernel(cx)?;
+    if data {
+        for at in k.model.options.keys() {
+            k.unset_option(&name, at, "plugin");
+        }
+    }
+    if k.model.options.undeclare(&name) {
+        k.emit("registry.changed", "option", About::default(), json!({ "kind": "option", "names": [name] }));
+    }
+    k.dirty = true;
+    Ok(())
+}
