@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { arrange, grows, mergeGroup, moveGroup, moveSection, resize, shareOf, shown, splitOut, TREE, type Arrangement } from "./sidebar.ts"
+import { arrange, grows, mergeGroup, moveGroup, moveSection, open as openParts, resize, shareOf, shown, splitOut, TREE, type Arrangement } from "./sidebar.ts"
 
 const two: Arrangement = {
   groups: [
@@ -12,14 +12,13 @@ const two: Arrangement = {
 const ids = (a: Arrangement) => a.groups.map((g) => `${g.id}:${g.sections.join(",")}`)
 
 describe("arrange", () => {
-  test("new sections join the first group; nothing stored makes one", () => {
+  test("a section not seen before is a page of its own", () => {
     const first = arrange(undefined, ["agents", "files"])
-    expect(first.groups).toHaveLength(1)
-    expect(first.groups[0]!.sections).toEqual(["agents", "files"])
+    expect(first.groups.map((g) => g.sections)).toEqual([["agents"], ["files"]])
     expect(first.active).toBe(first.groups[0]!.id)
-    // Made again from nothing on every edit: the same group each time, so an edit finds it.
+    // Made again from nothing on every edit: the same pages each time, so an edit finds them.
     expect(arrange(undefined, ["agents"]).groups[0]!.id).toBe(first.groups[0]!.id)
-    expect(ids(arrange(two, ["agents", "npm", "tide"]))).toEqual(["a:agents,files,git,tide", "b:npm"])
+    expect(ids(arrange(two, ["agents", "npm", "tide"]))).toEqual(["a:agents,files,git", "b:npm", "tide:tide"])
   })
 
   test("a section off for now keeps its place; one seen twice stays in the first", () => {
@@ -70,13 +69,13 @@ describe("moves", () => {
 })
 
 describe("the tree", () => {
-  test("new to a group that holds sections, it heads it", () => {
-    expect(ids(arrange({ groups: [{ id: "a", sections: ["files"] }] }, [TREE, "files"]))).toEqual(["a:tree,files"])
-    expect(ids(arrange(undefined, [TREE, "files"]))).toEqual(["main:tree,files"])
+  test("seen again, it keeps the page it is in, and heads it", () => {
+    expect(ids(arrange({ groups: [{ id: "a", sections: ["files"] }] }, [TREE, "files"]))).toEqual(["a:files", "tree:tree"])
+    expect(ids(arrange({ groups: [{ id: "a", sections: ["files", TREE] }] }, [TREE, "files"]))).toEqual(["a:tree,files"])
   })
 
   test("the last section beside it leaves for a group of its own, and comes back after it", () => {
-    const both = arrange(undefined, [TREE, "files"])
+    const both = arrange({ groups: [{ id: "main", sections: [TREE, "files"] }] }, [TREE, "files"])
     const out = splitOut(both, "files")
     expect(out.groups.map((g) => g.sections)).toEqual([[TREE], ["files"]])
     expect(out.active).toBe(out.groups[1]!.id)
@@ -117,5 +116,18 @@ describe("shares", () => {
     expect(grows({ [TREE]: 1.2, git: 0.8 }, [TREE, "git"])).toEqual({ [TREE]: 0.6, git: 0.4 })
     expect(grows(undefined, ["a", "b"])).toEqual({ a: 0.5, b: 0.5 })
     expect(grows({}, [])).toEqual({})
+  })
+})
+
+describe("folding", () => {
+  test("a page's first section stays open, however it was put away", () => {
+    expect(openParts(["files", "git", "npm"], [])).toEqual(["files", "git", "npm"])
+    expect(openParts(["files", "git", "npm"], ["files"])).toEqual(["files", "git", "npm"])
+    expect(openParts(["files", "git", "npm"], ["files", "git", "npm"])).toEqual(["files"])
+  })
+
+  test("the tree heads its page open, so the sections after it fold as they like", () => {
+    expect(openParts([TREE, "files", "git"], ["files"])).toEqual([TREE, "git"])
+    expect(openParts([TREE, "files"], [TREE, "files"])).toEqual([TREE])
   })
 })
