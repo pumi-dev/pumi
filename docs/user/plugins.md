@@ -86,7 +86,7 @@ Everything a plugin owns is prefixed with its id, `owner.name.`: options, functi
 | `commands` | Palette entries, `{id, title}`. A command is a function `owner.name.<id>`; a key and a slot action run one. |
 | `keys` | Default keys, `{key, command}`. |
 | `slots` | What it adds to the window: a `component` (an export of `ui.tsx`) and `actions` (each runs a command). |
-| `blocks` | Tabs it can hold: `{id, title, icon, version, strategy, methods, engine}`. |
+| `blocks` | Tabs it can hold: `{id, title, icon, audience, version, strategy, methods, engine}`. |
 | `renderers` | Blocks it draws but did not define, by block, with the `ui.tsx` export that draws them. |
 | `traits` | What a tab is beside its block: `{id, title, desc, fields}`. |
 | `settings` | Its pages in Settings and its sections on one, each a `ui.tsx` export: see [Settings](#settings). |
@@ -150,7 +150,7 @@ A slot is a place in the window. Give it a `component`, an export of `ui.tsx`, o
 
 A theme draws them with `useSlot(slot, args)`, from `pumi/theme`.
 
-`tab.new` is what a new tab can be: the list a right press on the pane's `+` shows, and Launchpad's list. pumi adds nothing of its own; the list holds each plugin's actions (the Terminal plugin's shell among them), and the blocks of plugins with none, the most used first. Each row has a letter that picks it while the list or Launchpad's tab has the keys: its first letter while no row before it in the plugins' order has it (`C` for Claude Code), else another word's first (`A` for Cursor Agent), else another of its letters. The letter stays the same as the order of use changes. A press on the `+` itself opens one new tab, what `new_tab` names, without the list. A theme or plugin gets the list, with the letters and the order, from `useNewTabs()` in `pumi/theme`. Opening a file is a plugin's too: an editor adds `File…`, an image editor `Image…`.
+`tab.new` is what a new tab can be: the list a right press on the pane's `+` shows, and Launchpad's list. pumi adds nothing of its own; the list holds each plugin's actions (the Terminal plugin's shell among them), and the blocks of plugins with none — those a person is offered, its `audience` `any` or `user` (see [Blocks](#blocks)) — the most used first. Each row has a letter that picks it while the list or Launchpad's tab has the keys: its first letter while no row before it in the plugins' order has it (`C` for Claude Code), else another word's first (`A` for Cursor Agent), else another of its letters. The letter stays the same as the order of use changes. A press on the `+` itself opens one new tab, what `new_tab` names, without the list. A theme or plugin gets the list, with the letters and the order, from `useNewTabs()` in `pumi/theme`. Opening a file is a plugin's too: an editor adds `File…`, an image editor `Image…`.
 
 An action with `pick` asks the user for files before its command runs, with the system's picker (`fs.pick`). `match` takes globs, as a file renderer's does; on macOS the picker greys out the other files when each glob is `*.<ext>`, and elsewhere a file none of them fits is refused once chosen, with a notification. The command gets what the slot gives it and `path`, or `paths` when `multiple` is set; a cancelled picker runs nothing. `kind: "directory"` picks a folder instead, and takes no `match`.
 
@@ -175,6 +175,21 @@ A block is what a tab holds: the core's `file`, or one of a plugin's own (a shel
 ```json
 "blocks": [{ "id": "page", "title": "Page", "methods": ["navigate"] }]
 ```
+
+`audience` says who its tabs are for, and so who is offered one (a new tab's list) and who may start one (`tab.open`). A tab that comes back to what it was — a session, or one reopened from the closed list — is nobody's to start.
+
+| `audience` | offered | who starts one |
+| --- | --- | --- |
+| `any` (default) | yes | anyone: the window, a plugin, an agent |
+| `user` | yes | a person's press in the window, and the plugin that declares it — never an agent |
+| `agent` | no | anyone |
+| `internal` | no | the plugin that declares it, alone |
+
+```json
+"blocks": [{ "id": "diff", "title": "Diff", "audience": "internal" }]
+```
+
+A diff needs the panel that fills it in, so the Git plugin's `pumi_dev.git.diff` is `internal`: neither a press on the `+` nor `pumi tab open pumi_dev.git.diff` starts one, and the panel opens it as itself. A block a person picks is `any` (a terminal, a page) or `user` (the Music Studio player), which an agent does not start. A block's own `ui.tsx` calls are the window's, not its plugin's, so an `internal` block is opened from the plugin's `main.ts` (`workspace.openTab`), where its calls arrive as the plugin.
 
 ```tsx
 export function Page({ tab, block, focused }: RendererProps) { … }
@@ -213,7 +228,7 @@ await call("option.set", "@icon", { src: favicon, tint: false }, { scope: "tab",
 pumi option set @icon sparkle --scope tab --id %3
 ```
 
-`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `project`, and leaving the place out puts the tab below the caller's. A `null` block is what a new tab holds: what the `new_tab` option names, a block (`pumi.launchpad.new`, `pumi_dev.terminal.shell`, …) or a `tab.new` action by its function (`pumi_dev.agents.new_claude`), which is called with `{tab, place}` and the block's `args` and answers the tab it opened. While it names nothing installed, it is Launchpad's list, else a shell, else the first `tab.new` action (or block of a plugin with none). With nothing installed, `tab.open` refuses with `no plugin opens new tabs`.
+`tab.open(block, args, place)` says where: `kind` is `tiled`, `float`, `view` or `project`, and leaving the place out puts the tab below the caller's. A `null` block is what a new tab holds: what the `new_tab` option names, a block (`pumi.launchpad.new`, `pumi_dev.terminal.shell`, …) or a `tab.new` action by its function (`pumi_dev.agents.new_claude`), which is called with `{tab, place}` and the block's `args` and answers the tab it opened. While it names nothing installed, it is Launchpad's list, else a shell, else the first `tab.new` action (or block of a plugin with none, of those a person is offered). With nothing installed, `tab.open` refuses with `no plugin opens new tabs`.
 
 ```ts
 await call("tab.open", "pumi_dev.terminal.shell", { command: ["make", "test"] }, { kind: "tiled", split: "right", size: "30%" });

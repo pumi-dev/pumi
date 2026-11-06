@@ -315,6 +315,10 @@ pub struct BlockSpec {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Who its tabs are for: anyone's (`any`), a person's (`user`), an agent's (`agent`), or the
+    /// plugin's that declares it (`internal`).
+    #[serde(default, skip_serializing_if = "Audience::is_any")]
+    pub audience: Audience,
     /// The version of its tabs' saved `data`; a state of another version is refused (1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<u32>,
@@ -328,6 +332,34 @@ pub struct BlockSpec {
     /// `{command, cwd, env, keep}`. Without one, the plugin draws and answers its tabs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine: Option<String>,
+}
+/// Who a block's tabs are for. It says who is offered one (the `+` menu, Launchpad, `new_tab`),
+/// and who may start one (`tab.open`); a tab that comes back to what it was is nobody's to start.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Audience {
+    /// Everyone's: offered wherever a new tab is picked, and started by the window, a plugin or an
+    /// agent alike (`any`).
+    #[default]
+    Any,
+    /// A person's: offered, and started by a press in the window (or by the plugin that declares
+    /// it), never by an agent (`user`).
+    User,
+    /// An agent's: never offered, and started by whatever knows its id (`agent`).
+    Agent,
+    /// Its plugin's alone: never offered, and started only by the plugin that declares it, or to
+    /// restore a tab of it (`internal`).
+    Internal,
+}
+impl Audience {
+    /// Whether a person is offered a tab of it: the `+` menu, Launchpad, Settings' new tabs.
+    pub fn is_offered(&self) -> bool {
+        matches!(self, Audience::Any | Audience::User)
+    }
+    /// Whether it is the default, `any`: what a block that says nothing is.
+    pub fn is_any(&self) -> bool {
+        *self == Audience::Any
+    }
 }
 /// An option's declaration: `option.declare`'s fields, and `secret`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -508,6 +540,9 @@ impl Plugin {
         }
         if let Some(engine) = &block.engine {
             spec["engine"] = engine.clone().into();
+        }
+        if !block.audience.is_any() {
+            spec["audience"] = serde_json::json!(block.audience);
         }
         spec
     }
@@ -975,12 +1010,23 @@ mod tests {
         let text = r#"{ "pumi": { "name": "browser", "owner": "pumi_dev", "api": 1, "contributes": {
             "options": { "url": { "type": "string", "scope": "tab", "blocks": ["page", "terminal"], "desc": "" } },
             "blocks": [{ "id": "page", "version": 2, "strategy": "reference", "methods": ["navigate", "back"] },
-                      { "id": "plain" }, { "id": "term", "engine": "terminal" }] } } }"#;
+                      { "id": "plain" }, { "id": "term", "engine": "terminal" },
+                      { "id": "mine", "audience": "internal" }, { "id": "people", "audience": "user" }] } } }"#;
         let p = parse(text, Path::new("/p"), None).unwrap();
         let blocks = &p.manifest.contributes.blocks;
         let page = serde_json::json!({ "id": "pumi_dev.browser.page", "provider": "pumi_dev/browser",
             "methods": ["navigate", "back"], "version": 2, "strategy": "reference" });
         assert_eq!(p.block_spec(&blocks[0]), page);
+        assert_eq!(
+            p.block_spec(&blocks[3]),
+            serde_json::json!({ "id": "pumi_dev.browser.mine", "provider": "pumi_dev/browser", "methods": [], "audience": "internal" }),
+            "an audience a person is not offered says so"
+        );
+        assert_eq!(
+            p.block_spec(&blocks[4]),
+            serde_json::json!({ "id": "pumi_dev.browser.people", "provider": "pumi_dev/browser", "methods": [], "audience": "user" }),
+            "one only a person starts says so; `any` is left out"
+        );
         assert_eq!(
             p.block_spec(&blocks[1]),
             serde_json::json!({ "id": "pumi_dev.browser.plain", "provider": "pumi_dev/browser", "methods": [] })
@@ -1007,6 +1053,13 @@ mod tests {
         assert!(component(r#""methods": ["goBack"], "strategy": "relaunch""#).is_ok());
         assert!(component(r#""engine": "other""#).unwrap_err().contains("engine"));
         assert!(component(r#""engine": "terminal", "strategy": "exact""#).is_ok(), "the engine decides the strategy");
+        assert!(component(r#""audience": "any""#).is_ok());
+        assert!(component(r#""audience": "user""#).is_ok());
+        assert!(component(r#""audience": "agent""#).is_ok());
+        assert!(
+            component(r#""audience": "nobody""#).unwrap_err().contains("nobody"),
+            "it names the audience it does not know"
+        );
     }
     #[test]
     fn a_trait_is_named_with_its_fields() {

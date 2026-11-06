@@ -175,6 +175,10 @@
                 "maxLength": 16384,
                 "pattern": "^([a-z0-9_]{1,64}|data:image/(svg\\+xml|png|jpeg|webp|gif)[;,].*|plugin:[^/:\\\\][^:\\\\]*\\.(svg|png|jpe?g|webp|gif))$"
               },
+              "audience": {
+                "description": "Who its tabs are for, and so who is offered one and who may start one. `any` (the default): offered wherever a new tab is picked (the `+` menu, Launchpad, Settings ▸ General ▸ New tabs open), and started by the window, a plugin or an agent alike. `user`: offered too, and started by a press in the window (or by the plugin that declares it), never by an agent. `agent`: never offered, and started by whatever knows its id. `internal`: never offered, and started only by the plugin that declares it, or to restore a tab of it.",
+                "enum": ["any", "user", "agent", "internal"]
+              },
               "version": {
                 "description": "The version of its tabs' saved `data`; a state of another version is refused. 1 by default.",
                 "type": "integer",

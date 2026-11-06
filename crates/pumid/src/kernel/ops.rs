@@ -5,7 +5,9 @@ use super::options::Key;
 use super::state::{Origin, STATE_VERSION, TabState, now_rfc3339};
 use super::types::{Restore, SaveOpts};
 use super::{CLOSED_LIMIT, Closed, Float, Kernel, Place, Project, ProjectId, Tab, TabId, View, ViewId};
-use pumi_api::{Cx, Error, Kind, PaneRef, ProjectRef, Ref, Result, TabRef, ViewRef};
+use pumi_api::manifest::Audience;
+use pumi_api::{Caller, Cx, Error, Kind, PaneRef, ProjectRef, Ref, Result, TabRef, ViewRef};
+use pumi_model::SERVER;
 use pumi_model::objects::TabPlace;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -133,12 +135,40 @@ fn state_blobs(kernel: &Kernel, state: Option<&TabState>) -> Result<BTreeMap<Str
         None => Ok(BTreeMap::new()),
     }
 }
+/// Why `caller` may not start a tab of `block`, of the `audience` its plugin declared it with.
+/// `any` and `agent` start for anyone; a `user` one is a person's — a press in the window, or the
+/// plugin that declares it — and an `internal` one is that plugin's alone. A tab coming back to
+/// what it was (`state`: a session, or a tab reopened) is nobody's to start.
+fn started_by(block: &str, audience: Audience, provider: Option<&str>, caller: &Caller, state: bool) -> Result<()> {
+    if state || caller.channel == SERVER {
+        return Ok(());
+    }
+    let own = provider.is_some_and(|p| caller.source.as_deref() == Some(p));
+    // The window's calls name no plugin; an agent's, through `pumi`, are no client at all.
+    let window = caller.source.is_none() && caller.client.is_some();
+    let why = match audience {
+        Audience::Any | Audience::Agent => return Ok(()),
+        Audience::User if !(window || own) => "a person's to start, from the window",
+        Audience::Internal if !own => {
+            return Err(Error::invalid_params(format!(
+                "`{block}` is its plugin's to open ({}), which fills it in",
+                provider.unwrap_or("its own")
+            )));
+        }
+        _ => return Ok(()),
+    };
+    Err(Error::invalid_params(format!("`{block}` is {why}")))
+}
 /// Opens a tab of `ty` where `place` says, new from `args` or restored from `args.state`; or,
 /// with `place.replace`, in that tab instead of its block ([`replace_block`]).
 pub fn open_tab(cx: &mut Cx, ty: &str, mut args: Value, place: PlaceSpec) -> Result<TabId> {
     let ty = ty.to_string();
-    cx.host::<Kernel>()?.block(&ty)?;
+    let (audience, provider) = {
+        let block = cx.host::<Kernel>()?.block(&ty)?;
+        (block.audience(), block.provider().map(str::to_string))
+    };
     let state = take_state(&mut args)?;
+    started_by(&ty, audience, provider.as_deref(), cx.caller(), state.is_some())?;
     if let Some(tab) = place.replace {
         if place != (PlaceSpec { replace: Some(tab), ..PlaceSpec::default() }) {
             return Err(Error::invalid_params("`replace` is the place; say it alone"));
@@ -718,4 +748,54 @@ pub fn get_state(cx: &mut Cx, tab: TabId, opts: &StateOpts) -> Result<TabState> 
         }
     }
     Ok(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const BLOCK: &str = "test.term.diff";
+    const PLUGIN: &str = "test/term";
+    fn caller(channel: u64, source: Option<&str>) -> Caller {
+        Caller { channel, source: source.map(str::to_string), ..Caller::default() }
+    }
+    /// The window: a client, naming no plugin.
+    fn window() -> Caller {
+        Caller { client: Some("9".into()), ..caller(7, None) }
+    }
+    /// An agent's `pumi tab open`: neither a client nor a plugin.
+    fn agent() -> Caller {
+        caller(7, None)
+    }
+    #[test]
+    fn an_any_or_an_agents_block_starts_for_anyone() {
+        for audience in [Audience::Any, Audience::Agent] {
+            for who in [window(), agent(), caller(7, Some(PLUGIN)), caller(7, Some("me/other"))] {
+                assert!(started_by(BLOCK, audience, Some(PLUGIN), &who, false).is_ok(), "{audience:?} {who:?}");
+            }
+        }
+    }
+    #[test]
+    fn a_users_block_is_a_persons_press_its_plugin_s_or_a_tab_coming_back() {
+        let own = caller(7, Some(PLUGIN));
+        assert!(started_by(BLOCK, Audience::User, Some(PLUGIN), &window(), false).is_ok(), "a press in the window");
+        assert!(started_by(BLOCK, Audience::User, Some(PLUGIN), &own, false).is_ok(), "the plugin that declares it");
+        let refused = started_by(BLOCK, Audience::User, Some(PLUGIN), &agent(), false).unwrap_err();
+        assert!(refused.message.contains("a person"), "{refused:?}");
+        assert!(started_by(BLOCK, Audience::User, Some(PLUGIN), &caller(7, Some("me/other")), false).is_err());
+        assert!(started_by(BLOCK, Audience::User, Some(PLUGIN), &agent(), true).is_ok(), "a tab coming back");
+    }
+    #[test]
+    fn an_internal_block_starts_for_its_plugin_or_a_tab_coming_back() {
+        let own = caller(7, Some(PLUGIN));
+        assert!(started_by(BLOCK, Audience::Internal, Some(PLUGIN), &own, false).is_ok());
+        assert!(started_by(BLOCK, Audience::Internal, Some(PLUGIN), &caller(7, Some("me/other")), false).is_err());
+        assert!(started_by(BLOCK, Audience::Internal, Some(PLUGIN), &window(), false).is_err(), "not even the window");
+        let refused = started_by(BLOCK, Audience::Internal, Some(PLUGIN), &agent(), false).unwrap_err();
+        assert!(refused.message.contains(PLUGIN), "{refused:?}");
+        assert!(started_by(BLOCK, Audience::Internal, Some(PLUGIN), &agent(), true).is_ok(), "a tab coming back");
+        assert!(
+            started_by(BLOCK, Audience::Internal, Some(PLUGIN), &caller(SERVER, None), false).is_ok(),
+            "the server"
+        );
+    }
 }

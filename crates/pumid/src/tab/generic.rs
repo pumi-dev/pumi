@@ -3,6 +3,7 @@ use crate::kernel::TabId;
 use crate::kernel::options::Key;
 use crate::kernel::state::Strategy;
 use crate::kernel::types::{Instance, Restore, SaveOpts, Serialized, TabType};
+use pumi_api::manifest::Audience;
 use pumi_api::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -29,6 +30,10 @@ pub struct GenericType {
     /// What runs its tabs, when the core does: `terminal`, a PTY and its program.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine: Option<Engine>,
+    /// Who its tabs are for: a person picking one (`user`), an agent (`agent`), or its plugin
+    /// alone (`internal`): what `tab.open` reads before it starts one.
+    #[serde(default)]
+    pub audience: Audience,
 }
 /// What the core can run a plugin's block on. Its tabs are the engine's: they open with its
 /// arguments, answer its methods, and are saved and brought back as it does.
@@ -58,9 +63,8 @@ impl GenericType {
             return Some(format!("{}: `version` is 1 or more", self.id));
         }
         let terminal = self.engine == Some(Engine::Terminal);
-        let engine = |m: &str| {
-            terminal && (super::terminal::METHODS.contains(&m) || super::terminal::HOST_METHODS.contains(&m))
-        };
+        let engine =
+            |m: &str| terminal && (super::terminal::METHODS.contains(&m) || super::terminal::HOST_METHODS.contains(&m));
         let taken = |m: &str| pumi_api::manifest::BLOCK_PROTOCOL.contains(&m) || engine(m);
         let refused = self.methods.iter().find(|m| m.is_empty() || taken(m));
         refused.map(|m| format!("{}: `{m}` is not a method of its own", self.id))
@@ -144,6 +148,12 @@ impl TabType for GenericType {
             None => &OWN,
         };
         base.iter().map(|m| m.to_string()).chain(self.methods.iter().cloned()).collect()
+    }
+    fn audience(&self) -> Audience {
+        self.audience
+    }
+    fn provider(&self) -> Option<&str> {
+        Some(&self.provider)
     }
     fn open(
         &self,

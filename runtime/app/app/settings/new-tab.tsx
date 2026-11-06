@@ -13,8 +13,9 @@ const labelOf = (title: string, plugin: string) => (title === plugin ? title : `
 
 /**
  * The menu's choices and the one chosen, for `new_tab` being `current`. A block `new_tab` names
- * that a plugin declares but the list leaves out (an agent's bare terminal) opens, so it is shown
- * too; anything else not installed is what new tabs fall back on.
+ * that a plugin declares but the list leaves out (one an agent or its plugin opens: its `audience`)
+ * is shown too, so what it names is never invisible; anything else not installed is what new tabs
+ * fall back on.
  */
 export function newTabChoices(entries: Iterable<From>, current: string): { options: SelectOption[]; value: string } {
   const all = [...entries]

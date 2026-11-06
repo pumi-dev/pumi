@@ -29,7 +29,7 @@ export interface Manifest {
     commands?: { id: string; title: string }[]
     keys?: { key: string; command: string }[]
     options?: Record<string, unknown>
-    blocks?: { id: string; title?: string; icon?: string }[]
+    blocks?: { id: string; title?: string; icon?: string; audience?: "any" | "user" | "agent" | "internal" }[]
     /** The blocks it draws but did not define: block → `ui.tsx` export; for the core's `file`,
      *  optionally with the files it draws (`{ export: "Editor", match: ["*.md"] }`). */
     renderers?: Record<string, string | { export: string; match: string[] }>
