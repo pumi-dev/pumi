@@ -3,7 +3,8 @@ import { newTabChoices } from "./new-tab.tsx"
 import { newTabOf, startables, type From } from "../startable.ts"
 
 type Action = { id: string; title: string; command: string; pick?: { kind: "file" } }
-const entry = (id: string, title: string, blocks: { id: string; title?: string }[], actions: Action[] = [], error?: string): From => ({
+type Block = { id: string; title?: string; audience?: "any" | "user" | "agent" | "internal" }
+const entry = (id: string, title: string, blocks: Block[], actions: Action[] = [], error?: string): From => ({
   id,
   title,
   prefix: `${id.replace("/", ".")}.`,
@@ -29,6 +30,29 @@ const agents = entry(
 const film = entry("amresyd/film", "Film", [{ id: "editor", title: "Film" }])
 const editor = entry("pumi_dev/code-editor", "Code Editor", [], [{ id: "file", title: "File…", command: "open_file", pick: { kind: "file" } }])
 const broken = entry("pumi_dev/browser", "Browser", [{ id: "page", title: "Browser" }], [], "its package.json: bad")
+const diff = entry("pumi_dev/git", "Git", [{ id: "diff", title: "Diff", audience: "internal" }])
+const report = entry("pumi_dev/perf", "Performance", [{ id: "report", title: "Report", audience: "agent" }])
+const studio = entry("pumi_dev/music-studio", "Music Studio", [
+  { id: "player", title: "Music Studio", audience: "user" },
+  { id: "mixer", title: "Mixer", audience: "any" },
+])
+
+test("a block only an agent or its plugin opens is not what a new tab can start", () => {
+  expect(startables([diff, report])).toEqual([])
+  expect(newTabOf(startables([diff, report]), "")).toBeUndefined()
+  expect(newTabOf(startables([diff, report, launchpad]), "pumi_dev.git.diff")?.value).toBe("pumi.launchpad.new")
+  expect(newTabChoices([diff, report], "pumi_dev.git.diff").value).toBe("pumi_dev.git.diff")
+})
+
+test("a person's block and anyone's are offered; the default is anyone's", () => {
+  expect(startables([studio]).map((s) => [s.value, s.title])).toEqual([
+    ["pumi_dev.music-studio.player", "Music Studio"],
+    ["pumi_dev.music-studio.mixer", "Mixer"],
+  ])
+  const choices = newTabChoices([studio], "")
+  expect(choices.options.map((o) => o.value)).toEqual(["pumi_dev.music-studio.player", "pumi_dev.music-studio.mixer"])
+  expect(choices.value).toBe("pumi_dev.music-studio.player")
+})
 
 test("a plugin's tab.new actions are what it starts, else its blocks; one that did not load has none", () => {
   const list = startables([agents, film, terminal, broken])

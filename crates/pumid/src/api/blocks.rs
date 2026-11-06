@@ -5,6 +5,7 @@ use super::kernel;
 use crate::kernel::events::About;
 use crate::kernel::types::TabType;
 use crate::tab::generic::GenericType;
+use pumi_api::manifest::Audience;
 use pumi_api::{Cx, Result, api};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -15,8 +16,11 @@ use std::rc::Rc;
 pub struct BlockInfo {
     /// `file`, or a plugin's `owner.name.id`.
     pub id: String,
-    /// Who declares it: `core`, or the plugin (`owner/name`).
+    /// Who it declares it: `core`, or the plugin (`owner/name`).
     pub provider: String,
+    /// Who its tabs are for: `any` (anyone opens one), `user` (a person, from the window),
+    /// `agent`, or `internal` (its plugin alone, to fill it in).
+    pub audience: Audience,
     /// The version of its saved states' `data`.
     pub version: u32,
     pub strategy: crate::kernel::state::Strategy,
@@ -36,7 +40,7 @@ pub struct BlockInfo {
     effect = "read",
     example(
         args = "[]",
-        result = r#"[{"id": "file", "provider": "core", "version": 1, "strategy": "reference", "methods": ["at", "reveal", "report", "save"], "options": ["path"]}, {"id": "pumi_dev.terminal.shell", "provider": "pumi_dev/terminal", "version": 1, "strategy": "relaunch", "methods": ["respawn", "signal", "clear_history", "modes"], "options": [], "engine": "terminal"}]"#
+        result = r#"[{"id": "file", "provider": "core", "audience": "any", "version": 1, "strategy": "reference", "methods": ["at", "reveal", "report", "save"], "options": ["path"]}, {"id": "pumi_dev.terminal.shell", "provider": "pumi_dev/terminal", "audience": "any", "version": 1, "strategy": "relaunch", "methods": ["respawn", "signal", "clear_history", "modes"], "options": [], "engine": "terminal"}]"#
     )
 )]
 pub fn pumi_block_list(cx: &mut Cx) -> Result<Vec<BlockInfo>> {
@@ -52,6 +56,7 @@ pub fn pumi_block_list(cx: &mut Cx) -> Result<Vec<BlockInfo>> {
         .map(|(block, provider, engine)| BlockInfo {
             id: block.name().to_string(),
             provider,
+            audience: block.audience(),
             version: block.version(),
             strategy: block.strategy(),
             methods: block.methods(),

@@ -206,13 +206,19 @@ fn block_help(block: &Value, json: bool) -> Result<i32, Error> {
         return Ok(0);
     }
     let name = block["id"].as_str().or(block["name"].as_str()).unwrap_or_default();
-    println!("block {name} · {}", block["provider"].as_str().unwrap_or(""));
+    let provider = block["provider"].as_str().unwrap_or("");
+    let audience = block["audience"].as_str().unwrap_or("any");
+    println!("block {name} · {provider} · {audience}");
     let list = |key: &str| -> String {
         let words: Vec<&str> = block[key].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
         if words.is_empty() { "none".into() } else { words.join(", ") }
     };
     println!("    methods (tab.call): read, input, selection, report, {}", list("methods"));
     println!("    options: {}", list("options"));
-    println!("\nopen: pumi tab open {name}");
+    match audience {
+        "internal" => println!("\nopen: only {provider}, which fills it in (or a tab of it coming back)"),
+        "user" => println!("\nopen: from the window, by a person (a tab of it coming back opens too)"),
+        _ => println!("\nopen: pumi tab open {name}"),
+    }
     Ok(0)
 }

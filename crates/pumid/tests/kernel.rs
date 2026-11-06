@@ -176,7 +176,11 @@ fn a_project_is_its_folder() {
     let root = open(&mut f, json!({"kind": "project", "path": "/"}));
     assert_eq!(f.kernel.model.projects[&root].path, "/");
     assert_eq!(f.call("project.list", json!([])).as_array().map(Vec::len), Some(3), "one a folder");
-    assert_eq!(f.call("project.get", json!([project(first)]))["views"].as_array().map(Vec::len), Some(3), "each open a view");
+    assert_eq!(
+        f.call("project.get", json!([project(first)]))["views"].as_array().map(Vec::len),
+        Some(3),
+        "each open a view"
+    );
 }
 #[test]
 fn a_terminal_given_no_folder_starts_in_its_projects() {
@@ -564,4 +568,36 @@ fn chan_autocmds_queue_notifications_for_their_channel() {
     assert_eq!(sent[1]["params"][1]["event"], "project.changed");
     assert_eq!(sent[1]["params"][1]["match"], project(1), "matched by the project's id");
     assert_eq!(sent[1]["params"][1]["data"]["patch"]["activeView"], view(2));
+}
+
+#[test]
+fn an_internal_block_is_its_plugins_to_open() {
+    let mut f = Fixture::empty();
+    let diff = "test.term.diff";
+    f.call("core.setBlocks", blocks(json!([{"id": diff, "provider": "test/term", "audience": "internal"}])));
+    let listed = f.call("core.blocks", json!([]));
+    let found = listed.as_array().unwrap().iter().find(|b| b["id"] == diff).expect("listed");
+    assert_eq!(found["audience"], json!("internal"), "a person is not offered one, and it says so");
+    let refused = f.try_call("core.openTab", json!([diff, {}, {"kind": "project"}])).unwrap_err();
+    assert!(refused.message.contains("test/term"), "{refused:?}");
+    f.caller.source = Some("test/term".into());
+    let tab = f.call("core.openTab", json!([diff, {}, {"kind": "project"}]));
+    let state = f.call("tab.get", json!([id(&tab), {"state": true}]))["state"].clone();
+    f.caller.source = None;
+    let reopened = f.call("core.openTab", json!([diff, {"state": state}, {"kind": "project"}]));
+    assert_eq!(f.call("tab.get", json!([id(&reopened)]))["block"], diff, "a tab coming back is nobody's to start");
+}
+
+#[test]
+fn a_users_block_is_started_from_the_window_not_by_an_agent() {
+    let mut f = Fixture::empty();
+    let music = "test.term.music";
+    f.call("core.setBlocks", blocks(json!([{"id": music, "provider": "test/term", "audience": "user"}])));
+    // `pumi tab open test.term.music`, from an agent: no client, no plugin.
+    let refused = f.try_call("core.openTab", json!([music, {}, {"kind": "project"}])).unwrap_err();
+    assert!(refused.message.contains("a person"), "{refused:?}");
+    // The window's own call: a client channel, naming no plugin.
+    f.caller.client = Some("9".into());
+    let tab = f.call("core.openTab", json!([music, {}, {"kind": "project"}]));
+    assert_eq!(f.call("tab.get", json!([id(&tab)]))["block"], music);
 }

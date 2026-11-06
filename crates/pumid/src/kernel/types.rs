@@ -2,6 +2,7 @@ use super::Kernel;
 use super::TabId;
 use super::options::{Change, Decl};
 use super::state::{Need, Strategy};
+use pumi_api::manifest::Audience;
 use pumi_api::{Error, Result};
 use serde_json::Value;
 use std::any::Any;
@@ -36,6 +37,15 @@ pub trait TabType: 'static {
     }
     fn methods(&self) -> Vec<String> {
         Vec::new()
+    }
+    /// Who its tabs are for: anyone's (`any`), a person's (`user`), an agent's (`agent`), or its
+    /// plugin's alone (`internal`) — what `tab.open` reads before it starts one.
+    fn audience(&self) -> Audience {
+        Audience::Any
+    }
+    /// The plugin that declares it (`owner/name`): the one that opens an `internal` block.
+    fn provider(&self) -> Option<&str> {
+        None
     }
     fn open(
         &self,

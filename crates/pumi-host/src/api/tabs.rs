@@ -3,6 +3,7 @@ use super::select::Zoom;
 use crate::kernel::layout::{PlaceSpec, Side};
 use crate::kernel::objects::{TabPlace, patch_field};
 use crate::kernel::options::Key;
+use pumi_api::manifest::Audience;
 use pumi_api::{Cx, Error, Result, TabRef, api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -90,14 +91,16 @@ pub enum NewTab {
     Action(String),
 }
 /// One thing a new tab can start, as the `+` menu lists them (the app's `startable.ts`): each
-/// enabled plugin's `tab.new` actions, or, for a plugin with none, each block it declares.
+/// enabled plugin's `tab.new` actions, or, for a plugin with none, each block it declares that a
+/// person may open.
 fn startables() -> Vec<NewTab> {
     let mut out = Vec::new();
     for p in crate::contributions::plugins() {
         let c = &p.manifest.contributes;
         let actions = c.slots.get("tab.new").map(|s| s.actions.as_slice()).unwrap_or_default();
         if actions.is_empty() {
-            out.extend(c.blocks.iter().map(|b| NewTab::Block(p.prefixed(&b.id))));
+            let offered = c.blocks.iter().filter(|b| b.audience.is_offered());
+            out.extend(offered.map(|b| NewTab::Block(p.prefixed(&b.id))));
         } else {
             // One that asks for files first can't start on its own.
             out.extend(actions.iter().filter(|a| a.pick.is_none()).map(|a| NewTab::Action(p.prefixed(&a.command))));
@@ -126,13 +129,30 @@ pub fn resolve_new_tab(named: &str, startables: Vec<NewTab>, blocks: &[String]) 
         NewTab::Action(_) => true,
     })
 }
+/// A block's audience, as `core.blocks` says it; nothing said is anyone's (`any`).
+fn audience(block: &Value) -> Audience {
+    match block.get("audience").and_then(Value::as_str) {
+        Some("user") => Audience::User,
+        Some("agent") => Audience::Agent,
+        Some("internal") => Audience::Internal,
+        _ => Audience::Any,
+    }
+}
+/// The blocks a new tab may hold, from `core.blocks`'s: the ones a person is offered. A block only
+/// an agent opens, or its plugin alone, is never what a new tab holds, nor what `new_tab` names.
+fn offered_blocks(listed: &[Value]) -> Vec<String> {
+    listed
+        .iter()
+        .filter(|b| audience(b).is_offered())
+        .filter_map(|b| b.get("id")?.as_str().map(str::to_string))
+        .collect()
+}
 /// What a new tab starts: what the `new_tab` option names, while it is installed; else
 /// Launchpad's list, a shell, or the first thing installed that starts one. Refused while nothing does.
 pub fn new_tab(k: &mut crate::kernel::Kernel, caller: &pumi_api::Caller) -> Result<NewTab> {
     let named = k.global_option("new_tab");
     let listed = k.call_core(caller, "core.blocks", json!([]))?;
-    let blocks: Vec<String> =
-        listed.as_array().into_iter().flatten().filter_map(|b| b.get("id")?.as_str().map(str::to_string)).collect();
+    let blocks = offered_blocks(listed.as_array().map(Vec::as_slice).unwrap_or_default());
     resolve_new_tab(named.as_str().unwrap_or(""), startables(), &blocks).ok_or_else(|| {
         Error::invalid_params(format!(
             "{NO_NEW_TAB}: turn Launchpad back on (`pumi plugin update pumi/launchpad --enabled`) or install one (Terminal, Browser, Agents: `pumi plugin add pumi-dev/plugins/terminal`); Settings ▸ General ▸ New tabs open (the `new_tab` option) picks among them"
@@ -284,6 +304,42 @@ mod tests {
     }
     fn blocks(ids: &[&str]) -> Vec<String> {
         ids.iter().map(|s| s.to_string()).collect()
+    }
+    fn listed(specs: &[(&str, &str)]) -> Vec<Value> {
+        specs.iter().map(|(id, audience)| json!({ "id": id, "provider": "test/term", "audience": audience })).collect()
+    }
+    #[test]
+    fn a_new_tab_never_holds_a_block_only_an_agent_or_its_plugin_opens() {
+        let all = listed(&[
+            ("test.term.diff", "internal"),
+            ("test.term.report", "agent"),
+            ("test.term.shell", "any"),
+            ("test.term.music", "user"),
+            ("file", "any"),
+        ]);
+        assert_eq!(
+            offered_blocks(&all),
+            blocks(&["test.term.shell", "test.term.music", "file"]),
+            "a person's, and anyone's"
+        );
+        assert_eq!(
+            offered_blocks(&json!([{"id": "test.term.diff"}]).as_array().unwrap()),
+            blocks(&["test.term.diff"]),
+            "nothing said is anyone's"
+        );
+        assert_eq!(resolve_new_tab("test.term.diff", vec![], &offered_blocks(&all)), None, "nor what `new_tab` names");
+        assert_eq!(
+            resolve_new_tab("", vec![block("test.term.shell")], &offered_blocks(&all)),
+            Some(block("test.term.shell"))
+        );
+        let launchpad = listed(&[("pumi.launchpad.new", "any"), ("test.term.diff", "internal")]);
+        assert_eq!(resolve_new_tab("", vec![], &offered_blocks(&launchpad)), Some(block("pumi.launchpad.new")));
+        let only_internal = listed(&[("test.term.diff", "internal")]);
+        assert_eq!(
+            resolve_new_tab("", vec![], &offered_blocks(&only_internal)),
+            None,
+            "nothing a person may open: no new tab"
+        );
     }
     #[test]
     fn a_new_tab_starts_what_new_tab_names_while_it_is_installed() {

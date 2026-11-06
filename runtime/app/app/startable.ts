@@ -1,7 +1,9 @@
 // What a new tab can start: one list, which the `+` menu (a right press) shows and Settings ▸
 // General ▸ New tabs open picks from. Each plugin that is on brings its `tab.new` actions (Terminal,
-// Pi, Claude Code…), or, when it has none, each block it declares (Launchpad's list, Film, Diff),
-// opened with no arguments. Plugins come in the order the server lists them, each a group of its own.
+// Pi, Claude Code…), or, when it has none, each block it declares that a person is offered — its
+// `audience` is `any` (the default; anyone starts one) or `user` (a person starts one), not `agent`
+// (an agent's) or `internal` (its plugin's) — opened with no arguments. Plugins come in the order
+// the server lists them, each a group of its own.
 //
 // The `new_tab` option names one: an action by its function (`pumi_dev.agents.new_claude`), a block
 // by its id (`pumi.launchpad.new`). While it names nothing installed, new tabs open Launchpad's
@@ -44,7 +46,7 @@ export function startables(entries: Iterable<From>): Startable[] {
     if (!loaded(e)) continue
     const c = e.manifest.contributes
     const pluginTitle = e.title ?? e.manifest.name ?? e.id
-    const blocks = c?.blocks ?? []
+    const blocks = (c?.blocks ?? []).filter((b) => b.audience !== "agent" && b.audience !== "internal")
     const actions = c?.slots?.["tab.new"]?.actions ?? []
     if (actions.length) {
       const alias = actions.length === 1 && blocks.length === 1 && !actions[0]!.pick ? `${e.prefix}${blocks[0]!.id}` : undefined
