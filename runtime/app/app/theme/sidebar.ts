@@ -50,8 +50,9 @@ function valid(value: unknown): value is Arrangement {
 }
 
 /**
- * The stored arrangement with every section of `present` in it: a section not seen before joins
- * the first group (a new one when there is none). A section seen in two groups stays in the first.
+ * The stored arrangement with every section of `present` in it: a section not seen here before is
+ * a page of its own, at the end of the bar, so a plugin's new panel opens as a button of its own
+ * rather than at the bottom of the page shown. A section seen in two groups stays in the first.
  */
 export function arrange(stored: unknown, present: readonly string[]): Arrangement {
   const base: Arrangement = valid(stored) ? stored : NO_ARRANGEMENT
@@ -60,11 +61,12 @@ export function arrange(stored: unknown, present: readonly string[]): Arrangemen
     id: g.id,
     sections: g.sections.filter((s) => (seen.has(s) ? false : (seen.add(s), true))),
   }))
-  const fresh = present.filter((s) => !seen.has(s))
-  if (fresh.length) {
-    if (groups[0]) groups[0] = { ...groups[0], sections: [...groups[0].sections, ...fresh] }
-    // The same id each time: an arrangement made from nothing is made again on every edit.
-    else groups.push({ id: "main", sections: [...fresh] })
+  for (const section of present) {
+    if (seen.has(section)) continue
+    seen.add(section)
+    // Its own key as the page's id: the same page each time an arrangement made from nothing is
+    // made again, so an edit finds the pages the last one made.
+    groups.push({ id: section, sections: [section] })
   }
   return tidy({ groups, active: base.active })
 }
@@ -136,6 +138,15 @@ export function show(arrangement: Arrangement, group: string): Arrangement {
 
 /** A page's open parts' shares of its height, by key: what is not in it has one share. */
 export type Shares = Record<string, number>
+
+/**
+ * The parts of a page that are open, top to bottom: those not put away, and the page's first, which
+ * is never put away. A click on the first section's header does not fold it: the page it heads is
+ * never left with nothing open. The tree heads whichever page holds it, and is open as it is.
+ */
+export function open(sections: readonly string[], collapsed: readonly string[]): string[] {
+  return sections.filter((key, i) => i === 0 || !collapsed.includes(key))
+}
 
 /** What `key` is in shares (window.json is the user's to edit: what is not a share is one). */
 export function shareOf(shares: unknown, key: string): number {

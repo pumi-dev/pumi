@@ -2273,7 +2273,8 @@ function Panel({ point }: { point: string }) {
   )
   const page = active ?? (point === TREE_POINT ? TREE_ALONE : undefined)
   if (!page) return null
-  const grow = sidebar.grows(shares, page.sections.filter((key) => key === sidebar.TREE || !collapsed.includes(key)))
+  const openKeys = sidebar.open(page.sections, collapsed)
+  const grow = sidebar.grows(shares, openKeys)
   let above: string | undefined
   return (
     <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0 }}>
@@ -2289,7 +2290,7 @@ function Panel({ point }: { point: string }) {
               </div>
             )
           }
-          const open = !collapsed.includes(key)
+          const open = openKeys.includes(key)
           const edge = open ? above : undefined
           if (open) above = key
           return (
@@ -2299,6 +2300,8 @@ function Panel({ point }: { point: string }) {
               section={s}
               next={all[i + 1]}
               open={open}
+              // The page's first section: its header drags it, but does not fold it away.
+              pinned={i === 0}
               share={sidebar.shareOf(shares, key)}
               grow={grow[key] ?? 0}
               prior={edge}
@@ -2396,6 +2399,7 @@ function PanelSection({
   section: s,
   next,
   open,
+  pinned,
   share,
   grow,
   prior,
@@ -2410,6 +2414,8 @@ function PanelSection({
   /** The section after this one: what a drop on this one's lower half goes before. */
   next?: string
   open: boolean
+  /** Its page's first section: always open, so a click on its header does not fold it away. */
+  pinned: boolean
   /** Its share of its page's height while open. */
   share: number
   /** What it grows by: its share over the open parts' shares, so together they fill the page. */
@@ -2447,12 +2453,12 @@ function PanelSection({
       <div
         {...draggable.props}
         onClick={() => {
-          if (!draggable.wasDragged()) toggle()
+          if (!pinned && !draggable.wasDragged()) toggle()
         }}
         title="Drag to move"
         style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 4, height: 26, userSelect: "none", paddingLeft: 8, paddingRight: 8, flexShrink: 0, cursor: draggable.dragging ? "grabbing" : "pointer", hover: { backgroundColor: t.hover } }}
       >
-        <Icon name={open ? "chevron_down" : "chevron_right"} size={12} color={t.faint} />
+        {pinned ? null : <Icon name={open ? "chevron_down" : "chevron_right"} size={12} color={t.faint} />}
         <text style={{ fontSize: ts(11), fontWeight: 600, color: t.muted }}>{s.title}</text>
       </div>
       {open ? <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0, overflowY: "scroll" }}>{s.body}</div> : null}
