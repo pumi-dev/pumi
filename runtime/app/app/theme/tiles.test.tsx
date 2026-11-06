@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { useEffect } from "react"
+import { useContext, useEffect } from "react"
 import { createTestRoot, hasNativeTestRenderer } from "../../react/testing.ts"
 import type { Tree } from "../state.ts"
 import { ThemeContext, type ThemeState } from "../../sdk/theme.ts"
 import { useDraggable } from "../../sdk/drag.ts"
 import type { Move } from "./moves.ts"
-import { boxesOf, seamOf, TileMotion, Tiling } from "./tiles.tsx"
+import { AtCorner, AtTop, boxesOf, seamOf, TileMotion, Tiling } from "./tiles.tsx"
 
 /** A pane holding one tab of the same number. */
 const leaf = (pane: string): Tree => ({ pane, tabs: [pane], active: pane })
@@ -177,6 +177,36 @@ describe.skipIf(!hasNativeTestRenderer)("Tiling", () => {
       { kind: "tab.split", tab: "%1", pane: "%2", side: "down" },
       { kind: "tab.into", tab: "%1", pane: "%2" },
     ])
+    unmount()
+  })
+
+  test("the pane at its top left is the window's corner, and a zoomed one covers it", () => {
+    const seen: Record<string, { top: boolean; corner: boolean }> = {}
+    function Pane({ pane }: { pane: string }) {
+      seen[pane] = { top: useContext(AtTop), corner: useContext(AtCorner) }
+      return <div testId={pane} style={{ flexGrow: 1 }} />
+    }
+    // SAFETY: the tiles read only these tokens and this one part.
+    const theme = { tokens: { border: "#333333", accent: "#4488ff", editor: "#1e1f22" }, components: { Pane, Splitter: () => null } } as unknown as ThemeState
+    const { render, unmount } = createTestRoot({ width: 900, height: 300 })
+    const draw = (tree: Tree, zoom?: string) =>
+      render(
+        <ThemeContext.Provider value={theme}>
+          <TileMotion.Provider value={{ zoom }}>
+            <Tiling tree={tree} />
+          </TileMotion.Provider>
+        </ThemeContext.Provider>,
+      )
+    // Both panes meet the top; only the first meets the left too: the window's corner.
+    draw(two)
+    expect(seen["%1"]).toEqual({ top: true, corner: true })
+    expect(seen["%2"]).toEqual({ top: true, corner: false })
+    draw(col(0.5, leaf("%1"), leaf("%2")))
+    expect(seen["%1"]).toEqual({ top: true, corner: true })
+    expect(seen["%2"]).toEqual({ top: false, corner: false })
+    // A zoomed pane is the one over the corner, wherever its own place is.
+    draw(two, "%2")
+    expect(seen["%2"]).toEqual({ top: true, corner: true })
     unmount()
   })
 })
