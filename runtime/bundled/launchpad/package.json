@@ -3,7 +3,7 @@
   "displayName": "Launchpad",
   "version": "0.1.0",
   "license": "GPL-3.0-or-later",
-  "description": "A tab that lists what you can open in it: a file, and whatever your plugins add to the + menu (a terminal, a page, an agent…). Pick one and it takes the tab's place. It ships with pumi and is what new tabs open.",
+  "description": "A tab that lists what you can open in it: whatever your plugins add to the + menu (a terminal, a page, an agent…), and the plugins themselves at the end. Pick one and it takes the tab's place. It ships with pumi and is what new tabs open.",
   "keywords": [
     "launchpad",
     "new tab"
@@ -31,7 +31,7 @@
     "images": [
       {
         "path": "preview.svg",
-        "alt": "A new tab as the list of what it can open: a file, a terminal, a page, an agent, each with its key"
+        "alt": "A new tab as the list of what it can open: a terminal, a page, an agent, each with its key"
       }
     ],
     "contributes": {
