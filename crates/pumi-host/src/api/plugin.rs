@@ -563,6 +563,23 @@ pub fn pumi_plugin_remove(cx: &mut Cx, plugin: PluginId, opts: Optional<RemoveOp
         let _ = std::fs::remove_dir_all(checkout_of(&name));
     }
     if let Some(plugin) = &plugin {
+        // `data` takes what its options were set to, at every object that held one, beside its own
+        // directories: the declarations are here, the values are the core's to drop.
+        let names: Vec<String> = match cx.host::<Kernel>() {
+            Ok(k) => k
+                .model
+                .options
+                .decls()
+                .filter(|d| d.plugin.as_deref() == Some(plugin.id.as_str()))
+                .map(|d| d.name.clone())
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        for name in names {
+            if let Err(err) = cx.call("option.undeclare", json!([name, { "data": true }])) {
+                crate::server::log(&format!("option {name}: {}", err.message));
+            }
+        }
         forget(plugin)?;
     }
     lock.plugins.remove(&name);

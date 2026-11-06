@@ -291,6 +291,11 @@ impl Options {
     pub fn decls(&self) -> impl Iterator<Item = &Decl> {
         self.decls.values()
     }
+    /// Takes a declaration back: the option is one no more. Its values stay (`unset` takes one),
+    /// so a plugin that comes back reads what was set before it went.
+    pub fn undeclare(&mut self, name: &str) -> bool {
+        self.decls.remove(name).is_some()
+    }
     /// Declares an option. Declaring one that exists is allowed only as the same option: a second
     /// block may share `title`, but not change its type.
     pub fn declare(&mut self, mut decl: Decl) -> Result<()> {
