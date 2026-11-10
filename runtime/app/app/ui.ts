@@ -122,27 +122,29 @@ const registered = new Map<string, string>()
 
 function register(entry: plugins.Entry) {
   const c = entry.manifest.contributes
-  for (const [slot, given] of Object.entries(c?.slots ?? {})) {
-    for (const action of given.actions ?? []) {
-      const fail = (err: any) => console.error(`pumi: ${entry.id}: ${action.title}:`, err?.message ?? err)
-      const run = (args: unknown) => plugins.command(entry.id, action.command, args)
-      addAction(slot, {
-        id: action.id,
-        title: action.title,
-        icon: action.icon,
-        plugin: entry.id,
-        // The function it calls: the keys the server binds to it are its own.
-        command: `${entry.prefix}${action.command}`,
-        run: (args) => {
-          if (!action.pick) return void run(args).catch(fail)
-          pickFor(action.pick, action.title, args)
-            .then((picked) => picked && run(picked))
-            .catch(fail)
-        },
-      })
-    }
-    if (given.component && entry.ui) {
-      addComponent(slot, { id: given.component, plugin: entry.id, title: given.title, icon: given.icon, Component: lazyExport(entry, given.component) })
+  for (const [slot, slots] of Object.entries(c?.slots ?? {})) {
+    for (const given of Array.isArray(slots) ? slots : [slots]) {
+      for (const action of given.actions ?? []) {
+        const fail = (err: any) => console.error(`pumi: ${entry.id}: ${action.title}:`, err?.message ?? err)
+        const run = (args: unknown) => plugins.command(entry.id, action.command, args)
+        addAction(slot, {
+          id: action.id,
+          title: action.title,
+          icon: action.icon,
+          plugin: entry.id,
+          // The function it calls: the keys the server binds to it are its own.
+          command: `${entry.prefix}${action.command}`,
+          run: (args) => {
+            if (!action.pick) return void run(args).catch(fail)
+            pickFor(action.pick, action.title, args)
+              .then((picked) => picked && run(picked))
+              .catch(fail)
+          },
+        })
+      }
+      if (given.component && entry.ui) {
+        addComponent(slot, { id: given.component, plugin: entry.id, title: given.title, icon: given.icon, Component: lazyExport(entry, given.component) })
+      }
     }
   }
   if (!entry.ui) return

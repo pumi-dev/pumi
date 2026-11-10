@@ -34,6 +34,14 @@ export interface OptionSpec {
   [field: string]: unknown;
 }
 
+/** What a plugin adds to one of the window's slots: actions (each runs one of its commands) and a component (`src/ui.tsx`'s export). */
+export interface SlotSpec {
+  actions?: { id: string; title: string; icon?: string; command: string; pick?: { kind?: "file" | "directory"; match?: string[]; multiple?: boolean; title?: string } }[];
+  component?: string;
+  title?: string;
+  icon?: string;
+}
+
 /** What the module reads of the manifest (`package.json`'s `pumi`). */
 export interface Manifest {
   name: string;
@@ -51,7 +59,8 @@ export interface Manifest {
       methods?: string[];
     }[];
     renderers?: Record<string, string | { export: string; match: string[] }>;
-    slots?: Record<string, { actions?: { id: string; title: string; icon?: string; command: string; pick?: { kind?: "file" | "directory"; match?: string[]; multiple?: boolean; title?: string } }[]; component?: string; title?: string; icon?: string }>;
+    /** A slot's contributions: one, or several (a plugin's two side bar sections). */
+    slots?: Record<string, SlotSpec | SlotSpec[]>;
   };
   [field: string]: unknown;
 }

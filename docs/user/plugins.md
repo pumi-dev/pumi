@@ -145,8 +145,9 @@ A slot is a place in the window. Give it a `component`, an export of `ui.tsx`, o
 | `view.actions` `view.badge` `view.menu` | `view` |
 | `tab.toolbar` `tab.strip` `tab.overlay` `tab.menu` | `tab` |
 | `tab.new` | actions only, run with `{tab, place}`: the pane or tab it opens beside, and where (`tab.open`'s place); with `path` or `paths` too when it has a `pick` |
-| `tab.row.controls` `tab.row.footer` `tab.row.menu` | `tab`: a tab's row in the side bar, for each tab with a `@status` |
 | `sidebar.footer` | `point` (the dock's name) |
+
+A slot holds one contribution, or a list of them where the window draws more than one under it: `panel` then is a side bar section each (`"panel": [{ "component": "Agents", "title": "Agents" }, { "component": "History", "title": "Agents Archive" }]`).
 
 A theme draws them with `useSlot(slot, args)`, from `pumi/theme`.
 
@@ -414,7 +415,7 @@ off();
 
 ## Status and agents
 
-A tab's `@status` option says how what runs in it is doing: `working`, `blocked`, `error`, `done`, `idle` or `unknown`. pumi sets a terminal's from what its program reports ([Status](cli.md#status)), and a block may set its own tabs'. The side bar shows a row for each tab with a status, and the `tab.row.*` slots add to it.
+A tab's `@status` option says how what runs in it is doing: `working`, `blocked`, `error`, `done`, `idle` or `unknown`. pumi sets a terminal's from what its program reports ([Status](cli.md#status)), and a block may set its own tabs'. A tab's row in a plugin's own list of tabs shows it with `useTabStatus` and `useTabIcon` (`pumi/theme`).
 
 ```ts
 await call("option.set", "@status", "working", { scope: "tab", id: tab.id });

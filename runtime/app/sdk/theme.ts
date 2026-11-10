@@ -352,12 +352,8 @@ export interface Components {
   Float: ComponentType<{ tab: string }>
   /** What contributes to a slot (`panel`), stacked, tabbed or collapsed as the theme likes. */
   Panel: ComponentType<{ point: string }>
-  /** Every project, its views and their tabs, as a tree: the default side bar's own, heading the first page of its sections. */
+  /** Every project and its views, as a tree: the default side bar's own, heading the first page of its sections. */
   Projects: ComponentType
-  /** A tab with a status (`@status`), as a list of tabs (the `Projects` tree) shows it. */
-  TabRow: ComponentType<{ tab: string }>
-  /** A tab row's actions: the `tab.row.controls` contributions, given the tab. */
-  TabRowControls: ComponentType<{ tab: string }>
   /** One action, as a button. */
   Action: ComponentType<{ action: Action; args?: unknown }>
   /**

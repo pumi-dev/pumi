@@ -33,7 +33,7 @@ export interface Manifest {
     /** The blocks it draws but did not define: block → `ui.tsx` export; for the core's `file`,
      *  optionally with the files it draws (`{ export: "Editor", match: ["*.md"] }`). */
     renderers?: Record<string, string | { export: string; match: string[] }>
-    slots?: Record<string, Slot>
+    slots?: Record<string, Slots>
     /** Its pages in Settings, and its sections on one (a built-in page or its own). */
     settings?: {
       pages?: { id: string; title: string; icon?: string; component: string; keywords?: string[] }[]
@@ -60,6 +60,15 @@ export interface Slot {
   component?: string
   title?: string
   icon?: string
+}
+
+/** A slot's contributions: one, or several (a plugin's two side bar sections). */
+export type Slots = Slot | Slot[]
+
+/** `slots` as the list of contributions a slot of `name` has. */
+export function slotsOf(slots: Record<string, Slots> | undefined, name: string): Slot[] {
+  const given = slots?.[name]
+  return given === undefined ? [] : Array.isArray(given) ? given : [given]
 }
 
 export interface Entry {

@@ -81,9 +81,10 @@ pub struct Contributes {
     /// (`{"export": "Editor", "match": ["*"]}`).
     #[serde(default)]
     pub renderers: BTreeMap<String, Renderer>,
-    /// What it adds to the window's slots (`panel`, `status`, …), by slot.
+    /// What it adds to the window's slots (`panel`, `status`, …), by slot; one contribution, or
+    /// several under a slot a window draws more than one of (`panel`: its side bar sections).
     #[serde(default)]
-    pub slots: BTreeMap<String, Slot>,
+    pub slots: BTreeMap<String, Slots>,
     /// The traits it defines (`file` is `owner.name.file`): what a tab is beside its block.
     #[serde(default)]
     pub traits: Vec<TraitSpec>,
@@ -234,9 +235,6 @@ pub const SLOTS: &[&str] = &[
     "tab.overlay",
     "tab.menu",
     "tab.new",
-    "tab.row.controls",
-    "tab.row.footer",
-    "tab.row.menu",
     "panel",
     "sidebar.footer",
     "palette.actions",
@@ -256,6 +254,23 @@ pub struct Slot {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+}
+/// What it adds to a slot: one contribution, or several (a plugin's two side bar sections).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Slots {
+    One(Slot),
+    Many(Vec<Slot>),
+}
+
+impl Slots {
+    /// The contributions, one or many.
+    pub fn list(&self) -> &[Slot] {
+        match self {
+            Slots::One(slot) => std::slice::from_ref(slot),
+            Slots::Many(slots) => slots,
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -676,38 +691,40 @@ pub fn validate(m: &Manifest) -> Result<(), String> {
         }
     }
     let export = |v: &str| word(v, |c| c.is_ascii_alphabetic(), |c| c.is_ascii_alphanumeric() || c == '_');
-    for (name, slot) in &c.slots {
+    for (name, slots) in &c.slots {
         if !SLOTS.contains(&name.as_str()) {
             return Err(format!("slot {name:?} is not one of the window's: {}", SLOTS.join(", ")));
         }
-        if slot.actions.is_empty() && slot.component.is_none() {
-            return Err(format!("slot {name:?} gives no `actions` and no `component`"));
-        }
-        if slot.component.is_some() && ACTION_SLOTS.contains(&name.as_str()) {
-            return Err(format!("slot {name:?} holds actions, not a component"));
-        }
-        if let Some(component) = slot.component.as_deref().filter(|v| !export(v)) {
-            return Err(format!("slot {name:?}: `component` {component:?} is the name of an export of src/ui.tsx"));
-        }
-        for action in &slot.actions {
-            if !c.commands.iter().any(|command| command.id == action.command) {
-                return Err(format!(
-                    "slot {name:?}: action {:?} runs {:?}, which is not one of its `commands`",
-                    action.id, action.command
-                ));
+        for slot in slots.list() {
+            if slot.actions.is_empty() && slot.component.is_none() {
+                return Err(format!("slot {name:?} gives no `actions` and no `component`"));
             }
-            if let Some(pick) = &action.pick {
-                if pick.matches.iter().any(|g| g.trim().is_empty()) {
+            if slot.component.is_some() && ACTION_SLOTS.contains(&name.as_str()) {
+                return Err(format!("slot {name:?} holds actions, not a component"));
+            }
+            if let Some(component) = slot.component.as_deref().filter(|v| !export(v)) {
+                return Err(format!("slot {name:?}: `component` {component:?} is the name of an export of src/ui.tsx"));
+            }
+            for action in &slot.actions {
+                if !c.commands.iter().any(|command| command.id == action.command) {
                     return Err(format!(
-                        "slot {name:?}: action {:?}: `pick.match` is a list of globs (`*.png`)",
-                        action.id
+                        "slot {name:?}: action {:?} runs {:?}, which is not one of its `commands`",
+                        action.id, action.command
                     ));
                 }
-                if pick.kind == Some(PickKind::Directory) && !pick.matches.is_empty() {
-                    return Err(format!(
-                        "slot {name:?}: action {:?}: `pick.match` is for files, not a folder",
-                        action.id
-                    ));
+                if let Some(pick) = &action.pick {
+                    if pick.matches.iter().any(|g| g.trim().is_empty()) {
+                        return Err(format!(
+                            "slot {name:?}: action {:?}: `pick.match` is a list of globs (`*.png`)",
+                            action.id
+                        ));
+                    }
+                    if pick.kind == Some(PickKind::Directory) && !pick.matches.is_empty() {
+                        return Err(format!(
+                            "slot {name:?}: action {:?}: `pick.match` is for files, not a folder",
+                            action.id
+                        ));
+                    }
                 }
             }
         }
@@ -898,13 +915,17 @@ mod tests {
             "panel": { "component": "Files", "title": "Files" } }"#,
         )
         .unwrap();
-        assert_eq!(slots["panel"].component.as_deref(), Some("Files"));
+        assert_eq!(slots["panel"].list()[0].component.as_deref(), Some("Files"));
         assert!(with(r#"{ "sidebar": { "component": "Files" } }"#).unwrap_err().contains("not one of the window's"));
-        for gone in ["status", "window.titlebar", "agent.controls"] {
+        for gone in ["status", "window.titlebar", "agent.controls", "tab.row.controls"] {
             let err = with(&format!(r#"{{ "{gone}": {{ "component": "Bar" }} }}"#)).unwrap_err();
             assert!(err.contains("not one of the window's"), "{gone}: {err}");
         }
-        assert!(with(r#"{ "tab.row.controls": { "component": "Stop" } }"#).is_ok(), "a tab's row");
+        // A slot can hold several: a plugin's two side bar sections.
+        let many = with(r#"{ "panel": [{ "component": "History", "title": "History" }, { "component": "Agents", "title": "Agents" }] }"#).unwrap();
+        assert_eq!(many["panel"].list().len(), 2);
+        assert_eq!(many["panel"].list()[1].title.as_deref(), Some("Agents"));
+        assert!(with(r#"{ "panel": [{ "component": "a-b" }] }"#).unwrap_err().contains("an export"));
         assert!(with(r#"{ "palette.actions": { "component": "Menu" } }"#).unwrap_err().contains("holds actions"));
         assert!(with(r#"{ "tab.toolbar": {} }"#).unwrap_err().contains("no `actions`"));
         assert!(
@@ -922,7 +943,8 @@ mod tests {
                 "commands": [{{ "id": "edit", "title": "Edit" }}],
                 "slots": {{ "tab.new": {{ "actions": [{{ "id": "image", "title": "Image…", "command": "edit", "pick": {pick} }}] }} }} }} }} }}"#
             );
-            parse(&text, Path::new("/p"), None).map(|p| p.manifest.contributes.slots["tab.new"].actions[0].pick.clone())
+            parse(&text, Path::new("/p"), None)
+                .map(|p| p.manifest.contributes.slots["tab.new"].list()[0].actions[0].pick.clone())
         };
         let pick = with(r#"{ "match": ["*.png", "*.jpg"], "title": "Open Image" }"#).unwrap().unwrap();
         assert_eq!(pick.matches, ["*.png", "*.jpg"]);

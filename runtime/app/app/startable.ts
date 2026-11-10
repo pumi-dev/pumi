@@ -9,7 +9,7 @@
 // by its id (`pumi.launchpad.new`). While it names nothing installed, new tabs open Launchpad's
 // list, else a shell, else the first of the list: the server decides the same
 // (`crates/pumi-host/src/api/tabs.rs`).
-import type { ActionPick, Entry } from "./plugins.ts"
+import { slotsOf, type ActionPick, type Entry } from "./plugins.ts"
 
 export type From = Pick<Entry, "id" | "title" | "prefix" | "manifest"> & Partial<Pick<Entry, "state" | "error" | "dir">>
 
@@ -47,7 +47,7 @@ export function startables(entries: Iterable<From>): Startable[] {
     const c = e.manifest.contributes
     const pluginTitle = e.title ?? e.manifest.name ?? e.id
     const blocks = (c?.blocks ?? []).filter((b) => b.audience !== "agent" && b.audience !== "internal")
-    const actions = c?.slots?.["tab.new"]?.actions ?? []
+    const actions = slotsOf(c?.slots, "tab.new").flatMap((one) => one.actions ?? [])
     if (actions.length) {
       const alias = actions.length === 1 && blocks.length === 1 && !actions[0]!.pick ? `${e.prefix}${blocks[0]!.id}` : undefined
       for (const a of actions) {
