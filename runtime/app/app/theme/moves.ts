@@ -1,5 +1,5 @@
 // How the default theme moves tabs, views and projects by dragging them: a tab by its chip in a
-// pane's strip or its row in the side bar, a view or a project by its row. What a drag carries, where on its
+// pane's strip, a view or a project by its row in the side bar. What a drag carries, where on its
 // target it lands, and what that does, as the server's calls. Nothing here draws (`default.tsx`
 // and `tiles.tsx` do) or calls (they run what `plan` says).
 import type { PaneLeaf, Snapshot } from "../engine.ts"
@@ -59,13 +59,9 @@ export function regionBox(region: Region): { x: number; y: number; w: number; h:
 }
 
 /**
- * A row of the side bar's tree, as a drop target. A `tab` row that is `alone` is a view of one
- * tab, drawn in the view's place: it stands for the view too.
+ * A row of the side bar's tree, as a drop target.
  */
-export type Row =
-  | { kind: "project"; project: string }
-  | { kind: "view"; project: string; view: string }
-  | { kind: "tab"; project: string; view: string; tab: string; alone: boolean }
+export type Row = { kind: "project"; project: string } | { kind: "view"; project: string; view: string }
 
 /** What a drop does. `after`: on the far side of `anchor`, not the near one. */
 export type Move =
@@ -73,7 +69,6 @@ export type Move =
   | { kind: "view.move"; view: string; project: string; anchor?: string; after?: boolean }
   | { kind: "tab.newView"; tab: string; project: string }
   | { kind: "tab.join"; tab: string; view: string }
-  | { kind: "tab.beside"; tab: string; target: string; side: Side }
   /** Into a pane, among its tabs: at `index` of its strip, or after the one in front. */
   | { kind: "tab.into"; tab: string; pane: string; index?: number }
   /** In a pane of its own, split from `pane` on `side`. */
@@ -141,9 +136,8 @@ function slot(fy: number): "before" | "into" | "after" {
 /**
  * What `it` dropped on a row of the side bar's tree does, `fy` of the way down it; nothing when
  * it does nothing there. A project sorts among the projects; a view among the views, into another
- * project too; a tab joins a view, goes beside a tab, or is a new view of a
- * project. A view of one tab is that tab's row: dragged to another view's edge, the view moves.
- * A tab dropped on another tab's row goes before it or after it, never in its place.
+ * project too; a tab joins a view, or is a new view of a project. A view of one tab, its tab
+ * dragged to another view's edge, is that view moving.
  */
 export function rowDrop(it: Carried, row: Row, fy: number, where: Where): Move | undefined {
   const here = slot(fy)
@@ -157,8 +151,8 @@ export function rowDrop(it: Carried, row: Row, fy: number, where: Where): Move |
     if (row.kind === "project") {
       return where.projectOf(it.view) === row.project ? undefined : { kind: "view.move", view: it.view, project: row.project }
     }
-    // A tab inside a view of several is not where a view goes.
-    if (row.view === it.view || (row.kind === "tab" && !row.alone)) return undefined
+    // Its own row is not where it goes.
+    if (row.view === it.view) return undefined
     return { kind: "view.move", view: it.view, project: row.project, anchor: row.view, after }
   }
   const tab = it.tab
@@ -170,14 +164,10 @@ export function rowDrop(it: Carried, row: Row, fy: number, where: Where): Move |
     return { kind: "tab.newView", tab, project: row.project }
   }
   // A tab alone in its view, dropped at another view's edge: its view is what moves.
-  const viewRow = row.kind === "view" || row.alone
-  if (viewRow && here !== "into" && from && from !== row.view && where.tabsIn(from) === 1) {
+  if (here !== "into" && from && from !== row.view && where.tabsIn(from) === 1) {
     return { kind: "view.move", view: from, project: row.project, anchor: row.view, after }
   }
-  if (row.kind === "view") return from === row.view ? undefined : { kind: "tab.join", tab, view: row.view }
-  if (row.tab === tab) return undefined
-  if (row.alone) return { kind: "tab.join", tab, view: row.view }
-  return { kind: "tab.beside", tab, target: row.tab, side: after ? "right" : "left" }
+  return from === row.view ? undefined : { kind: "tab.join", tab, view: row.view }
 }
 
 /** `order` with `id` moved beside `anchor` (before it, or `after` it); at the end without one. */
@@ -214,8 +204,6 @@ export function plan(move: Move, snapshot: Snapshot | undefined): Step[] {
       return [place(move.tab, { kind: "view", project: move.project })]
     case "tab.join":
       return [place(move.tab, { kind: "tiled", view: move.view, split: "right" })]
-    case "tab.beside":
-      return [place(move.tab, { kind: "tiled", beside: move.target, split: move.side })]
     case "tab.into":
       return [place(move.tab, { kind: "tiled", pane: move.pane, ...(move.index === undefined ? {} : { index: move.index }) })]
     case "tab.split":

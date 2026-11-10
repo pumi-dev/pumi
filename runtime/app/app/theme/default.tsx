@@ -1763,8 +1763,10 @@ function PaneTab({ tab: id, pane, index, active, focused }: { tab: string; pane:
         cursor: draggable.dragging ? "grabbing" : "pointer",
         opacity: draggable.dragging ? 0.55 : 1,
         position: "relative",
-        // An edge either side (the first tab's left one too) and, but on the front tab, under it.
-        borderLeftWidth: lit === "left" ? 2 : index === 0 ? 1 : 0,
+        // An edge on its right, and, but on the front tab, under it. Its left edge is the pane's own
+        // (the layout draws the line where two panes meet) or, at the window's, the side bar's:
+        // the first tab drew one of its own, which read as two lines beside the bar's.
+        borderLeftWidth: lit === "left" ? 2 : 0,
         borderRightWidth: 1,
         borderBottomWidth: active ? 0 : 1,
         borderColor: lit ? t.accent : t.border,
@@ -2344,15 +2346,12 @@ function PanelButtons({ point = "panel" }: { point?: string }) {
     setClosed(false)
     if (!open) setOpen(true)
   }
-  // With only the tree there is nothing to pick between; the side bar's foot still has the tree's own toggle.
+  // With only the tree there is nothing to pick between: its foot has the tree's own actions, if any.
   const onlyTree = groups.every((g) => g.sections.every((s) => s === sidebar.TREE))
-  const tree = point === TREE_POINT
   const footer = useSlot("sidebar.footer").actions
-  if (onlyTree && !tree && footer.length === 0) return null
+  if (onlyTree && footer.length === 0) return null
   return (
     <div cache style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 2, height: 36, flexShrink: 0, paddingLeft: 6, paddingRight: 8, borderTopWidth: 1, borderColor: t.border }}>
-      {tree ? <TreeModeButton /> : null}
-      {tree && !onlyTree ? <div style={{ width: 1, height: 16, marginLeft: 4, marginRight: 4, flexShrink: 0, backgroundColor: t.border }} /> : null}
       {onlyTree ? null : <GroupBar point={point} groups={groups} active={open ? active?.id : undefined} byKey={byKey} carrying={carrying} change={change} pick={pick} />}
       <FooterButtons point={point} actions={footer} />
       {carrying && drag ? <DragGhost drag={drag} it={carrying} byKey={byKey} groups={groups} /> : null}
@@ -2453,7 +2452,7 @@ function PanelSection({
       ref={(it: { id: number } | null) => {
         self.current = it?.id
       }}
-      style={{ display: "flex", flexDirection: "column", minHeight: 0, position: "relative", opacity: moving ? 0.45 : 1, ...(open ? { flexGrow: grow, flexBasis: 0 } : {}), borderTopWidth: 1, borderColor: t.border }}
+      style={{ display: "flex", flexDirection: "column", minHeight: 0, position: "relative", opacity: moving ? 0.45 : 1, ...(open ? { flexGrow: grow, flexBasis: 0 } : {}), borderTopWidth: pinned && point === TREE_POINT ? 0 : 1, borderColor: t.border }}
     >
       <div
         {...draggable.props}
@@ -2629,40 +2628,6 @@ function GroupButton({
   )
 }
 
-/** Whether the side bar's tree lists each view's tabs under it (`true`), or only the views. */
-const TREE_EXPANDED = "default.tree.expanded"
-
-/** The side bar foot's first button: the tree as views only, or with each view's tabs under it. */
-function TreeModeButton() {
-  const t = useTheme()
-  const m = useMetrics()
-  const [expanded, setExpanded] = useLocal(TREE_EXPANDED, false)
-  const title = expanded ? "Show Views Only" : "Show Tabs by View"
-  return (
-    <div
-      onClick={() => setExpanded(!expanded)}
-      aria-label={title}
-      aria-pressed={expanded}
-      title={title}
-      style={{
-        display: "flex",
-        width: BAR_BUTTON,
-        height: BAR_BUTTON,
-        flexShrink: 0,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: m.radiusSmall,
-        cursor: "pointer",
-        userSelect: "none",
-        backgroundColor: expanded ? t.hover : undefined,
-        hover: { backgroundColor: t.hover },
-      }}
-    >
-      <Icon name={expanded ? "list_tree" : "list"} size={BAR_ICON} color={expanded ? t.text : t.muted} />
-    </div>
-  )
-}
-
 /** The tree's icon, on the button of the group it heads. */
 const TREE_ICON = "list_tree"
 
@@ -2770,20 +2735,12 @@ function ProjectHeader() {
 }
 
 // ── The projects tree ────────────────────────────────────────────────
-// Projects, their views, and the tabs in them, as a file tree draws folders: a chevron to fold a
-// level, and a rail under each open level down the left of what it holds.
+// Projects and their views, as a file tree draws folders: a chevron to fold a project.
 
 const TREE_ROW = 28
 /** How far a level sits in from its parent. */
 const TREE_INDENT = 16
 const TREE_PAD = 8
-/** The chevron's box: a level's rail runs down its middle. */
-const CHEVRON = 12
-
-/** How deep in the tree a tab's row is drawn (0 outside one: a theme's own list). */
-const TreeDepth = createContext(0)
-/** Where a tab's row is in the tree, as a drop target; none outside it, or for a float. */
-const TreeSpot = createContext<moves.Row | undefined>(undefined)
 /** Whether `it` drops anywhere on `row`: at its top, in its middle or at its foot (its left, middle or right `across`). */
 function dropsOn(it: moves.Carried, row: moves.Row): boolean {
   const where = moves.whereIn(store.get().snapshot)
@@ -2880,17 +2837,7 @@ function RowDropZone({ row, across }: { row: moves.Row; across?: boolean }) {
   )
   const it = moves.carried(zone.drag?.data)
   const move = zone.isOver && zone.drag && it ? moves.rowDrop(it, row, along(zone.drag, zone.box()), where()) : undefined
-  const lit = !move
-    ? undefined
-    : move.kind === "project.order" || (move.kind === "view.move" && move.anchor !== undefined)
-      ? move.after
-        ? "after"
-        : "before"
-      : move.kind === "tab.beside"
-        ? move.side === "left"
-          ? "before"
-          : "after"
-        : "into"
+  const lit = !move ? undefined : move.kind === "project.order" || (move.kind === "view.move" && move.anchor !== undefined) ? (move.after ? "after" : "before") : "into"
   return (
     <div
       ref={zone.ref}
@@ -2997,9 +2944,6 @@ function loudTabs<T extends { status: string }>(tabs: T[]): T[] {
   return tabs.filter((p) => needsAttention(p.status)).sort((a, b) => URGENCY.indexOf(a.status) - URGENCY.indexOf(b.status))
 }
 
-/** What wants a look: a tab waiting on the user, failed, or done with a result not yet seen. */
-const wantsLook = (status: string) => status === "blocked" || status === "error" || status === "done"
-
 /** What needs the user to act: a tab waiting on them, or failed. A done one only wants a look. */
 const needsAttention = (status: string) => status === "blocked" || status === "error"
 
@@ -3011,40 +2955,6 @@ function lead(of: { status: string }[]): string {
     if (URGENCY.indexOf(status) >= 0 && URGENCY.indexOf(status) < URGENCY.indexOf(best)) best = status
   }
   return best
-}
-
-/** A row's rails: one under each of its parents' chevrons, the height of the row, so rows stack into lines. */
-const Guides = memo(function Guides({ depth }: { depth: number }) {
-  const t = useTheme()
-  if (depth <= 0) return null
-  return (
-    <>
-      {Array.from({ length: depth }, (_, d) => (
-        <div
-          key={d}
-          style={{ position: "absolute", top: 0, left: TREE_PAD + d * TREE_INDENT + CHEVRON / 2, width: 1, height: "100%", backgroundColor: t.border, pointerEvents: "none" }}
-        />
-      ))}
-    </>
-  )
-})
-
-function treeRow(depth: number, selected: boolean, t: ReturnType<typeof useTheme>) {
-  return {
-    display: "flex",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: TREE_ROW,
-    flexShrink: 0,
-    paddingLeft: TREE_PAD + depth * TREE_INDENT,
-    paddingRight: 8,
-    position: "relative",
-    cursor: "pointer",
-    userSelect: "none",
-    backgroundColor: selected ? t.selected : undefined,
-    hover: { backgroundColor: selected ? t.selected : t.hover },
-  } as const
 }
 
 const stop = (e: any) => e?.stopPropagation?.()
@@ -3127,9 +3037,7 @@ function Projects() {
   // One function for every row (it is given the row's id), so a memoized row keeps its props.
   const toggle = useCallback((id: string) => setFolded((now) => (now.includes(id) ? now.filter((k) => k !== id) : [...now, id])), [setFolded])
   const [query, setQuery] = useState("")
-  const [expanded] = useLocal(TREE_EXPANDED, false)
   const tabs = useApp((s) => s.snapshot?.tabs ?? NO_SNAPSHOT_TABS)
-  const layouts = useApp((s) => s.trees)
   // ⌘1…⌘9 go to the rows as they are drawn, top to bottom, across every project: what this
   // draw numbers (`numbered`) is given to the window once it is drawn.
   const window = useWindow()
@@ -3161,18 +3069,6 @@ function Projects() {
     return path ? shortName(path) : undefined
   }
   const viewHit = (view: string) => has(viewName(snapshot, trees, view), worktreeOf(view), ...(snapshot?.tabs ?? []).filter((p) => p.view_id === view).map(tabLabel))
-  // Expanded: a view's tabs pane by pane as its layout has them, then its floats.
-  const laidOut = (view: string) => {
-    const tree = layouts[view]
-    const at = tree ? tabsOf(tree) : []
-    const rank = (tab: string) => (at.indexOf(tab) < 0 ? at.length : at.indexOf(tab))
-    return tabs.filter((p) => p.view_id === view).sort((a, b) => rank(a.tab_id) - rank(b.tab_id))
-  }
-  const leaves = (project: string, held: typeof tabs, view: string, whole: boolean) => {
-    // Searching, a view that matches by its own name (or its project's) keeps all its tabs.
-    const shown = whole ? held : held.filter((p) => has(tabLabel(p)))
-    return shown.map((p) => <TreeLeaf key={p.tab_id} tab={p.tab_id} depth={1} status={!!p.status} project={project} view={view} alone={false} />)
-  }
   let shownAny = false
   if (!q) for (const p of loudTabs(tabs)) numbered.push({ key: `tab:${p.tab_id}`, project: p.project_id, view: p.view_id, tab: p.tab_id })
   return (
@@ -3192,17 +3088,7 @@ function Projects() {
             <ProjectRow project={id} label={project.label || id} folded={shut} toggle={toggle} status={shut ? lead(own) : undefined} views={own.length} />
             {shut
               ? null
-              : shown.map((view) => {
-                  // A view of one tab stays one row, as compact draws it: there is nothing to group.
-                  const held = expanded ? laidOut(view.view_id) : NO_SNAPSHOT_TABS
-                  const grouped = held.length > 1
-                  return (
-                    <Fragment key={view.view_id}>
-                      <ViewRow view={view.view_id} project={id} expanded={grouped} />
-                      {grouped ? leaves(id, held, view.view_id, has(project.label || id, viewName(snapshot, trees, view.view_id))) : null}
-                    </Fragment>
-                  )
-                })}
+              : shown.map((view) => <ViewRow key={view.view_id} view={view.view_id} project={id} />)}
             {shut ? null : <NewViewDrop project={id} />}
           </div>
         )
@@ -3489,10 +3375,9 @@ function NewWorktreeRows({ branches, lit, onLit, pick }: { branches: string[]; l
 /**
  * A view's row under its project: its tabs' icons, as the view bar has them, and its name; the
  * window's front view is lit. On hover its menu (rename, close) and its close; a tab dropped on
- * it joins it, and dragged, it moves among its project's views or to another project. `expanded`:
- * its tabs are listed under it, so it draws no icons of them. Memoized.
+ * it joins it, and dragged, it moves among its project's views or to another project. Memoized.
  */
-const ViewRow = memo(function ViewRow({ view: id, project, expanded }: { view: string; project: string; expanded?: boolean }) {
+const ViewRow = memo(function ViewRow({ view: id, project }: { view: string; project: string }) {
   const ts = useTextSize()
   const t = useTheme()
   const window = useWindow()
@@ -3520,7 +3405,7 @@ const ViewRow = memo(function ViewRow({ view: id, project, expanded }: { view: s
           onMouseLeave={() => setHovered(false)}
           style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, height: VIEW_ROW, flexShrink: 0, paddingLeft: ROW_PAD, paddingRight: 8, position: "relative", cursor: "pointer", userSelect: "none", backgroundColor: background }}
         >
-          {expanded ? null : <ViewIcons view={id} ring={background} />}
+          <ViewIcons view={id} ring={background} />
           {input ? (
             <RenameField input={input} />
           ) : (
@@ -3538,62 +3423,6 @@ const ViewRow = memo(function ViewRow({ view: id, project, expanded }: { view: s
     </>
   )
 })
-
-/**
- * A tab's row under its view, in the expanded tree: the theme's `TabRow` for a tab with a status
- * (`@status`), else a plain row. Where it is makes it a drop target (`moves.Row`). Memoized on
- * those, so a change to another tab does not draw it again.
- */
-const TreeLeaf = memo(function TreeLeaf({ tab, depth, status, project, view, alone }: { tab: string; depth: number; status: boolean; project: string; view: string; alone: boolean }) {
-  const C = useComponents()
-  const spot = useMemo<moves.Row>(() => ({ kind: "tab", project, view, tab, alone }), [project, view, tab, alone])
-  return (
-    <TreeDepth.Provider value={depth}>
-      <TreeSpot.Provider value={spot}>{status ? <C.TabRow tab={tab} /> : <PlainTabRow tab={tab} />}</TreeSpot.Provider>
-    </TreeDepth.Provider>
-  )
-})
-
-/** A tab with no status, in the expanded tree: its kind's icon and its title; a click goes to it. */
-function PlainTabRow({ tab }: { tab: string }) {
-  const ts = useTextSize()
-  const t = useTheme()
-  const window = useWindow()
-  const depth = useContext(TreeDepth)
-  const p = useTab(tab)
-  const focused = useFocusedTab()
-  const front = useView()?.view_id
-  const [hovered, setHovered] = useState(false)
-  const close = () => call(via(tab, "tab.close"), tab).catch(swallow)
-  const { open, show, menu, shown } = useMenu("tab.menu", { tab })
-  const draggable = useDraggable<moves.Carried>({ kind: "pumi.tab", tab })
-  const spot = useContext(TreeSpot)
-  if (!p) return null
-  const selected = tab === focused && p.view_id === front
-  return (
-    <>
-      <div compartment>
-        <div
-          {...draggable.props}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          onAuxClick={open}
-          onClick={() => draggable.wasDragged() || goTo(window, p.project_id, p.view_id, tab)}
-          style={treeRow(depth, selected, t)}
-        >
-          <Guides depth={depth} />
-          <div style={{ display: "flex", width: 14, height: 14, flexShrink: 0, alignItems: "center", justifyContent: "center" }}>
-            <TabIcon tab={tab} size={12} color={t.muted} />
-          </div>
-          <text style={{ fontSize: ts(12), color: selected || hovered ? t.text : t.muted, whiteSpace: "nowrap", textOverflow: "ellipsis", flexGrow: 1, flexShrink: 1, minWidth: 0 }}>{tabLabel(p)}</text>
-          {hovered || shown ? <RowButtons menu={show} close={close} /> : null}
-          {spot ? <RowDrop row={spot} /> : null}
-        </div>
-      </div>
-      {menu}
-    </>
-  )
-}
 
 /**
  * The field over the projects tree, as Zed's: a strip the side bar's width, under the title bar's
@@ -3622,77 +3451,6 @@ function TreeSearch({ query, setQuery }: { query: string; setQuery(q: string): v
         style={{ flexGrow: 1, minWidth: 0, fontSize: ts(13), color: t.text, backgroundColor: "transparent" }}
       />
       {query ? <RowButton icon="close" title="Clear search" onClick={() => setQuery("")} /> : null}
-    </div>
-  )
-}
-
-/**
- * The `TabRow` part: a tab with a status (`@status`) in the tree, named by its title or its label,
- * bold while it wants a look. Under the name its `tab.row.footer`; on hover its
- * `tab.row.controls` (the `TabRowControls` part), its menu (`tab.row.menu`) and its close.
- */
-function TabRow({ tab }: { tab: string }) {
-  const ts = useTextSize()
-  const t = useTheme()
-  const C = useComponents()
-  const window = useWindow()
-  const depth = useContext(TreeDepth)
-  const p = useTab(tab)
-  const focused = useFocusedTab()
-  const front = useView()?.view_id
-  const controls = useSlot("tab.row.controls")
-  const [hovered, setHovered] = useState(false)
-  const close = () => call(via(tab, "tab.close"), tab).catch(swallow)
-  const { open, show, menu, shown } = useMenu("tab.row.menu", { tab })
-  const draggable = useDraggable<moves.Carried>({ kind: "pumi.tab", tab })
-  const spot = useContext(TreeSpot)
-  const footer = useMemo(() => ({ tab }), [tab])
-  if (!p) return null
-  const status = p.status || "unknown"
-  const label = p.terminal_title || p.label || tabLabel(p)
-  // What wants a look is bold, as unread mail is.
-  const loud = wantsLook(status)
-  const hasControls = controls.actions.length + controls.components.length > 0
-  return (
-    <>
-      <div compartment>
-        <div
-          {...draggable.props}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          onAuxClick={open}
-          onClick={() => draggable.wasDragged() || goTo(window, p.project_id, p.view_id, tab)}
-          title={p.label && p.terminal_title && p.label !== p.terminal_title ? `${p.label} · ${p.terminal_title}` : undefined}
-          style={treeRow(depth, tab === focused && p.view_id === front, t)}
-        >
-          <Guides depth={depth} />
-          <TabIcon tab={tab} />
-          <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0 }}>
-            <text style={{ fontSize: ts(12), fontWeight: loud ? 600 : 400, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{label}</text>
-            <Slot slot="tab.row.footer" args={footer} />
-          </div>
-          {hovered || shown ? (
-            <RowButtons menu={show} close={close}>
-              {hasControls ? <C.TabRowControls tab={tab} /> : null}
-            </RowButtons>
-          ) : null}
-          {spot ? <RowDrop row={spot} /> : null}
-        </div>
-      </div>
-      {menu}
-    </>
-  )
-}
-
-function TabRowControls({ tab }: { tab: string }) {
-  const C = useComponents()
-  const { components, actions } = useSlot("tab.row.controls")
-  return (
-    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 2 }}>
-      {actions.map((a) => (
-        <C.Action key={`${a.plugin}/${a.id}`} action={a} args={{ tab }} />
-      ))}
-      {components.map((v) => renderComponent(v, { tab }))}
     </div>
   )
 }
@@ -3736,8 +3494,6 @@ export const DEFAULT: Components = {
   Panel,
   Projects,
   Float,
-  TabRow,
-  TabRowControls,
   Action,
   Menu,
   Dialog,

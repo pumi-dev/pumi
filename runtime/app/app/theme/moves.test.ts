@@ -83,8 +83,7 @@ describe("stripDrop", () => {
 describe("rowDrop", () => {
   const project = { kind: "project", project: "$2" } as const
   const view = { kind: "view", project: "$1", view: "@1" } as const
-  const inView = { kind: "tab", project: "$1", view: "@1", tab: "%2", alone: false } as const
-  const alone = { kind: "tab", project: "$1", view: "@2", tab: "%3", alone: true } as const
+  const other = { kind: "view", project: "$1", view: "@2" } as const
 
   test("projects sort among projects", () => {
     const it: Carried = { kind: "pumi.project", project: "$1" }
@@ -95,30 +94,24 @@ describe("rowDrop", () => {
 
   test("views sort among views, and go to another project", () => {
     const it: Carried = { kind: "pumi.view", view: "@1" }
-    expect(rowDrop(it, alone, 0.9, where)).toEqual({ kind: "view.move", view: "@1", project: "$1", anchor: "@2", after: true })
+    expect(rowDrop(it, other, 0.9, where)).toEqual({ kind: "view.move", view: "@1", project: "$1", anchor: "@2", after: true })
     expect(rowDrop(it, project, 0.5, where)).toEqual({ kind: "view.move", view: "@1", project: "$2" })
     expect(rowDrop(it, { kind: "project", project: "$1" }, 0.5, where)).toBeUndefined()
-    expect(rowDrop(it, inView, 0.5, where)).toBeUndefined()
   })
 
-  test("a tab joins a view, is a new view of a project, or goes beside a tab", () => {
+  test("a tab joins a view, or is a new view of a project", () => {
     expect(rowDrop(tab("%4"), view, 0.5, where)).toEqual({ kind: "tab.join", tab: "%4", view: "@1" })
     expect(rowDrop(tab("%1"), view, 0.5, where)).toBeUndefined()
     expect(rowDrop(tab("%1"), project, 0.5, where)).toEqual({ kind: "tab.newView", tab: "%1", project: "$2" })
     // %4 already is a view of its own in $2.
     expect(rowDrop(tab("%4"), project, 0.5, where)).toBeUndefined()
-    expect(rowDrop(tab("%1"), inView, 0.1, where)).toEqual({ kind: "tab.beside", tab: "%1", target: "%2", side: "left" })
-    // Never in its place: before it or after it, by the half it lands in.
-    expect(rowDrop(tab("%1"), inView, 0.4, where)).toEqual({ kind: "tab.beside", tab: "%1", target: "%2", side: "left" })
-    expect(rowDrop(tab("%1"), inView, 0.6, where)).toEqual({ kind: "tab.beside", tab: "%1", target: "%2", side: "right" })
-    expect(rowDrop(tab("%1"), alone, 0.5, where)).toEqual({ kind: "tab.join", tab: "%1", view: "@2" })
   })
 
   test("a tab alone in its view, at another view's edge, moves its view", () => {
     expect(rowDrop(tab("%3"), view, 0.1, where)).toEqual({ kind: "view.move", view: "@2", project: "$1", anchor: "@1", after: false })
     expect(rowDrop(tab("%3"), view, 0.5, where)).toEqual({ kind: "tab.join", tab: "%3", view: "@1" })
     // Not alone: it joins the view wherever it lands.
-    expect(rowDrop(tab("%1"), alone, 0.9, where)).toEqual({ kind: "tab.join", tab: "%1", view: "@2" })
+    expect(rowDrop(tab("%1"), other, 0.9, where)).toEqual({ kind: "tab.join", tab: "%1", view: "@2" })
   })
 })
 
@@ -146,7 +139,6 @@ describe("plan", () => {
   })
 
   test("a tab's moves are one update", () => {
-    expect(plan({ kind: "tab.beside", tab: "%1", target: "%3", side: "down" }, snapshot)).toEqual([{ on: "%1", method: "tab.update", params: ["%1", { place: { kind: "tiled", beside: "%3", split: "down" } }] }])
     expect(plan({ kind: "tab.newView", tab: "%1", project: "$2" }, snapshot)).toEqual([{ on: "%1", method: "tab.update", params: ["%1", { place: { kind: "view", project: "$2" } }] }])
     expect(plan({ kind: "tab.into", tab: "%1", pane: ":3", index: 0 }, snapshot)).toEqual([{ on: "%1", method: "tab.update", params: ["%1", { place: { kind: "tiled", pane: ":3", index: 0 } }] }])
     expect(plan({ kind: "tab.split", tab: "%1", pane: ":3", side: "left" }, snapshot)).toEqual([{ on: "%1", method: "tab.update", params: ["%1", { place: { kind: "tiled", pane: ":3", split: "left" } }] }])

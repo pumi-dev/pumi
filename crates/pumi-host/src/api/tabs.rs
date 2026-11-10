@@ -97,7 +97,11 @@ fn startables() -> Vec<NewTab> {
     let mut out = Vec::new();
     for p in crate::contributions::plugins() {
         let c = &p.manifest.contributes;
-        let actions = c.slots.get("tab.new").map(|s| s.actions.as_slice()).unwrap_or_default();
+        let actions = c
+            .slots
+            .get("tab.new")
+            .map(|slots| slots.list().iter().flat_map(|one| one.actions.iter()).collect::<Vec<_>>())
+            .unwrap_or_default();
         if actions.is_empty() {
             let offered = c.blocks.iter().filter(|b| b.audience.is_offered());
             out.extend(offered.map(|b| NewTab::Block(p.prefixed(&b.id))));
