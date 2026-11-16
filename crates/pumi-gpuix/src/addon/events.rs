@@ -21,6 +21,14 @@ pub struct EventPayload {
     /// Mouse Y position in window coordinates (pixels).
     pub y: Option<f64>,
 
+    /// `x` and `y` in the element's own box: in pixels, less its origin. What a DOM `offsetX`
+    /// is, without the listener asking its bounds back across the bridge on every move.
+    /// Populated with `x` and `y` for the pointer events (click, doubleClick, auxClick,
+    /// contextMenu, mouseDown, mouseUp, mouseMove, mouseDownOutside, scroll, fileDrop) once the
+    /// element has painted.
+    pub local_x: Option<f64>,
+    pub local_y: Option<f64>,
+
     // ── Mouse button ─────────────────────────────────────────────────
     /// Which mouse button: 0=left, 1=middle, 2=right.
     /// Populated for: mouseDown, mouseUp, click, mouseDownOutside, contextMenu.
@@ -149,6 +157,8 @@ impl Default for EventPayload {
             event_type: String::new(),
             x: None,
             y: None,
+            local_x: None,
+            local_y: None,
             button: None,
             click_count: None,
             is_right_click: None,
@@ -267,6 +277,14 @@ impl From<Event> for EventPayload {
             }
             Select { selection: s } => selection(&mut p, s),
             Submit { value } => p.value = Some(value),
+            TextInput { value, start, end, selection: s } | Composition { value, start, end, selection: s } => {
+                p.value = Some(value);
+                p.start_index = Some(start as f64);
+                p.end_index = Some(end as f64);
+                if let Some(s) = s {
+                    selection(&mut p, s);
+                }
+            }
             Layout { x, y, width, height } => {
                 p.x = Some(x);
                 p.y = Some(y);
@@ -288,6 +306,16 @@ impl From<Event> for EventPayload {
             WindowActivated { active } => p.hovered = Some(active),
             WindowFullscreen { fullscreen } => p.hovered = Some(fullscreen),
             WindowModifiersChanged { modifiers } => p.modifiers = Some(modifiers.into()),
+        }
+        // A pointer's position in the element's own box, from the box it last painted. `layout`
+        // carries the box's own origin in `x`/`y`, not a pointer.
+        if p.event_type != "layout" {
+            if let (Some(x), Some(y)) = (p.x, p.y) {
+                if let Some(bounds) = crate::automation::get_bounds(event.target) {
+                    p.local_x = Some(x - bounds.x);
+                    p.local_y = Some(y - bounds.y);
+                }
+            }
         }
         p
     }

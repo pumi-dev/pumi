@@ -30,6 +30,8 @@ export const ELEMENT_EVENTS = [
   "change",
   "select",
   "submit",
+  "textInput",
+  "composition",
   "layout",
   "scrollChange",
   "visibleRange",
@@ -188,6 +190,18 @@ export type Event = {
 } | {
   type: "submit";
   value: string;
+} | {
+  type: "textInput";
+  value: string;
+  start: number;
+  end: number;
+  selection?: Selection | null;
+} | {
+  type: "composition";
+  value: string;
+  start: number;
+  end: number;
+  selection?: Selection | null;
 } | {
   type: "layout";
   x: number;

@@ -358,6 +358,7 @@ export type ElementType =
   | "canvas"
   | "input"
   | "textarea"
+  | "text-input"
   | "anchored"
   | "virtual-list"
 
@@ -632,6 +633,43 @@ export interface TextInline {
 export interface TextareaProps extends InputProps {
   minRows?: number
   maxRows?: number
+}
+
+/**
+ * `<text-input>`: the platform's text input (typing, dead keys, press-and-hold accents, an input
+ * method's composition, the emoji picker, autocorrect, dictation) for an editor that draws its own
+ * text. It draws its children, takes focus like any focusable element, and keeps no document: JS
+ * does. A key that types text arrives as `onKeyDown` and then `onTextInput` (only `onTextInput`
+ * when an input method takes the key), so text is inserted from `onTextInput` only. `autoFocus`
+ * focuses it each time it turns true, as a terminal's does.
+ *
+ * Every range is in `text`, in UTF-16 units (a JS string's indices). JS hears what was typed after
+ * the platform has moved on, so the element applies each `onTextInput` to its copy of `text` (the
+ * caret after the inserted text) and the next event's range is in that: an editor that applies
+ * each one as given, and keeps `text` the same window of its document, reads them in its own.
+ */
+export interface TextInputProps extends HostProps {
+  /**
+   * The text around the caret that the platform may read: any window of the document (the line,
+   * the paragraph, all of it).
+   */
+  text?: string
+  /** `[start, end]` in `text`: the selection, or the caret when `start == end`. */
+  selection?: [number, number]
+  /** The caret's box in the element's own coordinates: where an input method puts its window. */
+  caret?: { x: number; y: number; width?: number; height?: number }
+  /**
+   * Text typed: `value` replaces `startIndex..endIndex` of `text`. That is the selection, or the
+   * letter an accent replaces, or the word autocorrect fixes.
+   */
+  onTextInput?: (event: EventPayload) => void
+  /**
+   * The text an input method is composing (`value`), to draw over `startIndex..endIndex` of
+   * `text`, with the part it has selected (`selectionStart..selectionEnd` of `value`). Leave
+   * `text` as it is meanwhile. An empty `value` ends it with nothing typed; an `onTextInput` ends
+   * it with what was.
+   */
+  onComposition?: (event: EventPayload) => void
 }
 
 export type VirtualListShared = {

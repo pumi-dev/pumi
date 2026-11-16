@@ -78,7 +78,7 @@ impl RetainedElement {
     /// Whether the element must own a gpui focus handle: it takes text, is in the
     /// tab order, or listens for a key or focus event.
     pub fn needs_focus(&self) -> bool {
-        matches!(self.element_type.as_str(), "input" | "textarea")
+        matches!(self.element_type.as_str(), "input" | "textarea" | "text-input")
             || self.tab_index().is_some()
             || self.events().contains("keyDown")
             || self.events().contains("keyUp")

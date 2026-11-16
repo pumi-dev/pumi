@@ -87,6 +87,7 @@ export type {
   SvgProps,
   SelectionHost,
   TextareaProps,
+  TextInputProps,
   VirtualListProps,
   WindowInsetsHost,
   WindowKeyEventHandler,

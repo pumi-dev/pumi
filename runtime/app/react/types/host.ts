@@ -8,6 +8,7 @@ import type {
   ImagePixelsOptions,
   InputProps as NativeInputProps,
   TextareaProps as NativeTextareaProps,
+  TextInputProps as NativeTextInputProps,
   ImgProps as NativeImgProps,
   SvgProps as NativeSvgProps,
   AnchoredProps as NativeAnchoredProps,
@@ -32,6 +33,12 @@ export interface InputProps extends NativeInputProps {
 }
 
 export interface TextareaProps extends NativeTextareaProps {
+  key?: Key | null
+  children?: ReactNode
+  ref?: Ref<PublicInstance>
+}
+
+export interface TextInputProps extends NativeTextInputProps {
   key?: Key | null
   children?: ReactNode
   ref?: Ref<PublicInstance>

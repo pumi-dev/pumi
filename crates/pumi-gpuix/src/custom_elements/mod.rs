@@ -18,6 +18,7 @@ pub mod anchored;
 pub mod img;
 pub mod inlines;
 pub mod input;
+pub mod text_input;
 
 // ── Render context ───────────────────────────────────────────────────
 
@@ -340,6 +341,7 @@ impl CustomElementRegistry {
         let mut registry = Self::new();
         registry.register(Box::new(input::InputFactory));
         registry.register(Box::new(input::TextareaFactory));
+        registry.register(Box::new(text_input::TextInputFactory));
         registry.register(Box::new(anchored::AnchoredFactory));
         registry.register(Box::new(img::ImgFactory));
         registry.register(Box::new(img::SvgFactory));

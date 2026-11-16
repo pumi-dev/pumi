@@ -12,6 +12,7 @@ import type {
   Props,
   SvgProps,
   TextareaProps,
+  TextInputProps,
   VirtualListProps,
 } from "./react/types/host.ts"
 
@@ -34,6 +35,8 @@ export namespace JSX {
     canvas: Props
     input: InputProps
     textarea: TextareaProps
+    /** The platform's text input for an editor that draws its own text (see `TextInputProps`). */
+    "text-input": TextInputProps
     anchored: AnchoredProps
     "virtual-list": VirtualListProps
     /** A tab's live terminal. */

@@ -435,6 +435,26 @@ const text = useChannel("delta", "", (all, d) => all + d.text);            // ui
 useEvent("option.changed", (e) => {}, { match: "@status" });               // ui.tsx
 ```
 
+## Editors
+
+An editor that draws its own text gets typing from `<text-input>`: dead keys, press-and-hold accents, an input method's composition, the emoji picker, autocorrect and dictation. The document, its drawing, the caret and the selection stay in the plugin. `text` is any window of the document around the caret, and every range is in it, in UTF-16 units.
+
+```tsx
+<text-input
+  text={line}                          // what the platform may read: the line, the paragraph, all of it
+  selection={[from, to]}               // in `text`
+  caret={{ x, y, width: 2, height }}   // in the element's own box: where the input method puts its window
+  autoFocus
+  onTextInput={(e) => replace(e.startIndex, e.endIndex, e.value)}
+  onComposition={(e) => setComposing(e.value ? e : null)}  // draw e.value over e.startIndex..e.endIndex
+  onKeyDown={(e) => command(e)}        // arrows, Backspace, Enter, shortcuts: text comes from onTextInput
+>
+  {lines}
+</text-input>
+```
+
+The element applies each `onTextInput` to its copy of `text`, so text typed before the plugin answers lands where it should. An editor that applies each one as given and keeps `text` the same window reads the next range in its own. A composition's `selectionStart..selectionEnd` is the part of `value` the input method has selected; an empty `value` ends it with nothing typed, and an `onTextInput` ends it with what was.
+
 ## Web pages
 
 `<WebView>` shows a plugin's HTML in a component. The page gets `window.pumi` for the API and the theme.
@@ -522,7 +542,7 @@ Both files import from `"pumi"`. The app provides it at run time; for type-check
 | models | `Project` `View` `Pane` `Tab` `Request` `Plugin` `Model` `cache` |
 | theme | `defineTheme` `useTheme` `usePalette` `useMetrics` `useFont` |
 | hooks | `useChannel` `useChannelListener` `useEvent` `usePlugin` |
-| elements | `div` `text` `img` `svg` `scroll` `input` `terminal` `Icon` `IconButton`; an element's `ref` (`ElementRef`) has `focus()`, `scrollTo()`, `scrollIntoView()`, and a `virtual-list`'s `scrollToItem()` |
+| elements | `div` `text` `img` `svg` `scroll` `input` `text-input` `terminal` `Icon` `IconButton`; an element's `ref` (`ElementRef`) has `focus()`, `scrollTo()`, `scrollIntoView()`, and a `virtual-list`'s `scrollToItem()` |
 | web | `WebView` `useWebview` `webview` `webviewRun` `webviewSnapshot` |
 | kit | `motion` `Select` `useDraggable` `useDroppable` `useDragState` `useHover` `useInterval` `useNow` |
 | settings | `Page` `Section` `Row` `OptionRow` `Switch` `Slider` `Stepper` `TextField` `Button` `KeyRecorder` `KeyChip` `ChoiceGrid` `ImageCards` `useSettings` `haptic` `openSettings` `keyGlyphs` |

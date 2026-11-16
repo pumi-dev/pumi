@@ -83,6 +83,22 @@ pub enum EventKind {
     Submit {
         value: String,
     },
+    /// Text a `<text-input>` took in: typing, a paste, or what an input method committed, over
+    /// `start`..`end` of its value, with the selection it leaves.
+    TextInput {
+        value: String,
+        start: u64,
+        end: u64,
+        selection: Option<Selection>,
+    },
+    /// An input method's marked text, over `start`..`end` of the value; an empty `value` ends it
+    /// (the composition was committed as a `textInput`).
+    Composition {
+        value: String,
+        start: u64,
+        end: u64,
+        selection: Option<Selection>,
+    },
 
     // ── Paint ────────────────────────────────────────────────────────
     /// The element's border box, in window coordinates: after the first paint with the
@@ -165,6 +181,8 @@ impl EventKind {
             Change { .. } => "change",
             Select { .. } => "select",
             Submit { .. } => "submit",
+            TextInput { .. } => "textInput",
+            Composition { .. } => "composition",
             Layout { .. } => "layout",
             ScrollChange { .. } => "scrollChange",
             VisibleRange { .. } => "visibleRange",
@@ -291,6 +309,8 @@ pub(crate) mod tests {
             Change { value: String::new(), selection: Selection::default() },
             Select { selection: Selection::default() },
             Submit { value: String::new() },
+            TextInput { value: String::new(), start: 0, end: 0, selection: None },
+            Composition { value: String::new(), start: 0, end: 0, selection: None },
             Layout { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
             ScrollChange { x: 0.0, y: 0.0 },
             VisibleRange { start: 0, end: 0 },

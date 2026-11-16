@@ -26,6 +26,8 @@ pub const ELEMENT_EVENTS: &[&str] = &[
     "change",
     "select",
     "submit",
+    "textInput",
+    "composition",
     "layout",
     "scrollChange",
     "visibleRange",

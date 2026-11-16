@@ -64,10 +64,12 @@ export type {
   MotionStyle,
   MotionTransition,
   MotionValue,
+  PressEvent,
   RadialGradientBackground,
   SpriteSheet,
   StateStyleDesc,
   StyleDesc,
+  TextInputProps,
 } from "../native/host.ts"
 export type { EventPayload } from "../native/addon"
 export {

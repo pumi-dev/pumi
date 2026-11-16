@@ -642,6 +642,15 @@ export interface EventPayload {
   /** Mouse Y position in window coordinates (pixels). */
   y?: number
   /**
+   * `x` and `y` in the element's own box: in pixels, less its origin. What a DOM `offsetX`
+   * is, without the listener asking its bounds back across the bridge on every move.
+   * Populated with `x` and `y` for the pointer events (click, doubleClick, auxClick,
+   * contextMenu, mouseDown, mouseUp, mouseMove, mouseDownOutside, scroll, fileDrop) once the
+   * element has painted.
+   */
+  localX?: number
+  localY?: number
+  /**
    * Which mouse button: 0=left, 1=middle, 2=right.
    * Populated for: mouseDown, mouseUp, click, mouseDownOutside, contextMenu.
    */
