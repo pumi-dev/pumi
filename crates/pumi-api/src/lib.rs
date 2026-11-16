@@ -30,3 +30,6 @@ pub use schemars;
 #[doc(hidden)]
 pub use serde_json;
 pub const API_LEVEL: u32 = 1;
+/// pumi's version this crate is (`0.55.0`): what a plugin's `minPumi` is compared to, and what a
+/// program built on it (`pumi-store`) says, so a build older than the manifests it reads is seen.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
